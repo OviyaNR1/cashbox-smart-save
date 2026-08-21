@@ -150,7 +150,7 @@ export default function Notifications() {
             </label>
             <div className="p-3 rounded-xl border border-border">
               <p className="text-sm text-foreground mb-2">Specific member</p>
-              <Select value={recipients.startsWith("mem:") ? recipients.slice(4) : ""} onValueChange={(v) => setRecipients(v)}>
+              <Select value={recipients.includes("-") ? recipients : ""} onValueChange={(v) => setRecipients(v)}>
                 <SelectTrigger><SelectValue placeholder="Select member" /></SelectTrigger>
                 <SelectContent>
                   {registered.map((m) => <SelectItem key={m.id} value={m.id}>{m.full_name} ({m.mobile})</SelectItem>)}
