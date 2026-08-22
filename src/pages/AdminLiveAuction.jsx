@@ -200,7 +200,29 @@ export default function AdminLiveAuction() {
     const newCurrentMonth = Math.min(auction.month_number, plan.duration_months);
     await base44.entities.ChitGroup.update(group.id, { current_month: newCurrentMonth });
 
-    logAudit({ module: "Live Auction", action: "close", record_id: winner.id, details: `Closed Month ${auction.month_number} auction for group ${group.group_code} — winner ${winnerProf?.full_name || "member"} at ${winningBid.amount}` });
+    logAuction({ module: "Live Auction", action: "close", record_id: winner.id, details: `Closed Month ${auction.month_number} auction for group ${group.group_code} — winner ${winnerProf?.full_name || "member"} at ${winningBid.amount}` });
+
+    // Send winner announcement messages automatically
+    const monthLabel = `Month ${auction.month_number}`;
+    const prizeAmountStr = `${plan?.currency || "INR"} ${winningBid.amount}`;
+    const winnerName = winnerProf?.full_name || "Member";
+
+    const memberProfiles = await Promise.all(allActive.map(m => base44.entities.MemberProfile.get(m.member_profile_id)));
+    for (const prof of memberProfiles) {
+      if (prof?.mobile) {
+        const isWinner = prof.id === winningBid.member_profile_id;
+        const template = isWinner ? "winner_announcement_winner" : "winner_announcement_all";
+        try {
+          await base44.functions.invoke("sendWhatsApp", {
+            phone: prof.mobile,
+            template,
+            templateParams: [winnerName, monthLabel, prizeAmountStr],
+          });
+        } catch (err) {
+          console.error(`Failed to send ${template} to ${prof.full_name}:`, err);
+        }
+      }
+    }
 
     playGavel();
     speak(`Sold, to ${winnerProf?.full_name || "the member"}, for ${winningBid.amount}!`);
