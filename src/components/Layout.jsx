@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, Navigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { LayoutDashboard, Layers, Users, CreditCard, Trophy, BarChart3, ScrollText, MessageSquare, LogOut, Menu, X, Calendar, Landmark, UsersRound, User, Inbox, Gavel, Search, ChevronsLeft, ChevronsRight, Bell } from "lucide-react";
+import { LayoutDashboard, Layers, Users, CreditCard, Trophy, BarChart3, ScrollText, MessageSquare, LogOut, Menu, X, Calendar, Landmark, UsersRound, User, Inbox, Gavel, Search, ChevronsLeft, ChevronsRight, Bell, Trash2 } from "lucide-react";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { AdminCountryProvider, useAdminCountry } from "@/lib/AdminCountryContext";
@@ -121,6 +121,7 @@ export default function Layout() {
         { to: "/admin/audit", label: "Audit Trail", icon: ScrollText },
         { to: "/admin/notifications", label: "Communications", icon: MessageSquare },
         { to: "/admin/reminders", label: "Send Reminders", icon: Bell },
+        { to: "/admin/cleanup", label: "Data Cleanup", icon: Trash2 },
       ]
     : [
         { to: "/dashboard", label: "Home", icon: LayoutDashboard },

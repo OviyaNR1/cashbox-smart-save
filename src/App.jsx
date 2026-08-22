@@ -44,6 +44,7 @@ const Reports = lazy(() => import('@/pages/Reports'));
 const AuditLog = lazy(() => import('@/pages/AuditLog'));
 const Notifications = lazy(() => import('@/pages/Notifications'));
 const AdminReminders = lazy(() => import('@/pages/AdminReminders'));
+const AdminCleanup = lazy(() => import('@/pages/AdminCleanup'));
 const AuctionPlan = lazy(() => import('@/pages/AuctionPlan'));
 const BrowsePlans = lazy(() => import('@/pages/BrowsePlans'));
 const PlanRequests = lazy(() => import('@/pages/PlanRequests'));
@@ -107,6 +108,7 @@ const AuthenticatedApp = () => {
             <Route path="/admin/audit" element={<AuditLog />} />
             <Route path="/admin/notifications" element={<Notifications />} />
             <Route path="/admin/reminders" element={<AdminReminders />} />
+            <Route path="/admin/cleanup" element={<AdminCleanup />} />
             <Route path="/dashboard" element={<MemberDashboard />} />
             <Route path="/browse-plans" element={<BrowsePlans />} />
             <Route path="/my-chits" element={<MyChits />} />
