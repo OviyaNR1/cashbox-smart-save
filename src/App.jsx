@@ -43,6 +43,7 @@ const Winners = lazy(() => import('@/pages/Winners'));
 const Reports = lazy(() => import('@/pages/Reports'));
 const AuditLog = lazy(() => import('@/pages/AuditLog'));
 const Notifications = lazy(() => import('@/pages/Notifications'));
+const AdminReminders = lazy(() => import('@/pages/AdminReminders'));
 const AuctionPlan = lazy(() => import('@/pages/AuctionPlan'));
 const BrowsePlans = lazy(() => import('@/pages/BrowsePlans'));
 const PlanRequests = lazy(() => import('@/pages/PlanRequests'));
@@ -105,6 +106,7 @@ const AuthenticatedApp = () => {
             <Route path="/admin/reports" element={<Reports />} />
             <Route path="/admin/audit" element={<AuditLog />} />
             <Route path="/admin/notifications" element={<Notifications />} />
+            <Route path="/admin/reminders" element={<AdminReminders />} />
             <Route path="/dashboard" element={<MemberDashboard />} />
             <Route path="/browse-plans" element={<BrowsePlans />} />
             <Route path="/my-chits" element={<MyChits />} />
