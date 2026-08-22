@@ -11,14 +11,38 @@ import { useAdminCountry } from "@/lib/AdminCountryContext";
 const TEMPLATES = {
   payment_reminder: {
     body: "Dear Member,\n\nThis is a friendly reminder that your monthly chit installment is now due. Please make your payment at your earliest convenience to avoid late fees.\n\nThank you,\nCashBox Team",
+    isTemplate: false,
   },
-  winner_announcement: {
-    body: "Dear Member,\n\nWe are pleased to announce the winner for this month's chit cycle. Please log in to your CashBox dashboard for full details.\n\nCongratulations to the winner!\n\nCashBox Team",
+  payment_reminder_overdue: {
+    body: "Member Name, Days Overdue, Outstanding Amount",
+    isTemplate: true,
+    params: ["memberName", "daysOverdue", "amount"],
+  },
+  payment_reminder_urgent: {
+    body: "Member Name, Days Late, Outstanding Amount, Late Fee",
+    isTemplate: true,
+    params: ["memberName", "daysLate", "amount", "lateFee"],
+  },
+  winner_announcement_all: {
+    body: "Winner Name, Month, Prize Amount",
+    isTemplate: true,
+    params: ["winnerName", "month", "prizeAmount"],
+  },
+  winner_announcement_winner: {
+    body: "Winner Name, Month, Prize Amount (personalized to winner)",
+    isTemplate: true,
+    params: ["winnerName", "month", "prizeAmount"],
+  },
+  auction_reminder: {
+    body: "Member Name, Auction Date, Group Name",
+    isTemplate: true,
+    params: ["memberName", "auctionDate", "groupName"],
   },
   kyc_reminder: {
     body: "Dear Member,\n\nYour KYC verification is still pending. Please complete your KYC submission at the earliest to avoid any disruption in your chit participation.\n\nCashBox Team",
+    isTemplate: false,
   },
-  custom: { body: "" },
+  custom: { body: "", isTemplate: false },
 };
 
 export default function Notifications() {
@@ -28,6 +52,7 @@ export default function Notifications() {
   const [recipients, setRecipients] = useState("all");
   const [template, setTemplate] = useState("payment_reminder");
   const [body, setBody] = useState(TEMPLATES.payment_reminder.body);
+  const [templateParams, setTemplateParams] = useState({});
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(null);
 
@@ -48,6 +73,7 @@ export default function Notifications() {
   const onTemplate = (key) => {
     setTemplate(key);
     setBody(TEMPLATES[key].body);
+    setTemplateParams({});
   };
 
   const getTargets = () => {
@@ -61,8 +87,13 @@ export default function Notifications() {
   };
 
   const send = async () => {
-    if (!body.trim()) {
+    const tmpl = TEMPLATES[template];
+    if (!tmpl.isTemplate && !body.trim()) {
       toast({ title: "Message is required", variant: "destructive" });
+      return;
+    }
+    if (tmpl.isTemplate && Object.keys(templateParams).length === 0) {
+      toast({ title: "Please fill in all template parameters", variant: "destructive" });
       return;
     }
     const targets = getTargets();
@@ -75,12 +106,14 @@ export default function Notifications() {
     let fail = 0;
     for (const m of targets) {
       try {
-        // Use payment_reminder template for payment reminders; fall back to text for custom/other templates
-        if (template === "payment_reminder") {
-          await base44.functions.invoke("sendWhatsApp", { phone: m.mobile, template: "payment_reminder" });
+        const payload = { phone: m.mobile };
+        if (tmpl.isTemplate) {
+          payload.template = template;
+          payload.templateParams = Object.values(templateParams);
         } else {
-          await base44.functions.invoke("sendWhatsApp", { phone: m.mobile, message: body });
+          payload.message = body;
         }
+        await base44.functions.invoke("sendWhatsApp", payload);
         ok++;
       } catch {
         fail++;
@@ -112,17 +145,40 @@ export default function Notifications() {
             <Select value={template} onValueChange={onTemplate}>
               <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="payment_reminder">Payment reminder</SelectItem>
-                <SelectItem value="winner_announcement">Winner announcement</SelectItem>
+                <SelectItem value="payment_reminder">Payment reminder (static)</SelectItem>
+                <SelectItem value="payment_reminder_overdue">Payment reminder - Overdue</SelectItem>
+                <SelectItem value="payment_reminder_urgent">Payment reminder - Urgent</SelectItem>
+                <SelectItem value="winner_announcement_all">Winner announcement (all members)</SelectItem>
+                <SelectItem value="winner_announcement_winner">Winner announcement (personalized)</SelectItem>
+                <SelectItem value="auction_reminder">Auction reminder</SelectItem>
                 <SelectItem value="kyc_reminder">KYC reminder</SelectItem>
                 <SelectItem value="custom">Custom message</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label className="text-sm text-foreground">Message</Label>
-            <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={8} className="mt-1.5 resize-none" placeholder="Write your WhatsApp message…" />
-          </div>
+          {TEMPLATES[template]?.isTemplate && (
+            <div className="space-y-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
+              <p className="text-xs text-muted-foreground font-semibold">Template Parameters</p>
+              {TEMPLATES[template].params?.map((param) => (
+                <div key={param}>
+                  <Label className="text-xs text-foreground capitalize">{param.replace(/([A-Z])/g, " $1").trim()}</Label>
+                  <input
+                    type="text"
+                    value={templateParams[param] || ""}
+                    onChange={(e) => setTemplateParams({ ...templateParams, [param]: e.target.value })}
+                    placeholder={`Enter ${param}`}
+                    className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {!TEMPLATES[template]?.isTemplate && (
+            <div>
+              <Label className="text-sm text-foreground">Message</Label>
+              <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={8} className="mt-1.5 resize-none" placeholder="Write your WhatsApp message…" />
+            </div>
+          )}
           <div className="flex items-center justify-between pt-2">
             <p className="text-xs text-muted-foreground">Recipients with mobile number: {registered.length}</p>
             <Button onClick={send} disabled={sending} className="bg-primary hover:bg-primary/90 rounded-full">
