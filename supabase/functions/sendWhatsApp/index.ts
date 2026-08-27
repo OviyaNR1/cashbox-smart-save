@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
     }
 
     const accessToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
-    const businessPhoneNumberId = Deno.env.get("WHATSAPP_BUSINESS_PHONE_NUMBER_ID");
+    const businessPhoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
 
     if (!accessToken || !businessPhoneNumberId) {
       console.error("Missing WhatsApp credentials in environment");
