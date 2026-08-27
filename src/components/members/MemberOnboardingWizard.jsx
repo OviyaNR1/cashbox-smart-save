@@ -76,11 +76,11 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
       });
       logAudit({ module: "Members", action: "self-register", record_id: created.id, details: `${created.full_name} created their account` });
       const phoneNumber = `${CC}${stripCc(form.mobile)}`;
-      console.log("📱 Sending registration_welcome to:", phoneNumber);
+      console.log("📱 Sending registration_welcome_v2 to:", phoneNumber);
       import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
         sendWhatsAppMessage({
           phone: phoneNumber,
-          templateName: "registration_welcome",
+          templateName: "registration_welcome_v2",
           parameters: [created.full_name],
         }).then((res) => {
           console.log("✅ Registration welcome sent:", res);
