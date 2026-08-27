@@ -75,7 +75,7 @@ const handler = async (event) => {
     }
 
     const response = await fetch(
-      `https://graph.instagram.com/v18.0/${businessPhoneNumberId}/messages`,
+      `https://graph.instagram.com/v20.0/${businessPhoneNumberId}/messages`,
       {
         method: "POST",
         headers: {
