@@ -107,11 +107,23 @@ export default function PlanRequests() {
 
       const memberMobile = profileOf(approveTarget.member_profile_id)?.mobile;
       if (group.whatsapp_group_link && memberMobile) {
-        const message = `You've been approved and assigned to ${group.group_code} (${plan.plan_name})! Join the group chat here: ${group.whatsapp_group_link}`;
-        base44.functions.invoke("sendWhatsApp", { phone: memberMobile, message }).catch((err) => {
-          console.error("Approval WhatsApp notification failed:", err);
+        const startDate = group.start_date ? new Date(group.start_date).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }) : "TBD";
+        const collectionDate = group.monthly_collection_date ? `${group.monthly_collection_date}th of every month` : "TBD";
+        const firstDueDate = firstDue ? new Date(firstDue).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }) : "TBD";
+
+        console.log("📱 Sending group_approved to:", memberMobile, { group_code: group.group_code, startDate, collectionDate, firstDueDate });
+        base44.functions.invoke("sendWhatsApp", {
+          phone: memberMobile,
+          templateName: "group_approved",
+          parameters: [group.group_code, plan.plan_name, startDate, collectionDate, firstDueDate, group.whatsapp_group_link],
+        }).then((res) => {
+          console.log("✅ Group approved message sent:", res);
+        }).catch((err) => {
+          console.error("❌ Approval WhatsApp notification failed:", err);
           logAudit({ module: "Plan Requests", action: "whatsapp-notify-failed", record_id: approveTarget.id, details: `Failed to WhatsApp-notify member of approval for group "${group.group_code}": ${err?.message || err}` });
         });
+      } else {
+        console.warn("⚠️ Skipped group_approved: missing link or mobile", { link: group.whatsapp_group_link, mobile: memberMobile });
       }
 
       setApproveTarget(null);
