@@ -1,6 +1,7 @@
 export const sendWhatsAppMessage = async ({ phone, message, templateName, parameters }) => {
   try {
-    const response = await fetch("/.netlify/functions/sendWhatsApp", {
+    const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || "https://wryjrklhymcmmnbyndzv.supabase.co";
+    const response = await fetch(`${supabaseUrl}/functions/v1/sendWhatsApp`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
