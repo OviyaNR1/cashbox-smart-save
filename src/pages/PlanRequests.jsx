@@ -112,15 +112,17 @@ export default function PlanRequests() {
         const firstDueDate = firstDue ? new Date(firstDue).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }) : "TBD";
 
         console.log("📱 Sending group_approved to:", memberMobile, { group_code: group.group_code, startDate, collectionDate, firstDueDate });
-        base44.functions.invoke("sendWhatsApp", {
-          phone: memberMobile,
-          templateName: "group_approved",
-          parameters: [group.group_code, plan.plan_name, startDate, collectionDate, firstDueDate, group.whatsapp_group_link],
-        }).then((res) => {
-          console.log("✅ Group approved message sent:", res);
-        }).catch((err) => {
-          console.error("❌ Approval WhatsApp notification failed:", err);
-          logAudit({ module: "Plan Requests", action: "whatsapp-notify-failed", record_id: approveTarget.id, details: `Failed to WhatsApp-notify member of approval for group "${group.group_code}": ${err?.message || err}` });
+        import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
+          sendWhatsAppMessage({
+            phone: memberMobile,
+            templateName: "group_approved",
+            parameters: [group.group_code, plan.plan_name, startDate, collectionDate, firstDueDate, group.whatsapp_group_link],
+          }).then((res) => {
+            console.log("✅ Group approved message sent:", res);
+          }).catch((err) => {
+            console.error("❌ Approval WhatsApp notification failed:", err);
+            logAudit({ module: "Plan Requests", action: "whatsapp-notify-failed", record_id: approveTarget.id, details: `Failed to WhatsApp-notify member of approval for group "${group.group_code}": ${err?.message || err}` });
+          });
         });
       } else {
         console.warn("⚠️ Skipped group_approved: missing link or mobile", { link: group.whatsapp_group_link, mobile: memberMobile });

@@ -77,14 +77,16 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
       logAudit({ module: "Members", action: "self-register", record_id: created.id, details: `${created.full_name} created their account` });
       const phoneNumber = `${CC}${stripCc(form.mobile)}`;
       console.log("📱 Sending registration_welcome to:", phoneNumber);
-      base44.functions.invoke("sendWhatsApp", {
-        phone: phoneNumber,
-        templateName: "registration_welcome",
-        parameters: [created.full_name],
-      }).then((res) => {
-        console.log("✅ Registration welcome sent:", res);
-      }).catch((err) => {
-        console.error("❌ Registration welcome WhatsApp notification failed:", err);
+      import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
+        sendWhatsAppMessage({
+          phone: phoneNumber,
+          templateName: "registration_welcome",
+          parameters: [created.full_name],
+        }).then((res) => {
+          console.log("✅ Registration welcome sent:", res);
+        }).catch((err) => {
+          console.error("❌ Registration welcome WhatsApp notification failed:", err);
+        });
       });
       setProfile(created);
       setStep(2);

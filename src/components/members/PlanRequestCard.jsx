@@ -64,13 +64,15 @@ export default function PlanRequestCard({ plan, user: userProp, memberProfile: m
         status: "pending"
       });
       logAudit({ module: "Members", action: "plan-request", record_id: req.id, details: `${memberProfile?.full_name || "Member"} requested to join "${plan.plan_name}"` });
-      base44.functions.invoke("sendWhatsApp", {
-        phone: ADMIN_NOTIFY_PHONE,
-        templateName: "admin_plan_request",
-        parameters: [memberProfile?.full_name || "A member", plan.plan_name],
-      }).catch((err) => {
-        console.error("Admin WhatsApp notification failed:", err);
-        logAudit({ module: "Members", action: "whatsapp-notify-failed", record_id: req.id, details: `Failed to WhatsApp-notify admin of "${plan.plan_name}" request: ${err?.message || err}` });
+      import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
+        sendWhatsAppMessage({
+          phone: ADMIN_NOTIFY_PHONE,
+          templateName: "admin_plan_request",
+          parameters: [memberProfile?.full_name || "A member", plan.plan_name],
+        }).catch((err) => {
+          console.error("Admin WhatsApp notification failed:", err);
+          logAudit({ module: "Members", action: "whatsapp-notify-failed", record_id: req.id, details: `Failed to WhatsApp-notify admin of "${plan.plan_name}" request: ${err?.message || err}` });
+        });
       });
       setExistingRequest(req);
       setConfirming(false);
