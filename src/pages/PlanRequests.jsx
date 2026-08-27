@@ -76,6 +76,7 @@ export default function PlanRequests() {
 
       const groupMemberships = await base44.entities.GroupMembership.filter({ group_id: group.id });
       const alreadyAssigned = groupMemberships.some((m) => m.member_profile_id === approveTarget.member_profile_id);
+      let firstDue = "";
 
       // A member can also be assigned directly from their profile (Members
       // -> Groups & Chit Plans), bypassing this request. If that already
@@ -86,7 +87,7 @@ export default function PlanRequests() {
         logAudit({ module: "Plan Requests", action: "approve", record_id: approveTarget.id, details: `Marked request approved — "${profileOf(approveTarget.member_profile_id)?.full_name || "member"}" was already assigned to group "${group.group_code}"` });
       } else {
         const nextTicket = Math.max(0, ...groupMemberships.map((m) => m.ticket_number || 0)) + 1;
-        const firstDue = addMonthsUTC(group.start_date, 1) || "";
+        firstDue = addMonthsUTC(group.start_date, 1) || "";
 
         await base44.entities.GroupMembership.create({
           group_id: group.id,
