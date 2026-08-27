@@ -34,6 +34,13 @@ const handler = async (event) => {
       };
     }
 
+    console.log("DEBUG: Token check", {
+      tokenLength: accessToken.length,
+      hasPrefix: accessToken.startsWith("WHATSAPP_ACCESS_TOKEN="),
+      first20: accessToken.substring(0, 20),
+      last10: accessToken.substring(accessToken.length - 10)
+    });
+
     let payload = {
       messaging_product: "whatsapp",
       recipient_type: "individual",
