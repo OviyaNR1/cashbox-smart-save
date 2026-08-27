@@ -34,11 +34,27 @@ const handler = async (event) => {
       };
     }
 
-    console.log("DEBUG: Token check", {
+    console.log("DEBUG: Token diagnostics", {
       tokenLength: accessToken.length,
-      hasPrefix: accessToken.startsWith("WHATSAPP_ACCESS_TOKEN="),
+      startsWithEAA: accessToken.startsWith("EAA"),
+      startsWithEAGOV: accessToken.startsWith("EAGOV"),
+      startsWithBearer: accessToken.startsWith("Bearer"),
+      hasWhitespace: /\s/.test(accessToken),
+      hasQuotes: accessToken.startsWith('"') || accessToken.endsWith('"'),
       first20: accessToken.substring(0, 20),
       last10: accessToken.substring(accessToken.length - 10)
+    });
+
+    // Test token validity first
+    const testResponse = await fetch("https://graph.facebook.com/v20.0/me", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    const testData = await testResponse.json();
+    console.log("DEBUG: Meta token test", {
+      testStatus: testResponse.status,
+      testData: testData,
     });
 
     let payload = {
