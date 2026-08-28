@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { MessageCircle, Send, CheckCircle2, Users } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
+import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 
 const TEMPLATES = {
   payment_reminder: {
@@ -108,12 +109,12 @@ export default function Notifications() {
       try {
         const payload = { phone: m.mobile };
         if (tmpl.isTemplate) {
-          payload.template = template;
-          payload.templateParams = Object.values(templateParams);
+          payload.templateName = template;
+          payload.parameters = Object.values(templateParams);
         } else {
           payload.message = body;
         }
-        await base44.functions.invoke("sendWhatsApp", payload);
+        await sendWhatsAppMessage(payload);
         ok++;
       } catch {
         fail++;

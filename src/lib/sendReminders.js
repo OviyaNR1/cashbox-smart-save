@@ -1,5 +1,6 @@
 import { base44 } from "@/api/base44Client";
 import { addMonthsUTC, collectionDateUTC } from "./dates";
+import { sendWhatsAppMessage } from "./sendWhatsAppMessage";
 
 export const sendPaymentReminders = async (groupId) => {
   try {
@@ -66,10 +67,10 @@ export const sendPaymentReminders = async (groupId) => {
 
         templateParams = [profile.full_name, daysLateStr, amountStr, lateFeeStr];
 
-        await base44.functions.invoke("sendWhatsApp", {
+        await sendWhatsAppMessage({
           phone: profile.mobile,
-          template,
-          templateParams,
+          templateName: template,
+          parameters: templateParams,
         });
         sent++;
       } catch (err) {
@@ -147,10 +148,10 @@ export const sendAuctionReminders = async (groupId) => {
           group.group_code,
         ];
 
-        await base44.functions.invoke("sendWhatsApp", {
+        await sendWhatsAppMessage({
           phone: profile.mobile,
-          template: "auction_reminder",
-          templateParams,
+          templateName: "auction_reminder",
+          parameters: templateParams,
         });
         sent++;
       } catch (err) {

@@ -10,6 +10,7 @@ import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
 import { playCallBell, playGavel, speak, CALL_ANNOUNCEMENTS } from "@/lib/sound";
 import { fireConfetti } from "@/lib/confetti";
+import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown } from "@/lib/useCountdown";
 import { Gavel, Crown, Trophy, Building2, Phone } from "lucide-react";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
@@ -213,10 +214,10 @@ export default function AdminLiveAuction() {
         const isWinner = prof.id === winningBid.member_profile_id;
         const template = isWinner ? "winner_announcement_winner" : "winner_announcement_all";
         try {
-          await base44.functions.invoke("sendWhatsApp", {
+          await sendWhatsAppMessage({
             phone: prof.mobile,
-            template,
-            templateParams: [winnerName, monthLabel, prizeAmountStr],
+            templateName: template,
+            parameters: [winnerName, monthLabel, prizeAmountStr],
           });
         } catch (err) {
           console.error(`Failed to send ${template} to ${prof.full_name}:`, err);
