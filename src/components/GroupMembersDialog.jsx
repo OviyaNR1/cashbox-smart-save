@@ -30,11 +30,15 @@ export default function GroupMembersDialog({ group, plan, onClose }) {
 
   if (!group) return null;
 
-  const memberIds = new Set(memberships?.map((m) => m.member_profile_id) || []);
+  // A member already in this group stays offered (not filtered out) so an
+  // admin can deliberately give them a second ticket — same as
+  // MemberGroupAssignment.jsx. ticketCountOf() labels how many they
+  // already hold so re-selecting them is a visible, deliberate choice.
+  const ticketCountOf = (memberProfileId) => (memberships || []).filter((m) => m.member_profile_id === memberProfileId).length;
   // Same guard as MemberGroupAssignment.jsx — never offer a member whose
   // own country doesn't match this group's plan currency.
   const groupCountry = (plan?.currency || "INR") === "CAD" ? "Canada" : "India";
-  const available = allProfiles.filter((p) => !memberIds.has(p.id) && (p.country || "India") === groupCountry);
+  const available = allProfiles.filter((p) => (p.country || "India") === groupCountry);
   const nextTicket = Math.max(0, ...(memberships || []).map((m) => m.ticket_number || 0)) + 1;
   const capacity = plan?.member_count || 0;
   const isFull = capacity > 0 && (memberships?.length || 0) >= capacity;
@@ -126,13 +130,19 @@ export default function GroupMembersDialog({ group, plan, onClose }) {
               <Select value={selectedMember} onValueChange={setSelectedMember}>
                 <SelectTrigger className="flex-1"><SelectValue placeholder="Select a member" /></SelectTrigger>
                 <SelectContent>
-                  {available.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.full_name} · {p.member_code || p.mobile}</SelectItem>
-                  ))}
+                  {available.map((p) => {
+                    const count = ticketCountOf(p.id);
+                    return (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.full_name} · {p.member_code || p.mobile}
+                        {count > 0 ? ` (already has ${count} ticket${count > 1 ? "s" : ""})` : ""}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               <Button onClick={addMember} disabled={adding || !selectedMember} className="bg-primary hover:bg-primary/90 rounded-full">
-                {adding ? "Adding…" : "Add"}
+                {adding ? "Adding…" : ticketCountOf(selectedMember) > 0 ? "Add another ticket" : "Add"}
               </Button>
             </div>
           </div>

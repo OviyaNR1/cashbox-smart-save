@@ -50,10 +50,13 @@ export default function PlanRequests() {
   const groupsForPlan = (planId) =>
     groups.filter((g) => g.plan_id === planId && g.status === "active");
 
-  const seatsAvailable = (g) => {
+  // needed defaults to 1 for the general group-select filter; the
+  // approval dialog passes the actual request's ticket_count so a group
+  // that only has, say, 1 seat left isn't offered for a 3-ticket request.
+  const seatsAvailable = (g, needed = 1) => {
     const plan = planOf(g.plan_id);
     const cap = plan?.member_count || 0;
-    return cap === 0 || (g.filled_seats || 0) < cap;
+    return cap === 0 || (g.filled_seats || 0) + needed <= cap;
   };
 
   const openApprove = async (req) => {
@@ -76,34 +79,46 @@ export default function PlanRequests() {
 
       const groupMemberships = await base44.entities.GroupMembership.filter({ group_id: group.id });
       const alreadyAssigned = groupMemberships.some((m) => m.member_profile_id === approveTarget.member_profile_id);
+      const ticketCount = approveTarget.ticket_count || 1;
       let firstDue = "";
 
       // A member can also be assigned directly from their profile (Members
       // -> Groups & Chit Plans), bypassing this request. If that already
       // happened, don't dead-end with an error — the admin's intent here is
-      // clearly "yes, approve" — just clear the now-redundant request.
+      // clearly "yes, approve" — just clear the now-redundant request. This
+      // stays a simple all-or-nothing skip even for multi-ticket requests:
+      // reconciling "they already have 1, but asked for 3" is a rare-enough
+      // race that it's safer to leave for the admin to sort out manually
+      // than to guess how many more to add.
       if (alreadyAssigned) {
         await base44.entities.PlanRequest.update(approveTarget.id, { status: "approved" });
         logAudit({ module: "Plan Requests", action: "approve", record_id: approveTarget.id, details: `Marked request approved — "${profileOf(approveTarget.member_profile_id)?.full_name || "member"}" was already assigned to group "${group.group_code}"` });
       } else {
-        const nextTicket = Math.max(0, ...groupMemberships.map((m) => m.ticket_number || 0)) + 1;
+        const startTicket = Math.max(0, ...groupMemberships.map((m) => m.ticket_number || 0)) + 1;
         firstDue = addMonthsUTC(group.start_date, 1) || "";
 
-        await base44.entities.GroupMembership.create({
-          group_id: group.id,
-          member_profile_id: approveTarget.member_profile_id,
-          user_id: approveTarget.user_id || "",
-          ticket_number: nextTicket,
-          paid_installments: 0,
-          total_paid: 0,
-          next_due_date: firstDue,
-          has_won: false,
-          status: "active",
-        });
+        // One person, ticketCount separate tickets — each is its own
+        // group_memberships row (its own ticket_number, its own
+        // installment/payment/win tracking), all pointing at the same
+        // member_profile_id. See codeGenerator.js / the 2026-08-28 schema
+        // change for why membership identity is per-ticket, not per-person.
+        await base44.entities.GroupMembership.bulkCreate(
+          Array.from({ length: ticketCount }, (_, i) => ({
+            group_id: group.id,
+            member_profile_id: approveTarget.member_profile_id,
+            user_id: approveTarget.user_id || "",
+            ticket_number: startTicket + i,
+            paid_installments: 0,
+            total_paid: 0,
+            next_due_date: firstDue,
+            has_won: false,
+            status: "active",
+          }))
+        );
 
-        await base44.entities.ChitGroup.update(group.id, { filled_seats: groupMemberships.length + 1 });
+        await base44.entities.ChitGroup.update(group.id, { filled_seats: groupMemberships.length + ticketCount });
         await base44.entities.PlanRequest.update(approveTarget.id, { status: "approved" });
-        logAudit({ module: "Plan Requests", action: "approve", record_id: approveTarget.id, details: `Approved request, assigned to group "${group.group_code}" (ticket #${nextTicket})` });
+        logAudit({ module: "Plan Requests", action: "approve", record_id: approveTarget.id, details: `Approved request, assigned to group "${group.group_code}" (ticket${ticketCount > 1 ? "s" : ""} #${startTicket}${ticketCount > 1 ? `–${startTicket + ticketCount - 1}` : ""})` });
       }
 
       const memberMobile = profileOf(approveTarget.member_profile_id)?.mobile;
@@ -146,7 +161,10 @@ export default function PlanRequests() {
     await load();
   };
 
-  const availableGroups = approveTarget ? groupsForPlan(approveTarget.plan_id).filter(seatsAvailable) : [];
+  const requestedTicketCount = approveTarget?.ticket_count || 1;
+  const availableGroups = approveTarget
+    ? groupsForPlan(approveTarget.plan_id).filter((g) => seatsAvailable(g, requestedTicketCount))
+    : [];
 
   return (
     <div className="space-y-6">
@@ -191,10 +209,15 @@ export default function PlanRequests() {
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {prof?.member_code || prof?.mobile || "—"} · {prof?.branch || "—"}
                         </p>
-                        <div className="flex items-center gap-2 mt-2">
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
                             {req.plan_name}
                           </span>
+                          {(req.ticket_count || 1) > 1 && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium">
+                              {req.ticket_count} tickets
+                            </span>
+                          )}
                           <span className="text-xs text-muted-foreground">
                             {formatMoney(plan?.monthly_contribution, cur)}/mo · {plan?.duration_months} months
                           </span>
@@ -270,6 +293,7 @@ export default function PlanRequests() {
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {approveTarget.plan_name} · {approveTarget.currency}
+                  {requestedTicketCount > 1 && <span className="text-amber-400"> · {requestedTicketCount} tickets requested</span>}
                 </p>
               </div>
 
@@ -277,7 +301,9 @@ export default function PlanRequests() {
                 <div className="text-center py-4">
                   <Users className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground mb-3">
-                    No active groups with available seats for this plan.
+                    {requestedTicketCount > 1
+                      ? `No active group has ${requestedTicketCount} seats available for this plan.`
+                      : "No active groups with available seats for this plan."}
                   </p>
                   <Link
                     to="/admin/groups"

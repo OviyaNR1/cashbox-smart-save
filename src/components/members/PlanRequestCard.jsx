@@ -25,6 +25,8 @@ export default function PlanRequestCard({ plan, user: userProp, memberProfile: m
   const [error, setError] = useState("");
   const [profileChecked, setProfileChecked] = useState(!!memberProfileProp);
   const [confirming, setConfirming] = useState(false);
+  const [ticketCount, setTicketCount] = useState(1);
+  const [customCount, setCustomCount] = useState("");
 
   useEffect(() => {
     const withUser = userProp ? Promise.resolve(userProp) : base44.auth.me();
@@ -51,6 +53,10 @@ export default function PlanRequestCard({ plan, user: userProp, memberProfile: m
     }).catch(() => setProfileChecked(true));
   }, [plan.id, userProp, memberProfileProp]);
 
+  // "4+" reveals a free-entry field instead of a fixed quick-pick — cap at
+  // 20 to match the DB check constraint and catch an obvious fat-finger.
+  const resolvedTicketCount = ticketCount === "custom" ? Math.min(20, Math.max(1, parseInt(customCount, 10) || 1)) : ticketCount;
+
   const handleChoose = async () => {
     setSubmitting(true);
     setError("");
@@ -61,9 +67,10 @@ export default function PlanRequestCard({ plan, user: userProp, memberProfile: m
         plan_id: plan.id,
         plan_name: plan.plan_name,
         currency: currency,
+        ticket_count: resolvedTicketCount,
         status: "pending"
       });
-      logAudit({ module: "Members", action: "plan-request", record_id: req.id, details: `${memberProfile?.full_name || "Member"} requested to join "${plan.plan_name}"` });
+      logAudit({ module: "Members", action: "plan-request", record_id: req.id, details: `${memberProfile?.full_name || "Member"} requested to join "${plan.plan_name}" (${resolvedTicketCount} ticket${resolvedTicketCount > 1 ? "s" : ""})` });
       import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
         sendWhatsAppMessage({
           phone: ADMIN_NOTIFY_PHONE,
@@ -123,8 +130,45 @@ export default function PlanRequestCard({ plan, user: userProp, memberProfile: m
             </div>
           ) : confirming ? (
             <div className="space-y-3">
+              <div>
+                <p className="text-xs font-medium text-foreground mb-1.5">How many chit funds are you joining?</p>
+                <div className="flex gap-1.5">
+                  {[1, 2, 3].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setTicketCount(n)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-semibold border ${
+                        ticketCount === n ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setTicketCount("custom")}
+                    className={`flex-1 py-2 rounded-lg text-sm font-semibold border ${
+                      ticketCount === "custom" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    4+
+                  </button>
+                </div>
+                {ticketCount === "custom" && (
+                  <input
+                    type="number"
+                    min={4}
+                    max={20}
+                    value={customCount}
+                    onChange={(e) => setCustomCount(e.target.value)}
+                    placeholder="How many?"
+                    className="mt-2 w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm"
+                  />
+                )}
+              </div>
               <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-3">
-                You're requesting to join <span className="font-semibold text-foreground">{plan.plan_name}</span> — a {plan.duration_months}-month commitment at {formatMoney(plan.monthly_contribution, currency)}/month. An admin will review your request and assign you to a group.
+                You're requesting <span className="font-semibold text-foreground">{resolvedTicketCount} ticket{resolvedTicketCount > 1 ? "s" : ""}</span> in <span className="font-semibold text-foreground">{plan.plan_name}</span> — a {plan.duration_months}-month commitment at {formatMoney(plan.monthly_contribution, currency)}/month{resolvedTicketCount > 1 ? " per ticket" : ""}. An admin will review your request and assign you to a group.
               </p>
               <div className="flex gap-2">
                 <button onClick={() => setConfirming(false)} className="flex-1 px-4 py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:bg-muted">Cancel</button>

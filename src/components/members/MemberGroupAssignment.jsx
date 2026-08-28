@@ -41,13 +41,25 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
   };
   const groupOf = (groupId) => groups.find((g) => g.id === groupId);
 
-  const assignedGroupIds = new Set((memberships || []).map((m) => m.group_id));
+  // Group a member's already in stays offered (not filtered out) so an
+  // admin can deliberately give them a second ticket in the same group —
+  // e.g. one person holding multiple slots. ticketCountIn() surfaces how
+  // many they already hold so re-selecting the same group is a visible,
+  // deliberate choice rather than an easy-to-fumble accidental duplicate.
+  const ticketCountIn = (groupId) => (memberships || []).filter((m) => m.group_id === groupId).length;
   // Never offer a group whose plan currency doesn't match this member's own
   // country — an India member's payments/KYC assume INR; assigning them
   // into a CAD group would silently corrupt those assumptions.
   const memberCountry = member.country || "India";
+  // A group at capacity has no seat left for anyone — a new person or an
+  // existing member's extra ticket alike — so it's excluded outright, the
+  // same rule GroupMembersDialog.jsx already enforces from the group side.
+  const hasCapacity = (g) => {
+    const cap = planOf(g.id)?.member_count || 0;
+    return cap === 0 || (g.filled_seats || 0) < cap;
+  };
   const available = groups.filter((g) => {
-    if (g.status !== "active" || assignedGroupIds.has(g.id)) return false;
+    if (g.status !== "active" || !hasCapacity(g)) return false;
     const plan = planOf(g.id);
     const groupCountry = (plan?.currency || "INR") === "CAD" ? "Canada" : "India";
     return groupCountry === memberCountry;
@@ -186,9 +198,11 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
               <SelectContent>
                 {available.map((g) => {
                   const p = plans.find((pl) => pl.id === g.plan_id);
+                  const count = ticketCountIn(g.id);
                   return (
                     <SelectItem key={g.id} value={g.id}>
                       {g.group_name || g.group_code}{p ? ` · ${p.plan_name}` : ""}
+                      {count > 0 ? ` (already has ${count} ticket${count > 1 ? "s" : ""})` : ""}
                     </SelectItem>
                   );
                 })}
@@ -199,7 +213,7 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
               disabled={adding || !selectedGroup}
               className="px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 whitespace-nowrap"
             >
-              {adding ? "Adding…" : "Assign"}
+              {adding ? "Adding…" : ticketCountIn(selectedGroup) > 0 ? "Add another ticket" : "Assign"}
             </button>
           </div>
         </div>

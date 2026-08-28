@@ -52,17 +52,25 @@ export default function AdminDashboard() {
   const groupIds = new Set(groups.map((g) => g.id));
   const profiles = allProfiles.filter((p) => (p.country || "India") === countryFilter);
   const payments = allPayments.filter((p) => groupIds.has(p.group_id));
-  const winners = allWinners.filter((w) => groupIds.has(w.group_id));
+  // announcement_date is a plain date (no time component), so multiple
+  // winners announced the same calendar day tie on it — without a
+  // secondary key, Postgres doesn't guarantee which order ties come back
+  // in, which is why this list could render out of order. created_at
+  // breaks the tie deterministically.
+  const winners = allWinners
+    .filter((w) => groupIds.has(w.group_id))
+    .sort((a, b) => {
+      const byDate = (b.announcement_date || "").localeCompare(a.announcement_date || "");
+      return byDate !== 0 ? byDate : (b.created_at || "").localeCompare(a.created_at || "");
+    });
 
   const success = payments.filter((p) => p.status === "success");
   const pending = payments.filter((p) => p.status === "pending");
   const totalCollectedDisplay = sumByCurrency(success, "amount", filterCurrency);
   const lateFeesDisplay = sumByCurrency(success, "late_fee", filterCurrency);
   const pendingTotalDisplay = sumByCurrency(pending, "amount", filterCurrency);
-  const winnerCurrency = (w) => {
-    const grp = groups.find((g) => g.id === w.group_id);
-    return plans.find((p) => p.id === grp?.plan_id)?.currency || "INR";
-  };
+  const winnerGroup = (w) => groups.find((g) => g.id === w.group_id);
+  const winnerCurrency = (w) => plans.find((p) => p.id === winnerGroup(w)?.plan_id)?.currency || "INR";
 
   const byMonth = {};
   success.forEach((p) => {
@@ -114,7 +122,9 @@ export default function AdminDashboard() {
               <div key={w.id} className="py-3 flex items-center justify-between">
                 <div>
                   <p className="text-sm text-foreground">{w.member_name || "Member"}</p>
-                  <p className="text-xs text-muted-foreground">Month {w.month_number}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {winnerGroup(w)?.group_name || winnerGroup(w)?.group_code} · Month {w.month_number}
+                  </p>
                 </div>
                 <span className="text-sm font-medium text-emerald-400">{formatMoney(w.prize_amount, winnerCurrency(w))}</span>
               </div>

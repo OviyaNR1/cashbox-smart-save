@@ -170,6 +170,7 @@ export default function AdminLiveAuction() {
       group_id: group.id,
       month_number: auction.month_number,
       member_profile_id: winningBid.member_profile_id,
+      membership_id: winningBid.membership_id,
       member_name: winnerProf?.full_name || "Member",
       prize_amount: winningBid.amount,
       announcement_date: new Date().toISOString().slice(0, 10),
@@ -179,7 +180,15 @@ export default function AdminLiveAuction() {
     });
 
     const memberships = await base44.entities.GroupMembership.filter({ group_id: group.id });
-    const winningMembership = memberships.find((m) => m.member_profile_id === winningBid.member_profile_id);
+    // The winning bid already carries the exact ticket it was placed with
+    // (place_bid() resolves this) — a person can hold multiple tickets in
+    // the same group, so matching on member_profile_id alone would mark
+    // an arbitrary one of their tickets as won instead of the one that
+    // actually bid. Fall back to the old member-profile match only for
+    // legacy bids recorded before membership_id existed.
+    const winningMembership = winningBid.membership_id
+      ? memberships.find((m) => m.id === winningBid.membership_id)
+      : memberships.find((m) => m.member_profile_id === winningBid.member_profile_id);
     if (winningMembership) {
       await base44.entities.GroupMembership.update(winningMembership.id, { has_won: true });
     }

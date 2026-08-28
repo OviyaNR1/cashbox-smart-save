@@ -46,7 +46,6 @@ export default function Winners() {
   const group = groups.find((g) => g.id === groupId);
   const plan = plans.find((p) => p.id === group?.plan_id);
   const profileOf = (id) => profiles.find((p) => p.id === id);
-  const wonIds = new Set(winners?.map((w) => w.member_profile_id) || []);
   const nextMonth = (winners?.length || 0) + 1;
 
   const isLakhBox = plan?.model === "lakhbox";
@@ -62,33 +61,40 @@ export default function Winners() {
     ? (lakhboxRow?.winnerPayout || 0)
     : (plan ? plan.chit_amount - plan.chit_amount * (plan.commission_percent / 100) : 0);
 
+  // has_won lives on the membership (ticket), not the person — a person
+  // can hold multiple tickets in the same group, and winning on one
+  // ticket must not disqualify their other, still-unwon tickets.
   const eligible = isLakhBox
     ? (lakhboxTarget ? [lakhboxTarget] : [])
-    : memberships.filter((m) => m.status === "active" && !m.has_won && !wonIds.has(m.member_profile_id));
+    : memberships.filter((m) => m.status === "active" && !m.has_won);
 
+  // `selected` is a membership id (a specific ticket), not a person — the
+  // same person can appear twice in `eligible` if they hold 2+ unwon
+  // tickets, so tracking the person alone couldn't tell them apart.
   const drawWinner = () => {
     if (isLakhBox) {
       if (!lakhboxTarget) return;
-      setSelected(lakhboxTarget.member_profile_id);
+      setSelected(lakhboxTarget.id);
       return;
     }
     if (eligible.length === 0) return;
     const pick = eligible[Math.floor(Math.random() * eligible.length)];
-    setSelected(pick.member_profile_id);
+    setSelected(pick.id);
   };
 
   const announce = async () => {
     if (!selected) return;
     setSaving(true);
-    const ms = memberships.find((m) => m.member_profile_id === selected);
-    const prof = profileOf(selected);
+    const ms = memberships.find((m) => m.id === selected);
+    const prof = profileOf(ms?.member_profile_id);
     const me = await base44.auth.me().catch(() => ({}));
     const prize = isLakhBox ? (lakhboxRow?.winnerPayout || 0) : prizeAmount;
 
     const createdWinner = await base44.entities.Winner.create({
       group_id: groupId,
       month_number: nextMonth,
-      member_profile_id: selected,
+      member_profile_id: ms?.member_profile_id,
+      membership_id: ms?.id,
       member_name: prof?.full_name || "Member",
       prize_amount: Math.round(prize),
       announcement_date: new Date().toISOString().slice(0, 10),
@@ -313,8 +319,8 @@ export default function Winners() {
               : `Select the winner for Month ${nextMonth}. The prize (${formatMoney(Math.round(prizeAmount), plan?.currency)}) will be recorded, their membership marked as won, and ${formatMoney(plan?.fixed_dividend, plan?.currency)} dividend credited to all active members.`}
           </p>
           {selected && (() => {
-            const prof = profileOf(selected);
-            const ms = memberships.find((m) => m.member_profile_id === selected);
+            const ms = memberships.find((m) => m.id === selected);
+            const prof = profileOf(ms?.member_profile_id);
             return (
               <div className="space-y-3">
                 <div className="flex flex-col items-center py-4">

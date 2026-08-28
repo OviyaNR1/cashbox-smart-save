@@ -56,7 +56,18 @@ export default function LiveAuction() {
       const auction = picked?.auction || null;
       const group = picked?.group || null;
       const plan = picked?.plan || null;
-      const myMembership = group ? memberships.find((m) => m.group_id === group.id) : null;
+      // A person can hold multiple tickets (memberships) in the same
+      // group — picking an arbitrary one here could show "you've already
+      // won, bidding closed" for someone who actually still has a
+      // different, eligible ticket. Prefer whichever of their tickets is
+      // actually eligible to bid (active, unwon, not overdue), mirroring
+      // place_bid()'s own resolution, so this page's bid-eligibility gate
+      // never disagrees with what the RPC will actually allow.
+      const myGroupMemberships = group ? memberships.filter((m) => m.group_id === group.id) : [];
+      const myMembership =
+        myGroupMemberships.find(
+          (m) => m.status === "active" && !m.has_won && (m.paid_installments || 0) >= (group?.current_month || 1) - 1
+        ) || myGroupMemberships[0] || null;
 
       let bids = [];
       let profiles = [];

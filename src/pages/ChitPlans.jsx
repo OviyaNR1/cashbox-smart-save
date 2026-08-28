@@ -20,6 +20,7 @@ import { formatMoney } from "@/lib/currency";
 import { generateAuctionPlan } from "@/lib/auctionEngine";
 import { logAudit } from "@/lib/audit";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
+import { useToast } from "@/components/ui/use-toast";
 
 const empty = { plan_name: "", model: "chit_fund", company_label: "", chit_amount: 100000, member_count: 20, duration_months: 20, monthly_contribution: 5000, fixed_dividend: 0, commission_percent: 5, late_interest_percent: 2, auction_min_decrement: 25, currency: "INR", status: "active" };
 
@@ -36,6 +37,7 @@ export default function ChitPlans() {
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const { toast } = useToast();
 
   const load = () => base44.entities.ChitPlan.list("-created_date", 200).then(setPlans);
   useEffect(() => { load(); }, []);
@@ -48,10 +50,26 @@ export default function ChitPlans() {
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
-    await base44.entities.ChitPlan.delete(deleteTarget.id);
-    logAudit({ module: "Chit Plans", action: "delete", record_id: deleteTarget.id, details: `Deleted plan "${deleteTarget.plan_name}"` });
-    setDeleteTarget(null);
-    load();
+    try {
+      await base44.entities.ChitPlan.delete(deleteTarget.id);
+      logAudit({ module: "Chit Plans", action: "delete", record_id: deleteTarget.id, details: `Deleted plan "${deleteTarget.plan_name}"` });
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      // Groups/plan-requests reference plans via a plain foreign key (no
+      // cascade, deliberately — a plan with real groups/payments under it
+      // shouldn't be deletable at all), so this throws instead of silently
+      // no-oping. Previously uncaught here, which looked exactly like "I
+      // clicked delete and nothing happened."
+      const inUse = err?.code === "23503";
+      toast({
+        title: "Couldn't delete plan",
+        description: inUse
+          ? "This plan still has savings groups (or plan requests) using it. Set it to Inactive instead, or remove those groups first."
+          : err.message || String(err),
+        variant: "destructive",
+      });
+    }
   };
 
   const toggleStatus = async (p) => {

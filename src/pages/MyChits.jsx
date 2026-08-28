@@ -60,8 +60,14 @@ export default function MyChits() {
   const myDividendsFor = (groupId) =>
     dividends.filter((d) => d.group_id === groupId).reduce((s, d) => s + (d.amount || 0), 0);
 
+  // A person can hold multiple tickets (memberships) in the same group,
+  // so matching on member_profile_id alone would show every one of their
+  // tickets as "won" the moment any single one of them wins. Winner rows
+  // now carry membership_id to pin the win to the exact ticket; fall back
+  // to the member-profile match only for legacy rows recorded before that
+  // column existed, when one person could only ever hold one ticket.
   const myWin = (m) =>
-    winners.find((w) => w.group_id === m.group_id && w.member_profile_id === m.member_profile_id);
+    winners.find((w) => w.group_id === m.group_id && (w.membership_id ? w.membership_id === m.id : w.member_profile_id === m.member_profile_id));
 
   return (
     <div className="space-y-6">
