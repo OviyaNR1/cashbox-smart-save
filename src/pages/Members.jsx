@@ -20,10 +20,36 @@ export default function Members() {
   const [formOpen, setFormOpen] = useState(false);
   const { toast } = useToast();
 
+  const [ticketsByProfile, setTicketsByProfile] = useState({});
+
   const load = () => {
     setLoading(true);
-    base44.entities.MemberProfile.list("-created_date", 500).then((p) => {
+    Promise.all([
+      base44.entities.MemberProfile.list("-created_date", 500),
+      base44.entities.GroupMembership.list("-created_date", 1000),
+      base44.entities.ChitGroup.list("-created_date", 500),
+      base44.entities.ChitPlan.list("-created_date", 200),
+    ]).then(([p, memberships, groups, plans]) => {
       setProfiles(p);
+      const byProfile = {};
+      for (const m of memberships) {
+        const group = groups.find((g) => g.id === m.group_id);
+        const plan = plans.find((pl) => pl.id === group?.plan_id);
+        const ticket = {
+          id: m.id,
+          groupLabel: group?.group_name || group?.group_code || "—",
+          ticketNumber: m.ticket_number,
+          totalTickets: plan?.member_count,
+          // A short, stable identifier for this specific ticket — the plain
+          // "1 of 20" position is meaningful context but isn't something you
+          // can search for or read out over the phone, so pair it with a
+          // code in the same {prefix}-{padded number} shape as member_code.
+          ticketCode: group?.group_code ? `${group.group_code}-T${String(m.ticket_number || 0).padStart(4, "0")}` : null,
+        };
+        (byProfile[m.member_profile_id] ||= []).push(ticket);
+      }
+      Object.values(byProfile).forEach((list) => list.sort((a, b) => (a.ticketNumber || 0) - (b.ticketNumber || 0)));
+      setTicketsByProfile(byProfile);
       setLoading(false);
     });
   };
@@ -118,6 +144,7 @@ export default function Members() {
               <thead className="bg-muted/70 text-muted-foreground text-xs uppercase tracking-wider">
                 <tr>
                   <th className="text-left px-5 py-3">Member</th>
+                  <th className="text-left px-5 py-3">Ticket</th>
                   <th className="text-left px-5 py-3">Contact</th>
                   <th className="text-left px-5 py-3 hidden sm:table-cell">Branch</th>
                   <th className="text-right px-5 py-3">KYC Stage</th>
@@ -126,29 +153,54 @@ export default function Members() {
               <tbody className="divide-y divide-border">
                 {filtered.map((p) => {
                   const badge = stageBadge(p.kyc_stage);
-                  return (
-                    <tr key={p.id} onClick={() => setSelected(p)} className="cursor-pointer hover:bg-muted/50">
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className="w-9 h-9 rounded-full bg-primary/5 grid place-items-center text-sm font-medium text-foreground">
-                            {(p.full_name || "?").charAt(0)}
-                          </span>
-                          <div>
-                            <p className="text-foreground font-medium">{p.full_name || "—"}</p>
-                            <p className="text-xs text-muted-foreground">{p.member_code || "—"}</p>
+                  // A member can hold several tickets, possibly across
+                  // different groups — one row per ticket instead of
+                  // collapsing them, so an admin can see and click into each
+                  // one individually. rowSpan on the shared columns keeps the
+                  // member's identity from repeating down the block.
+                  const tickets = ticketsByProfile[p.id] || [];
+                  const rows = tickets.length ? tickets : [null];
+                  return rows.map((t, i) => (
+                    <tr key={t ? t.id : p.id} onClick={() => setSelected(p)} className="cursor-pointer hover:bg-muted/50">
+                      {i === 0 && (
+                        <td className="px-5 py-3 align-top" rowSpan={rows.length}>
+                          <div className="flex items-center gap-3">
+                            <span className="w-9 h-9 rounded-full bg-primary/5 grid place-items-center text-sm font-medium text-foreground">
+                              {(p.full_name || "?").charAt(0)}
+                            </span>
+                            <div>
+                              <p className="text-foreground font-medium">{p.full_name || "—"}</p>
+                              <p className="text-xs text-muted-foreground">{p.member_code || "—"}</p>
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
+                      )}
                       <td className="px-5 py-3 text-muted-foreground">
-                        <p>{p.mobile || "—"}</p>
-                        <p className="text-xs text-muted-foreground">{p.email || ""}</p>
+                        {t ? (
+                          <>
+                            <p className="text-foreground font-mono text-sm">{t.ticketCode || `Ticket ${t.ticketNumber || "—"}`}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {t.groupLabel}{t.ticketNumber && t.totalTickets ? ` · ${t.ticketNumber} of ${t.totalTickets}` : ""}
+                            </p>
+                          </>
+                        ) : (
+                          <span className="text-xs">No group yet</span>
+                        )}
                       </td>
-                      <td className="px-5 py-3 text-muted-foreground hidden sm:table-cell">{p.branch || "—"}</td>
-                      <td className="px-5 py-3 text-right">
-                        <span className={`text-xs px-2.5 py-1 rounded-full ${badge.tone}`}>{badge.label}</span>
-                      </td>
+                      {i === 0 && (
+                        <>
+                          <td className="px-5 py-3 text-muted-foreground align-top" rowSpan={rows.length}>
+                            <p>{p.mobile || "—"}</p>
+                            <p className="text-xs text-muted-foreground">{p.email || ""}</p>
+                          </td>
+                          <td className="px-5 py-3 text-muted-foreground hidden sm:table-cell align-top" rowSpan={rows.length}>{p.branch || "—"}</td>
+                          <td className="px-5 py-3 text-right align-top" rowSpan={rows.length}>
+                            <span className={`text-xs px-2.5 py-1 rounded-full ${badge.tone}`}>{badge.label}</span>
+                          </td>
+                        </>
+                      )}
                     </tr>
-                  );
+                  ));
                 })}
               </tbody>
             </table>
