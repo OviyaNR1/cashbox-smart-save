@@ -6,7 +6,6 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import ScrollToTop from './components/ScrollToTop';
-import { Navigate } from 'react-router-dom';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import PublicLayout from '@/components/PublicLayout';
@@ -92,7 +91,7 @@ const AuthenticatedApp = () => {
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
+        <Route element={<ProtectedRoute />}>
           <Route path="/app" element={<Home />} />
           <Route element={<Layout />}>
             <Route path="/admin" element={<AdminDashboard />} />

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 
 const DefaultFallback = () => (
@@ -8,8 +8,9 @@ const DefaultFallback = () => (
   </div>
 );
 
-export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthenticatedElement }) {
+export default function ProtectedRoute({ fallback = <DefaultFallback /> }) {
   const { isAuthenticated, isLoadingAuth, authChecked, checkUserAuth } = useAuth();
+  const location = useLocation();
 
   useEffect(() => {
     if (!authChecked && !isLoadingAuth) {
@@ -22,7 +23,13 @@ export default function ProtectedRoute({ fallback = <DefaultFallback />, unauthe
   }
 
   if (!isAuthenticated) {
-    return unauthenticatedElement;
+    // Carry the page the member was trying to reach through login, so e.g.
+    // a WhatsApp "join the auction" link that arrives while logged out (or
+    // after the 30-min inactivity auto-logout) lands them back on that page
+    // instead of the generic dashboard — see authReturnTo.js / Login.jsx.
+    const returnTo = location.pathname + location.search;
+    const target = returnTo === "/" ? "/login" : `/login?returnTo=${encodeURIComponent(returnTo)}`;
+    return <Navigate to={target} replace />;
   }
 
   return <Outlet />;

@@ -150,7 +150,7 @@ export const sendAuctionReminders = async (groupId) => {
         const templateParams = [
           profile.full_name,
           auctionDateStr,
-          group.group_code,
+          group.group_name || group.group_code,
           `${window.location.origin}/live-auction`,
         ];
 
