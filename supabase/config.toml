@@ -1,0 +1,4 @@
+# Supabase configuration
+project_id = "wryjrklhymcmmnbyndzv"
+
+[functions.sendWhatsApp]

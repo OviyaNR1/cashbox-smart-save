@@ -201,7 +201,7 @@ export default function AdminLiveAuction() {
     const newCurrentMonth = Math.min(auction.month_number, plan.duration_months);
     await base44.entities.ChitGroup.update(group.id, { current_month: newCurrentMonth });
 
-    logAuction({ module: "Live Auction", action: "close", record_id: winner.id, details: `Closed Month ${auction.month_number} auction for group ${group.group_code} — winner ${winnerProf?.full_name || "member"} at ${winningBid.amount}` });
+    logAudit({ module: "Live Auction", action: "close", record_id: winner.id, details: `Closed Month ${auction.month_number} auction for group ${group.group_code} — winner ${winnerProf?.full_name || "member"} at ${winningBid.amount}` });
 
     // Send winner announcement messages automatically
     const monthLabel = `Month ${auction.month_number}`;

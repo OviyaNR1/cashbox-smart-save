@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { Send } from "lucide-react";
+import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 
 const empty = {
   full_name: "", mobile: "", email: "", branch: "", member_code: "",
@@ -31,7 +32,7 @@ export default function AddMemberDialog({ open, onClose, onAdded }) {
       const regUrl = `${window.location.origin}/register`;
       const message = `Hello ${form.full_name}! You've been added as a member of CashBox. Please complete your registration here: ${regUrl}`;
       try {
-        await base44.functions.invoke("sendWhatsApp", { phone: form.mobile, message });
+        await sendWhatsAppMessage({ phone: form.mobile, message });
         toast({ title: "Member added", description: `${form.full_name} added and WhatsApp invite sent.` });
       } catch (e) {
         toast({ title: "Member added", description: `${form.full_name} added, but WhatsApp invite failed — configure WhatsApp in settings.` });

@@ -10,6 +10,7 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
+import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 
 const empty = {
   full_name: "", address: "", city: "", state: "", pin_code: "", mobile: "", phone: "", email: "",
@@ -85,7 +86,7 @@ export default function MemberOnboardingForm({ open, onClose, onSaved, member })
           const regUrl = `${window.location.origin}/register`;
           const message = `Hello ${form.full_name}! You've been onboarded to CashBox. Complete your registration: ${regUrl}`;
           try {
-            await base44.functions.invoke("sendWhatsApp", { phone: form.mobile, message });
+            await sendWhatsAppMessage({ phone: form.mobile, message });
           } catch (e) {
             /* WhatsApp optional */
           }

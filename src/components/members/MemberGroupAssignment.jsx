@@ -5,6 +5,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { UserPlus, Trash2 } from "lucide-react";
 import { logAudit } from "@/lib/audit";
 import { addMonthsUTC } from "@/lib/dates";
+import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 
 export default function MemberGroupAssignment({ member, onUpdated }) {
   const [groups, setGroups] = useState([]);
@@ -96,7 +97,7 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
       if (group?.whatsapp_group_link && member.mobile) {
         const plan = planOf(group.id);
         const message = `You've been added to ${group.group_code}${plan ? ` (${plan.plan_name})` : ""}! Join the group chat here: ${group.whatsapp_group_link}`;
-        base44.functions.invoke("sendWhatsApp", { phone: member.mobile, message }).catch((err) => {
+        sendWhatsAppMessage({ phone: member.mobile, message }).catch((err) => {
           console.error("Group-invite WhatsApp notification failed:", err);
           logAudit({ module: "Savings Groups", action: "whatsapp-notify-failed", record_id: created.id, details: `Failed to WhatsApp-notify "${member.full_name || "member"}" of group assignment: ${err?.message || err}` });
         });

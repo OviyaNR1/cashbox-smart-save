@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { ArrowLeft, Printer, Download, MessageCircle } from "lucide-react";
 import { formatMoney } from "@/lib/currency";
 import { generateInvoicePdf, buildInvoiceNumber } from "@/lib/pdf";
+import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 
 export default function Receipt() {
   const { id } = useParams();
@@ -69,7 +70,7 @@ export default function Receipt() {
       const receiptUrl = `${window.location.origin}/receipt/${p.id}`;
       const message = `Your CashBox receipt for installment #${p.installment_number || "—"} (${formatMoney(p.amount, cur)}) is ready: ${receiptUrl}`;
       if (!prof?.mobile) throw new Error("This member has no phone number on file.");
-      await base44.functions.invoke("sendWhatsApp", { phone: prof.mobile, message });
+      await sendWhatsAppMessage({ phone: prof.mobile, message });
       toast({ title: "Sent via WhatsApp" });
     } catch (e) {
       toast({ title: "Could not send", description: e.message, variant: "destructive" });
