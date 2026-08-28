@@ -96,8 +96,14 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
       // members assigned this way never hear about the group chat at all.
       if (group?.whatsapp_group_link && member.mobile) {
         const plan = planOf(group.id);
-        const message = `You've been added to ${group.group_code}${plan ? ` (${plan.plan_name})` : ""}! Join the group chat here: ${group.whatsapp_group_link}`;
-        sendWhatsAppMessage({ phone: member.mobile, message }).catch((err) => {
+        // Free-form text only reaches numbers that messaged the business in
+        // the last 24 hours — a member assigned this way has no guarantee
+        // of that, so this has to be an approved template.
+        sendWhatsAppMessage({
+          phone: member.mobile,
+          templateName: "group_assignment_invite",
+          parameters: [member.full_name || "Member", group.group_code, plan?.plan_name || "your plan", group.whatsapp_group_link],
+        }).catch((err) => {
           console.error("Group-invite WhatsApp notification failed:", err);
           logAudit({ module: "Savings Groups", action: "whatsapp-notify-failed", record_id: created.id, details: `Failed to WhatsApp-notify "${member.full_name || "member"}" of group assignment: ${err?.message || err}` });
         });

@@ -84,9 +84,15 @@ export default function MemberOnboardingForm({ open, onClose, onSaved, member })
 
         if (form.mobile) {
           const regUrl = `${window.location.origin}/register`;
-          const message = `Hello ${form.full_name}! You've been onboarded to CashBox. Complete your registration: ${regUrl}`;
           try {
-            await sendWhatsAppMessage({ phone: form.mobile, message });
+            // Free-form text only reaches numbers that messaged the business
+            // in the last 24 hours — this is always a first-contact message
+            // to a brand-new member, so it has to be an approved template.
+            await sendWhatsAppMessage({
+              phone: form.mobile,
+              templateName: "member_invite",
+              parameters: [form.full_name, regUrl],
+            });
           } catch (e) {
             /* WhatsApp optional */
           }

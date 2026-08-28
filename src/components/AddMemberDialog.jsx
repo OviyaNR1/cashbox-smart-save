@@ -30,9 +30,15 @@ export default function AddMemberDialog({ open, onClose, onAdded }) {
       });
 
       const regUrl = `${window.location.origin}/register`;
-      const message = `Hello ${form.full_name}! You've been added as a member of CashBox. Please complete your registration here: ${regUrl}`;
       try {
-        await sendWhatsAppMessage({ phone: form.mobile, message });
+        // Free-form text only reaches numbers that messaged the business in
+        // the last 24 hours — this is always a first-contact message to a
+        // brand-new member, so it has to be an approved template.
+        await sendWhatsAppMessage({
+          phone: form.mobile,
+          templateName: "member_invite",
+          parameters: [form.full_name, regUrl],
+        });
         toast({ title: "Member added", description: `${form.full_name} added and WhatsApp invite sent.` });
       } catch (e) {
         toast({ title: "Member added", description: `${form.full_name} added, but WhatsApp invite failed — configure WhatsApp in settings.` });

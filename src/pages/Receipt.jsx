@@ -68,9 +68,16 @@ export default function Receipt() {
     setSending("whatsapp");
     try {
       const receiptUrl = `${window.location.origin}/receipt/${p.id}`;
-      const message = `Your CashBox receipt for installment #${p.installment_number || "—"} (${formatMoney(p.amount, cur)}) is ready: ${receiptUrl}`;
       if (!prof?.mobile) throw new Error("This member has no phone number on file.");
-      await sendWhatsAppMessage({ phone: prof.mobile, message });
+      // Plain free-form text only reaches members who messaged the business
+      // within the last 24 hours — an admin sending a receipt on demand has
+      // no such guarantee, so this has to be an approved template like every
+      // other admin-triggered notification in the app.
+      await sendWhatsAppMessage({
+        phone: prof.mobile,
+        templateName: "receipt_ready",
+        parameters: [prof?.full_name || "Member", String(p.installment_number || "—"), formatMoney(p.amount, cur), receiptUrl],
+      });
       toast({ title: "Sent via WhatsApp" });
     } catch (e) {
       toast({ title: "Could not send", description: e.message, variant: "destructive" });
