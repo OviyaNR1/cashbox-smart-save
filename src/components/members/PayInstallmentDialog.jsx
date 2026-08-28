@@ -22,8 +22,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { formatMoney } from "@/lib/currency";
 import FileUpload from "@/components/members/FileUpload";
-import { buildUpiPaymentLink } from "@/lib/upi";
-import { Loader2, CreditCard, Check, Smartphone } from "lucide-react";
+import { buildUpiPaymentLink, BUSINESS_UPI_ID } from "@/lib/upi";
+import { Loader2, CreditCard, Check, Smartphone, Copy } from "lucide-react";
 
 const PAYMENT_METHODS = [
   { value: "upi", label: "UPI" },
@@ -114,6 +114,16 @@ export default function PayInstallmentDialog({
       else next.add(number);
       return next;
     });
+  };
+
+  // Fallback for when the upi:// deep link can't hand off to an external
+  // app — most commonly because the member tapped a CashBox link from
+  // inside WhatsApp/Instagram's own in-app browser, which frequently
+  // swallows custom-scheme navigations instead of launching the UPI app.
+  const copyUpiId = () => {
+    navigator.clipboard?.writeText(BUSINESS_UPI_ID)
+      .then(() => toast({ title: "UPI ID copied", description: "Paste it in your UPI app to pay." }))
+      .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_ID, variant: "destructive" }));
   };
 
   const installmentsToPay = items.filter((i) => selected.has(i.number));
@@ -254,6 +264,21 @@ export default function PayInstallmentDialog({
             >
               <Smartphone className="w-4 h-4" /> Pay {formatMoney(amount, currency)} via UPI App
             </a>
+          )}
+
+          {method === "upi" && (
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">
+                Button above not opening your UPI app? That happens if you opened this page from inside WhatsApp — copy the UPI ID instead and pay manually.
+              </p>
+              <button
+                type="button"
+                onClick={copyUpiId}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs font-medium text-foreground hover:bg-muted"
+              >
+                <Copy className="w-3 h-3" /> Copy UPI ID
+              </button>
+            </div>
           )}
 
           {method !== "cash" && (

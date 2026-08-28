@@ -2,7 +2,7 @@
 // UI exists yet for this — change it here (same pattern as
 // ADMIN_NOTIFY_PHONE in PlanRequestCard.jsx), or ask for a settings field if
 // you want it editable in the app itself.
-const BUSINESS_UPI_ID = "8344551836@ybl";
+export const BUSINESS_UPI_ID = "8344551836@ybl";
 const BUSINESS_UPI_NAME = "CashBox";
 
 // Builds a `upi://pay` deep link that opens the phone's UPI app chooser
@@ -11,6 +11,15 @@ const BUSINESS_UPI_NAME = "CashBox";
 // Only does anything on a device with a UPI app installed to handle the
 // `upi://` scheme (mainly Android) — elsewhere the link is inert, so
 // members there still rely on the reference number / screenshot fields.
+//
+// Known gap: in-app browsers (tapping a CashBox link from inside WhatsApp,
+// Instagram, etc.) frequently block the handoff to an external app for a
+// custom scheme like this — the WebView just fails to launch anything and
+// drops the member back into the host app, which looks like "it opened
+// WhatsApp instead of my UPI app". There's no reliable cross-app way to
+// detect or work around this from inside the WebView; the copy-UPI-ID
+// fallback next to this button in PayInstallmentDialog.jsx exists because
+// of exactly this.
 export function buildUpiPaymentLink({ amount, note }) {
   const params = new URLSearchParams({
     pa: BUSINESS_UPI_ID,
