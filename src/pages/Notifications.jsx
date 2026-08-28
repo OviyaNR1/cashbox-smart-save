@@ -36,9 +36,9 @@ const TEMPLATES = {
     params: ["winnerName", "month", "prizeAmount", "dividend", "nextInstallment"],
   },
   auction_reminder: {
-    body: "Member Name, Auction Date, Group Name",
+    body: "Member Name, Auction Date, Group Name, Auction Link",
     isTemplate: true,
-    params: ["memberName", "auctionDate", "groupName"],
+    params: ["memberName", "auctionDate", "groupName", "auctionLink"],
   },
   kyc_reminder: {
     body: "Dear Member,\n\nYour KYC verification is still pending. Please complete your KYC submission at the earliest to avoid any disruption in your chit participation.\n\nCashBox Team",

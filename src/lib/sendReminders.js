@@ -151,6 +151,7 @@ export const sendAuctionReminders = async (groupId) => {
           profile.full_name,
           auctionDateStr,
           group.group_code,
+          `${window.location.origin}/live-auction`,
         ];
 
         await sendWhatsAppMessage({
