@@ -22,7 +22,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { formatMoney } from "@/lib/currency";
 import FileUpload from "@/components/members/FileUpload";
-import { Loader2, CreditCard, Check } from "lucide-react";
+import { buildUpiPaymentLink } from "@/lib/upi";
+import { Loader2, CreditCard, Check, Smartphone } from "lucide-react";
 
 const PAYMENT_METHODS = [
   { value: "upi", label: "UPI" },
@@ -163,7 +164,7 @@ export default function PayInstallmentDialog({
             <CreditCard className="w-5 h-5 text-primary" /> Pay Installment
           </DialogTitle>
           <DialogDescription>
-            {plan.plan_name} · {group?.group_code || ""}
+            {plan.plan_name} · {group?.group_name || group?.group_code || ""}
           </DialogDescription>
         </DialogHeader>
 
@@ -239,6 +240,21 @@ export default function PayInstallmentDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {method === "upi" && amount > 0 && (
+            <a
+              href={buildUpiPaymentLink({
+                amount,
+                // Plain ASCII only — some UPI apps reject the deep link
+                // outright if the transaction note has non-ASCII characters
+                // (plan.plan_name has a rupee symbol and commas).
+                note: `CashBox Installment ${installmentsToPay.map((i) => i.number).join(",")}`,
+              })}
+              className="flex items-center justify-center gap-2 w-full h-10 rounded-lg border border-primary/30 bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/15 transition-colors"
+            >
+              <Smartphone className="w-4 h-4" /> Pay {formatMoney(amount, currency)} via UPI App
+            </a>
+          )}
 
           {method !== "cash" && (
             <>
