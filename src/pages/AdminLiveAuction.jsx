@@ -21,7 +21,10 @@ export default function AdminLiveAuction() {
   const { country: countryFilter } = useAdminCountry();
   const [groups, setGroups] = useState([]);
   const [plans, setPlans] = useState([]);
-  const [groupId, setGroupId] = useState("");
+  // Remembered across visits so the admin doesn't have to reselect the
+  // group every time they open this page — same pattern as the other
+  // cashbox_* admin preferences.
+  const [groupId, setGroupId] = useState(() => localStorage.getItem("cashbox_live_auction_group") || "");
   const [auction, setAuction] = useState(null);
   const [bids, setBids] = useState([]);
   const [profiles, setProfiles] = useState([]);
@@ -33,6 +36,10 @@ export default function AdminLiveAuction() {
     base44.entities.ChitPlan.list("-created_date", 200).then(setPlans);
     base44.entities.ChitGroup.list("-created_date", 200).then(setGroups);
   }, []);
+
+  useEffect(() => {
+    if (groupId) localStorage.setItem("cashbox_live_auction_group", groupId);
+  }, [groupId]);
 
   const liveAuctionGroups = useMemo(
     () => groups.filter((g) => {
