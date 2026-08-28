@@ -113,7 +113,7 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
         // of that, so this has to be an approved template.
         sendWhatsAppMessage({
           phone: member.mobile,
-          templateName: "group_assignment_invite",
+          templateName: "group_assignment_invite_v2",
           parameters: [member.full_name || "Member", group.group_name || group.group_code, plan?.plan_name || "your plan", group.whatsapp_group_link],
         }).catch((err) => {
           console.error("Group-invite WhatsApp notification failed:", err);

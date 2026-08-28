@@ -161,7 +161,7 @@ export const sendAuctionReminders = async (groupId) => {
 
         await sendWhatsAppMessage({
           phone: profile.mobile,
-          templateName: "auction_reminder",
+          templateName: "auction_reminder_v2",
           parameters: templateParams,
         });
         sent++;

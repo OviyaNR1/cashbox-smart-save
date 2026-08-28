@@ -131,7 +131,7 @@ export default function PlanRequests() {
         import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
           sendWhatsAppMessage({
             phone: memberMobile,
-            templateName: "group_approved",
+            templateName: "group_approved_v2",
             parameters: [group.group_name || group.group_code, plan.plan_name, startDate, collectionDate, firstDueDate, group.whatsapp_group_link],
           }).then((res) => {
             console.log("✅ Group approved message sent:", res);
