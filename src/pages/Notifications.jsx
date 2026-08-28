@@ -24,15 +24,15 @@ const TEMPLATES = {
     isTemplate: true,
     params: ["memberName", "daysLate", "breakdown", "lateFee", "totalAmount"],
   },
-  winner_announcement_all: {
-    body: "Winner Name, Month, Prize Amount",
+  winner_announcement_all_v2: {
+    body: "Winner Name, Month, Prize Amount, Dividend, Next Installment",
     isTemplate: true,
-    params: ["winnerName", "month", "prizeAmount"],
+    params: ["winnerName", "month", "prizeAmount", "dividend", "nextInstallment"],
   },
   winner_announcement_winner: {
-    body: "Winner Name, Month, Prize Amount (personalized to winner)",
+    body: "Winner Name, Month, Prize Amount, Dividend, Next Installment (personalized to winner)",
     isTemplate: true,
-    params: ["winnerName", "month", "prizeAmount"],
+    params: ["winnerName", "month", "prizeAmount", "dividend", "nextInstallment"],
   },
   auction_reminder: {
     body: "Member Name, Auction Date, Group Name",
@@ -149,7 +149,7 @@ export default function Notifications() {
                 <SelectItem value="payment_reminder">Payment reminder (static)</SelectItem>
                 <SelectItem value="payment_reminder_overdue_v2">Payment reminder - Overdue</SelectItem>
                 <SelectItem value="payment_reminder_urgent_v2">Payment reminder - Urgent</SelectItem>
-                <SelectItem value="winner_announcement_all">Winner announcement (all members)</SelectItem>
+                <SelectItem value="winner_announcement_all_v2">Winner announcement (all members)</SelectItem>
                 <SelectItem value="winner_announcement_winner">Winner announcement (personalized)</SelectItem>
                 <SelectItem value="auction_reminder">Auction reminder</SelectItem>
                 <SelectItem value="kyc_reminder">KYC reminder</SelectItem>

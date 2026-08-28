@@ -207,17 +207,19 @@ export default function AdminLiveAuction() {
     const monthLabel = `Month ${auction.month_number}`;
     const prizeAmountStr = `${plan?.currency || "INR"} ${winningBid.amount}`;
     const winnerName = winnerProf?.full_name || "Member";
+    const dividendStr = formatMoney(outcome.dividendPerMember, plan.currency);
+    const nextInstallmentStr = formatMoney(outcome.nextInstallment, plan.currency);
 
     const memberProfiles = await Promise.all(allActive.map(m => base44.entities.MemberProfile.get(m.member_profile_id)));
     for (const prof of memberProfiles) {
       if (prof?.mobile) {
         const isWinner = prof.id === winningBid.member_profile_id;
-        const template = isWinner ? "winner_announcement_winner" : "winner_announcement_all";
+        const template = isWinner ? "winner_announcement_winner" : "winner_announcement_all_v2";
         try {
           await sendWhatsAppMessage({
             phone: prof.mobile,
             templateName: template,
-            parameters: [winnerName, monthLabel, prizeAmountStr],
+            parameters: [winnerName, monthLabel, prizeAmountStr, dividendStr, nextInstallmentStr],
           });
         } catch (err) {
           console.error(`Failed to send ${template} to ${prof.full_name}:`, err);
