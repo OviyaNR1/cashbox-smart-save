@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import MemberOnboardingWizard from "@/components/members/MemberOnboardingWizard";
-import PayInstallmentDialog from "@/components/members/PayInstallmentDialog";
+import PayAllDialog from "@/components/members/PayAllDialog";
 import { formatMoney } from "@/lib/currency";
 import { getNextPaymentPreview } from "@/lib/paymentPreview";
 import { ArrowRight, CreditCard, Gavel, Calendar, Wallet, Users, XCircle } from "lucide-react";
@@ -17,7 +17,7 @@ function greeting() {
 export default function MemberDashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [payMembership, setPayMembership] = useState(null);
+  const [payAllOpen, setPayAllOpen] = useState(false);
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -99,6 +99,29 @@ export default function MemberDashboard() {
   // the exact same "browse plans" empty state as someone who never applied.
   const openRequests = (planRequests || []).filter((r) => r.status !== "approved");
 
+  // Flattens every unpaid installment across every ticket a member holds
+  // (possibly several, possibly across different groups) into one list, so
+  // the whole thing can be paid in a single cart-style checkout instead of
+  // ticket-by-ticket. Replaces the old one-"Pay Now"-button-per-ticket-card
+  // pattern, which got confusing fast once a person held multiple tickets.
+  const allDueItems = activeMemberships.flatMap(({ membership, group, plan, preview }) =>
+    (preview?.unpaidInstallments || []).map((item) => ({
+      key: `${membership.id}-${item.number}`,
+      membership,
+      group,
+      plan,
+      currency: plan.currency || "INR",
+      ...item,
+    }))
+  );
+  const dueTotalsByCurrency = {};
+  allDueItems.forEach((i) => {
+    dueTotalsByCurrency[i.currency] = (dueTotalsByCurrency[i.currency] || 0) + i.amount;
+  });
+  const dueTotalDisplay = Object.keys(dueTotalsByCurrency).length
+    ? Object.entries(dueTotalsByCurrency).map(([c, amt]) => formatMoney(amt, c)).join(" + ")
+    : formatMoney(0, "INR");
+
   return (
     <div className="space-y-8">
       <Header firstName={firstName} />
@@ -142,25 +165,42 @@ export default function MemberDashboard() {
           </Link>
         )
       ) : (
-        activeMemberships.map(({ membership: m, group, plan, preview }) => (
-          <GroupHero
-            key={m.id}
-            membership={m}
-            group={group}
-            plan={plan}
-            preview={preview}
-            auctions={auctions}
-            onPay={() => setPayMembership(m)}
-          />
-        ))
+        <>
+          {allDueItems.length > 0 && (
+            <div className="bg-primary/10 rounded-2xl border border-primary/20 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-primary/80">Total Due</p>
+                <p className="text-3xl font-bold text-foreground tabular-nums mt-1">{dueTotalDisplay}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {allDueItems.length} installment{allDueItems.length > 1 ? "s" : ""} across {activeMemberships.length} ticket{activeMemberships.length > 1 ? "s" : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => setPayAllOpen(true)}
+                className="shrink-0 inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
+              >
+                <CreditCard className="w-4 h-4" /> Pay Now
+              </button>
+            </div>
+          )}
+
+          {activeMemberships.map(({ membership: m, group, plan, preview }) => (
+            <GroupHero
+              key={m.id}
+              membership={m}
+              group={group}
+              plan={plan}
+              preview={preview}
+              auctions={auctions}
+            />
+          ))}
+        </>
       )}
 
-      <PayInstallmentDialog
-        open={!!payMembership}
-        onOpenChange={(v) => !v && setPayMembership(null)}
-        membership={payMembership}
-        plan={payMembership ? planFor(payMembership).plan : null}
-        group={payMembership ? planFor(payMembership).group : null}
+      <PayAllDialog
+        open={payAllOpen}
+        onOpenChange={setPayAllOpen}
+        items={allDueItems}
         user={me}
         onPaid={loadData}
       />
@@ -177,7 +217,7 @@ function Header({ firstName }) {
   );
 }
 
-function GroupHero({ membership: m, group, plan, preview, auctions, onPay }) {
+function GroupHero({ membership: m, group, plan, preview, auctions }) {
   const cur = plan.currency || "INR";
   const total = plan.duration_months || 0;
   const currentMonth = Math.min(group?.current_month || (m.paid_installments || 0) + 1, total || 1);
@@ -192,7 +232,9 @@ function GroupHero({ membership: m, group, plan, preview, auctions, onPay }) {
       <div>
         <p className="text-sm text-muted-foreground">Your CashBox Group</p>
         <h2 className="text-xl font-semibold text-foreground">
-          {group?.group_name || group?.group_code || plan.plan_name} <span className="text-muted-foreground font-normal">· Month {currentMonth} of {total}</span>
+          {group?.group_name || group?.group_code || plan.plan_name}
+          {m.ticket_number ? <span className="text-muted-foreground font-normal"> · Ticket #{m.ticket_number}</span> : null}{" "}
+          <span className="text-muted-foreground font-normal">· Month {currentMonth} of {total}</span>
         </h2>
       </div>
 
@@ -225,14 +267,6 @@ function GroupHero({ membership: m, group, plan, preview, auctions, onPay }) {
           </p>
           {preview?.dividendThisMonth > 0 && (
             <p className="text-xs text-emerald-400 mt-1">This month's dividend: {formatMoney(preview.dividendThisMonth, cur)}</p>
-          )}
-          {m.status === "active" && preview?.label !== "completed" && (
-            <button
-              onClick={onPay}
-              className="mt-auto pt-3 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 self-start"
-            >
-              <CreditCard className="w-3.5 h-3.5" /> Pay Now
-            </button>
           )}
         </div>
 
