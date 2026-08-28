@@ -12,6 +12,7 @@ import { logAudit } from "@/lib/audit";
 import { getSignedUrl } from "@/lib/storage";
 import { useToast } from "@/components/ui/use-toast";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
+import { getNextPaymentPreview } from "@/lib/paymentPreview";
 
 const methods = ["upi", "cash", "bank_transfer"];
 
@@ -23,12 +24,14 @@ export default function Payments() {
   const [profiles, setProfiles] = useState([]);
   const [groups, setGroups] = useState([]);
   const [plans, setPlans] = useState([]);
+  const [auctions, setAuctions] = useState([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
   // Shared with every other admin page via the header dropdown.
   const { country: countryFilter } = useAdminCountry();
   const [form, setForm] = useState({ membership_id: "", amount: "", installment_number: "", method: "cash", payment_date: new Date().toISOString().slice(0, 10) });
+  const [suggested, setSuggested] = useState(null);
   const { toast } = useToast();
 
   const load = () => base44.entities.Payment.list("-payment_date", 300).then(setPayments);
@@ -38,7 +41,24 @@ export default function Payments() {
     base44.entities.MemberProfile.list("-created_date", 200).then(setProfiles);
     base44.entities.ChitGroup.list("-created_date", 200).then(setGroups);
     base44.entities.ChitPlan.list("-created_date", 200).then(setPlans);
+    base44.entities.Auction.list("-created_date", 500).then(setAuctions);
   }, []);
+
+  // Pre-fill the installment number and the dividend-adjusted amount the
+  // member actually owes right now, so the admin isn't expected to compute
+  // it by hand — same source of truth MyChits.jsx shows the member.
+  useEffect(() => {
+    const ms = memberships.find((m) => m.id === form.membership_id);
+    if (!ms) { setSuggested(null); return; }
+    const group = groups.find((g) => g.id === ms.group_id);
+    const plan = plans.find((p) => p.id === group?.plan_id);
+    if (!group || !plan) { setSuggested(null); return; }
+    const preview = getNextPaymentPreview({ membership: ms, plan, group, auctions });
+    if (preview.label === "completed") { setSuggested(null); return; }
+    const nextNumber = (ms.paid_installments || 0) + 1;
+    setSuggested({ number: nextNumber, amount: preview.nextInstallment, dividend: preview.dividendThisMonth, currency: plan.currency || "INR" });
+    setForm((f) => ({ ...f, installment_number: String(nextNumber), amount: String(preview.nextInstallment) }));
+  }, [form.membership_id, memberships, groups, plans, auctions]);
 
   const profileOf = (id) => profiles.find((p) => p.id === id);
   const groupOf = (id) => groups.find((g) => g.id === id);
@@ -259,7 +279,16 @@ export default function Payments() {
               </Select>
             </div>
             <div><Label>Installment #</Label><Input type="number" value={form.installment_number} onChange={(e) => set("installment_number", e.target.value)} /></div>
-            <div><Label>Amount</Label><Input type="number" value={form.amount} onChange={(e) => set("amount", e.target.value)} /></div>
+            <div>
+              <Label>Amount</Label>
+              <Input type="number" value={form.amount} onChange={(e) => set("amount", e.target.value)} />
+              {suggested && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Suggested: {formatMoney(suggested.amount, suggested.currency)}
+                  {suggested.dividend > 0 && ` (${formatMoney(suggested.dividend, suggested.currency)} dividend already applied)`}
+                </p>
+              )}
+            </div>
             <div>
               <Label>Method</Label>
               <Select value={form.method} onValueChange={(v) => set("method", v)}>
