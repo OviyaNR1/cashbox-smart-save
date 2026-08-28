@@ -12,7 +12,8 @@ import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 const TEMPLATES = {
   payment_reminder: {
     body: "Dear Member,\n\nThis is a friendly reminder that your monthly chit installment is now due. Please make your payment at your earliest convenience to avoid late fees.\n\nThank you,\nCashBox Team",
-    isTemplate: false,
+    isTemplate: true,
+    params: [],
   },
   payment_reminder_overdue_v2: {
     body: "Member Name, Days Overdue, Breakdown, Total Amount Due",
@@ -93,7 +94,7 @@ export default function Notifications() {
       toast({ title: "Message is required", variant: "destructive" });
       return;
     }
-    if (tmpl.isTemplate && Object.keys(templateParams).length === 0) {
+    if (tmpl.isTemplate && tmpl.params?.length > 0 && Object.keys(templateParams).length === 0) {
       toast({ title: "Please fill in all template parameters", variant: "destructive" });
       return;
     }
