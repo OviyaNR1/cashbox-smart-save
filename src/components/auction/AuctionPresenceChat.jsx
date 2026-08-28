@@ -392,7 +392,7 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
             onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder={recording ? "Recording…" : "Say something, @ to mention…"}
             disabled={recording}
-            className="flex-1 h-9 px-3 rounded-lg border border-border bg-background text-sm text-foreground disabled:opacity-50"
+            className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-border bg-background text-sm text-foreground disabled:opacity-50"
           />
           <button
             onClick={send}
