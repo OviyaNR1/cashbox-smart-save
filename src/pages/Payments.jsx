@@ -47,6 +47,14 @@ export default function Payments() {
   // Pre-fill the installment number and the dividend-adjusted amount the
   // member actually owes right now, so the admin isn't expected to compute
   // it by hand — same source of truth MyChits.jsx shows the member.
+  //
+  // getNextPaymentPreview's `nextInstallment` is the CURRENT month's rate
+  // (collapsed for the member-facing summary) — it does not line up with
+  // `paid_installments + 1` when a member is behind by more than one
+  // installment, since each overdue month keeps its own historical rate.
+  // Recording payment here is for a specific installment number, so pull
+  // that installment's own amount out of unpaidInstallments (oldest-first)
+  // instead of pairing the collapsed "next" figure with the oldest number.
   useEffect(() => {
     const ms = memberships.find((m) => m.id === form.membership_id);
     if (!ms) { setSuggested(null); return; }
@@ -54,10 +62,10 @@ export default function Payments() {
     const plan = plans.find((p) => p.id === group?.plan_id);
     if (!group || !plan) { setSuggested(null); return; }
     const preview = getNextPaymentPreview({ membership: ms, plan, group, auctions });
-    if (preview.label === "completed") { setSuggested(null); return; }
-    const nextNumber = (ms.paid_installments || 0) + 1;
-    setSuggested({ number: nextNumber, amount: preview.nextInstallment, dividend: preview.dividendThisMonth, currency: plan.currency || "INR" });
-    setForm((f) => ({ ...f, installment_number: String(nextNumber), amount: String(preview.nextInstallment) }));
+    const oldest = preview.unpaidInstallments?.[0];
+    if (!oldest) { setSuggested(null); return; }
+    setSuggested({ number: oldest.number, amount: oldest.amount, dividend: oldest.dividend || 0, currency: plan.currency || "INR" });
+    setForm((f) => ({ ...f, installment_number: String(oldest.number), amount: String(oldest.amount) }));
   }, [form.membership_id, memberships, groups, plans, auctions]);
 
   const profileOf = (id) => profiles.find((p) => p.id === id);
