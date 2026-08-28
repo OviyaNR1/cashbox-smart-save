@@ -70,7 +70,7 @@ export async function generateInvoicePdf({ payment, member, group, plan, dividen
   field("Member", member?.full_name, col1);
   field("Member code", member?.member_code, col2);
   y += 40;
-  field("Group", group?.group_code, col1);
+  field("Group", group?.group_name || group?.group_code, col1);
   field("Plan", plan?.plan_name, col2);
   y += 40;
   field("Installment #", payment.installment_number, col1);

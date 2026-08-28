@@ -122,7 +122,7 @@ export default function Receipt() {
         <div className="grid grid-cols-2 gap-y-4 py-6 text-sm">
           <div><p className="text-xs text-muted-foreground">Member</p><p className="text-foreground">{prof?.full_name || "—"}</p></div>
           <div><p className="text-xs text-muted-foreground">Member code</p><p className="text-foreground">{prof?.member_code || "—"}</p></div>
-          <div><p className="text-xs text-muted-foreground">Group</p><p className="text-foreground">{grp?.group_code || "—"}</p></div>
+          <div><p className="text-xs text-muted-foreground">Group</p><p className="text-foreground">{grp?.group_name || grp?.group_code || "—"}</p></div>
           <div><p className="text-xs text-muted-foreground">Plan</p><p className="text-foreground">{plan?.plan_name || "—"}</p></div>
           <div><p className="text-xs text-muted-foreground">Installment</p><p className="text-foreground">#{p.installment_number || "—"}</p></div>
           <div><p className="text-xs text-muted-foreground">Payment date</p><p className="text-foreground">{p.payment_date || "—"}</p></div>

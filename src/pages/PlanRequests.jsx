@@ -132,7 +132,7 @@ export default function PlanRequests() {
           sendWhatsAppMessage({
             phone: memberMobile,
             templateName: "group_approved",
-            parameters: [group.group_code, plan.plan_name, startDate, collectionDate, firstDueDate, group.whatsapp_group_link],
+            parameters: [group.group_name || group.group_code, plan.plan_name, startDate, collectionDate, firstDueDate, group.whatsapp_group_link],
           }).then((res) => {
             console.log("✅ Group approved message sent:", res);
           }).catch((err) => {

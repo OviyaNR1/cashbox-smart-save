@@ -114,7 +114,7 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
         sendWhatsAppMessage({
           phone: member.mobile,
           templateName: "group_assignment_invite",
-          parameters: [member.full_name || "Member", group.group_code, plan?.plan_name || "your plan", group.whatsapp_group_link],
+          parameters: [member.full_name || "Member", group.group_name || group.group_code, plan?.plan_name || "your plan", group.whatsapp_group_link],
         }).catch((err) => {
           console.error("Group-invite WhatsApp notification failed:", err);
           logAudit({ module: "Savings Groups", action: "whatsapp-notify-failed", record_id: created.id, details: `Failed to WhatsApp-notify "${member.full_name || "member"}" of group assignment: ${err?.message || err}` });
