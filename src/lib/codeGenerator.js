@@ -34,15 +34,38 @@ export async function generateGroupCode(currency = "INR") {
   return `${prefix}${String(maxNum + 1).padStart(2, "0")}`;
 }
 
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
+
+// "1 Lakh" / "5 Lakh" reads naturally for round-lakh INR amounts (the norm
+// for this app's plans); anything else falls back to a plain amount so it
+// never prints something nonsensical like "1.5 Lakh" or "0 Lakh".
+function formatAmountLabel(amount, currency) {
+  const n = Number(amount) || 0;
+  if (currency === "CAD") return `$${n.toLocaleString("en-US")}`;
+  if (n >= 100000 && n % 100000 === 0) return `${n / 100000} Lakh`;
+  if (n >= 1000 && n % 1000 === 0) return `${n / 1000}K`;
+  return `₹${n.toLocaleString("en-IN")}`;
+}
+
 /**
- * Auto-generates a group name from the plan name + region.
- * e.g. "Canada 5K Plan — Toronto 2025"
+ * Auto-generates a group name from the plan's amount + the group's start
+ * month, e.g. "1 Lakh Group Sept #2" — deliberately excludes branch, since
+ * members join a group from all over rather than one location, so tying the
+ * name to a branch would be misleading. The trailing "#N" is a per-plan
+ * sequence number (existing groups on the same plan, +1) so two groups on
+ * the same plan starting in the same month still get distinct names.
+ * `excludeGroupId` lets an edit re-generate the name without counting the
+ * group being edited as one of the "existing" groups on its own plan.
  */
-export function generateGroupName(planName, branch = "", currency = "INR") {
-  const region = currency === "CAD" ? "Canada" : "India";
-  const year = new Date().getFullYear();
-  const parts = [planName, region];
-  if (branch) parts.push(branch);
-  parts.push(String(year));
-  return parts.join(" — ");
+export async function generateGroupName(plan, startDate, excludeGroupId) {
+  const amountLabel = formatAmountLabel(plan?.chit_amount, plan?.currency);
+  // Read the month straight out of the "YYYY-MM-DD" string rather than
+  // through `new Date(startDate).getMonth()` — that parses as UTC midnight
+  // but reads back in the viewer's local time, which can shift the result
+  // to the wrong month depending on timezone (see dates.js for the same
+  // bug class already found and fixed elsewhere in this app).
+  const month = MONTH_ABBR[startDate ? Number(startDate.slice(5, 7)) - 1 : new Date().getMonth()];
+  const existing = await base44.entities.ChitGroup.list("-created_date", 500);
+  const count = existing.filter((g) => g.plan_id === plan?.id && g.id !== excludeGroupId).length;
+  return `${amountLabel} Group ${month} #${count + 1}`;
 }

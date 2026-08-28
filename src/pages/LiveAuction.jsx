@@ -204,7 +204,7 @@ export default function LiveAuction() {
       <div className="space-y-6">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-primary">Live Auction</p>
-          <h1 className="text-3xl font-semibold text-foreground mt-1">{group.group_code} — Month {auction.month_number}</h1>
+          <h1 className="text-3xl font-semibold text-foreground mt-1">{group.group_name || group.group_code} — Month {auction.month_number}</h1>
         </div>
 
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-6 space-y-2">
@@ -250,7 +250,7 @@ export default function LiveAuction() {
     <div className="space-y-6">
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-primary">Live Auction</p>
-        <h1 className="text-3xl font-semibold text-foreground mt-1">{group.group_code} — Month {auction.month_number}</h1>
+        <h1 className="text-3xl font-semibold text-foreground mt-1">{group.group_name || group.group_code} — Month {auction.month_number}</h1>
         <p className="text-sm text-muted-foreground mt-1 capitalize">Status: {auction.status.replace("_", " ")}</p>
       </div>
 

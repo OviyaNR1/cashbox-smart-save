@@ -68,7 +68,7 @@ export default function ChitGroups() {
       const plan = plans.find((p) => p.id === form.plan_id);
       const currency = plan?.currency || "INR";
       const autoCode = editingId ? form.group_code : await generateGroupCode(currency).catch(() => form.group_code);
-      const autoName = form.group_name || generateGroupName(plan?.plan_name || "Savings Group", form.branch, currency);
+      const autoName = form.group_name || await generateGroupName(plan, form.start_date, editingId).catch(() => form.group_code);
       const durationMonths = plan?.duration_months || 20;
       const endDate = form.start_date ? new Date(new Date(form.start_date).setMonth(new Date(form.start_date).getMonth() + durationMonths)).toISOString().slice(0, 10) : "";
       const payload = {

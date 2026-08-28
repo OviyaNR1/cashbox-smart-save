@@ -65,7 +65,7 @@ export default function MyPayments() {
               <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                 <div>
                   <p className="font-medium text-foreground">{plan?.plan_name || "Chit plan"}</p>
-                  <p className="text-xs text-muted-foreground">{group?.group_code} · {m.paid_installments}/{total} installments</p>
+                  <p className="text-xs text-muted-foreground">{group?.group_name || group?.group_code} · {m.paid_installments}/{total} installments</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <button onClick={() => setPayMembership(m)} className="px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1">

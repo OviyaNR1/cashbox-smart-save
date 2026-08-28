@@ -192,7 +192,7 @@ function GroupHero({ membership: m, group, plan, preview, auctions, onPay }) {
       <div>
         <p className="text-sm text-muted-foreground">Your CashBox Group</p>
         <h2 className="text-xl font-semibold text-foreground">
-          {group?.group_code || plan.plan_name} <span className="text-muted-foreground font-normal">· Month {currentMonth} of {total}</span>
+          {group?.group_name || group?.group_code || plan.plan_name} <span className="text-muted-foreground font-normal">· Month {currentMonth} of {total}</span>
         </h2>
       </div>
 

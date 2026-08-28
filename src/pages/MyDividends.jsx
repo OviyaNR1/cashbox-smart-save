@@ -101,7 +101,7 @@ export default function MyDividends() {
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div>
                 <p className="font-medium text-foreground">{plan?.plan_name || "Chit plan"}</p>
-                <p className="text-xs text-muted-foreground">{group?.group_code || "—"}</p>
+                <p className="text-xs text-muted-foreground">{group?.group_name || group?.group_code || "—"}</p>
               </div>
               <div className="text-right">
                 <p className="text-sm font-semibold text-emerald-400 tabular-nums">
