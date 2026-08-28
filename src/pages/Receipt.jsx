@@ -107,7 +107,7 @@ export default function Receipt() {
       <div className="bg-card rounded-2xl border border-border p-8 print:shadow-none print:border-0">
         <div className="flex items-start justify-between pb-6 border-b border-border">
           <div className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-lg bg-primary grid place-items-center text-primary-foreground font-bold text-lg">C</span>
+            <span className="w-10 h-10 rounded-lg bg-primary grid place-items-center text-primary-foreground font-bold text-sm tracking-tight">CB</span>
             <div>
               <p className="font-semibold text-foreground">CashBox</p>
               <p className="text-xs text-muted-foreground">Digital Chit Management</p>

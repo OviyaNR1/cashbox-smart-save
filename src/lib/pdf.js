@@ -28,9 +28,9 @@ export async function generateInvoicePdf({ payment, member, group, plan, dividen
   doc.setFillColor(255, 184, 51);
   doc.roundedRect(marginX, y - 20, 32, 32, 6, 6, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
+  doc.setFontSize(12);
   doc.setTextColor(20, 20, 25);
-  doc.text("C", marginX + 12, y + 2);
+  doc.text("CB", marginX + 7, y + 2);
 
   doc.setFontSize(18);
   doc.text("CashBox", marginX + 44, y - 4);
