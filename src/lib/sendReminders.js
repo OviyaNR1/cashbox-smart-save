@@ -1,5 +1,5 @@
 import { base44 } from "@/api/base44Client";
-import { addMonthsUTC, collectionDateUTC } from "./dates";
+import { collectionDateUTC } from "./dates";
 import { sendWhatsAppMessage } from "./sendWhatsAppMessage";
 
 export const sendPaymentReminders = async (groupId) => {
@@ -17,64 +17,62 @@ export const sendPaymentReminders = async (groupId) => {
       status: "active",
     });
 
-    // Get payments for current month
-    const paidMembers = await base44.entities.Payment.filter({
+    if (memberships.length === 0) {
+      return { sent: 0, failed: 0, message: "No active members" };
+    }
+
+    // Get every successful payment ever made in this group, so we can tell
+    // which installments (not just the current one) each member has settled.
+    const allPayments = await base44.entities.Payment.filter({
       group_id: groupId,
-      installment_number: group.current_month,
       status: "success",
     });
-    const paidMemberIds = new Set(paidMembers.map((p) => p.member_profile_id));
 
-    // Find unpaid members
-    const unpaidMemberships = memberships.filter(
-      (m) => !paidMemberIds.has(m.member_profile_id)
-    );
-
-    if (unpaidMemberships.length === 0) {
-      return { sent: 0, failed: 0, message: "All members have paid" };
-    }
-
-    // Get member profiles
-    const memberProfiles = await Promise.all(
-      unpaidMemberships.map((m) =>
-        base44.entities.MemberProfile.get(m.member_profile_id)
-      )
-    );
-
-    // Calculate collection date and days late
+    const currency = plan?.currency || "INR";
+    const monthlyAmount = plan?.monthly_contribution || 0;
     const today = new Date();
-    const collDate = new Date(collectionDateUTC(group.start_date, group.current_month));
-    const daysLate = Math.floor((today - collDate) / (1000 * 60 * 60 * 24));
 
-    // Determine template based on days late
-    let template, templateParams;
-    if (daysLate <= 0) {
-      return { sent: 0, failed: 0, message: "Payment not yet due" };
-    } else if (daysLate <= 7) {
-      template = "payment_reminder_overdue";
-    } else {
-      template = "payment_reminder_urgent";
-    }
-
-    // Send reminders to unpaid members
     let sent = 0;
     let failed = 0;
 
-    for (const profile of memberProfiles) {
+    for (const membership of memberships) {
+      const paidInstallments = new Set(
+        allPayments
+          .filter((p) => p.member_profile_id === membership.member_profile_id)
+          .map((p) => p.installment_number)
+      );
+
+      // Every installment from 1 through the group's current month that this
+      // member hasn't paid — a member stuck for several months accrues all
+      // of them, not just the latest one.
+      const unpaidInstallments = [];
+      for (let i = 1; i <= group.current_month; i++) {
+        if (!paidInstallments.has(i)) unpaidInstallments.push(i);
+      }
+      if (unpaidInstallments.length === 0) continue;
+
+      const oldestUnpaid = Math.min(...unpaidInstallments);
+      const collDate = new Date(collectionDateUTC(group.start_date, oldestUnpaid, group.monthly_collection_date));
+      const daysLate = Math.floor((today - collDate) / (1000 * 60 * 60 * 24));
+      if (daysLate <= 0) continue; // oldest unpaid installment isn't due yet
+
+      const profile = await base44.entities.MemberProfile.get(membership.member_profile_id);
       if (!profile?.mobile) continue;
 
-      try {
-        const daysLateStr = daysLate.toString();
-        const currency = plan?.currency || "INR";
-        const amountStr = `${currency} ${plan?.monthly_contribution || "0"}`;
-        const lateFeeStr = `${currency} ${Math.floor(daysLate * 10)}`; // Example: 10 per day
+      const outstandingAmount = unpaidInstallments.length * monthlyAmount;
+      const amountStr = `${currency} ${outstandingAmount}`;
+      const daysLateStr = daysLate.toString();
+      const template = daysLate <= 7 ? "payment_reminder_overdue" : "payment_reminder_urgent";
 
-        templateParams = [profile.full_name, daysLateStr, amountStr, lateFeeStr];
+      try {
+        const parameters = template === "payment_reminder_urgent"
+          ? [profile.full_name, daysLateStr, amountStr, `${currency} ${Math.floor(daysLate * 10)}`]
+          : [profile.full_name, daysLateStr, amountStr];
 
         await sendWhatsAppMessage({
           phone: profile.mobile,
           templateName: template,
-          parameters: templateParams,
+          parameters,
         });
         sent++;
       } catch (err) {
@@ -83,7 +81,7 @@ export const sendPaymentReminders = async (groupId) => {
       }
     }
 
-    return { sent, failed, template, daysLate };
+    return { sent, failed };
   } catch (error) {
     throw new Error(`Payment reminder error: ${error.message}`);
   }
