@@ -14,6 +14,7 @@ import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown } from "@/lib/useCountdown";
 import { Gavel, Crown, Trophy, Building2, Phone } from "lucide-react";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
+import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
 
 const CALL_LABELS = { call_1: "Call 1", call_2: "Call 2", final_call: "Final Call" };
 
@@ -31,10 +32,12 @@ export default function AdminLiveAuction() {
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [companyMonthRecorded, setCompanyMonthRecorded] = useState(false);
+  const [me, setMe] = useState(null);
 
   useEffect(() => {
     base44.entities.ChitPlan.list("-created_date", 200).then(setPlans);
     base44.entities.ChitGroup.list("-created_date", 200).then(setGroups);
+    base44.auth.me().then(setMe).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -244,7 +247,7 @@ export default function AdminLiveAuction() {
     }
 
     playGavel();
-    speak(`Sold, to ${winnerProf?.full_name || "the member"}, for ${winningBid.amount}!`);
+    speak(`Sold! Congratulations to our winner, ${winnerProf?.full_name || "the member"}, at ${formatMoney(winningBid.amount, plan.currency)}!`);
     fireConfetti();
     setBusy(false);
     setCloseConfirmOpen(false);
@@ -309,6 +312,16 @@ export default function AdminLiveAuction() {
           <p className="text-sm text-foreground">Winner: {profileOf(auction.winner_member_profile_id)?.full_name || "Member"} — {formatMoney(auction.winning_bid_amount, plan.currency)}</p>
           <p className="text-xs text-muted-foreground">Group has advanced to month {group.current_month}. Select the group again or refresh to manage the next month.</p>
         </div>
+      )}
+
+      {groupId && plan && !isCompanyMonth && auction && (
+        <AuctionPresenceChat
+          auctionId={auction.id}
+          groupId={group.id}
+          userId={me?.id}
+          memberProfileId={null}
+          senderName={me?.full_name || me?.email || "Admin"}
+        />
       )}
 
       {groupId && plan && !isCompanyMonth && auction && auction.status !== "closed" && (

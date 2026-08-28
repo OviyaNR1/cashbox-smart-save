@@ -9,6 +9,7 @@ import { logAudit } from "@/lib/audit";
 import { Crown, Gavel, Building2, Trophy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
 
 const CALL_LABELS = { call_1: "CALL 1", call_2: "CALL 2", final_call: "FINAL CALL" };
 
@@ -87,7 +88,15 @@ export default function LiveAuction() {
         }
       }
 
-      setState({ loading: false, me, auction, group, plan, myMembership, bids, profiles });
+      // Members can only SELECT their own member_profiles row under RLS, so
+      // this direct .get() (not the bidder-only get_member_names RPC) is
+      // the only way to reliably get the viewer's own display name — they
+      // might not have bid yet, so they wouldn't be in `profiles` above.
+      const myProfile = myMembership
+        ? await base44.entities.MemberProfile.get(myMembership.member_profile_id).catch(() => null)
+        : null;
+
+      setState({ loading: false, me, auction, group, plan, myMembership, myName: myProfile?.full_name || "Member", bids, profiles });
     } catch (err) {
       setState({ loading: false, error: err.message || String(err) });
     }
@@ -140,7 +149,8 @@ export default function LiveAuction() {
           fireWinnerConfetti();
         } else {
           playGavel();
-          speak("Sold! The auction has closed.");
+          const winnerName = state.profiles?.find((p) => p.id === auction.winner_member_profile_id)?.full_name;
+          speak(winnerName ? `Sold! Congratulations to our winner, ${winnerName}!` : "Sold! The auction has closed.");
           fireConfetti();
         }
       }
@@ -199,7 +209,7 @@ export default function LiveAuction() {
     );
   }
 
-  const { auction, group, plan, myMembership, bids, profiles } = state;
+  const { auction, group, plan, myMembership, myName, bids, profiles } = state;
   const profileOf = (id) => profiles.find((p) => p.id === id);
   const validBids = bids.filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
   const myBids = bids.filter((b) => b.member_profile_id === myMembership?.member_profile_id);
@@ -253,6 +263,14 @@ export default function LiveAuction() {
         </div>
 
         <p className="text-xs text-muted-foreground text-center">Next month's auction hasn't started yet — check back once your group's admin opens it.</p>
+
+        <AuctionPresenceChat
+          auctionId={auction.id}
+          groupId={group.id}
+          userId={state.me?.id}
+          memberProfileId={myMembership?.member_profile_id}
+          senderName={myName}
+        />
       </div>
     );
   }
@@ -341,6 +359,14 @@ export default function LiveAuction() {
           </div>
         </div>
       )}
+
+      <AuctionPresenceChat
+        auctionId={auction.id}
+        groupId={group.id}
+        userId={state.me?.id}
+        memberProfileId={myMembership?.member_profile_id}
+        senderName={myName}
+      />
     </div>
   );
 }

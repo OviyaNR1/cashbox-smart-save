@@ -6,6 +6,22 @@ function getCtx() {
   return ctx;
 }
 
+// Browsers refuse to actually produce sound from an AudioContext until it's
+// been resumed from inside a real user gesture (click/tap/key) at least
+// once on the page. Call1/Sold work because they're triggered directly by
+// the admin's own button click, which satisfies that on its own — but a
+// join/leave sound fires from another person's action arriving over the
+// network, with no guarantee *you* clicked anything on your own page first.
+// Call this from the first user gesture the app sees so the context is
+// already unlocked by the time an async event needs to play a sound.
+export function primeAudio() {
+  try {
+    getCtx();
+  } catch {
+    // Web Audio unavailable — ignore, individual sound calls fail silently too.
+  }
+}
+
 function tone(freq, start, duration, type = "sine", gainPeak = 0.2) {
   const c = getCtx();
   const osc = c.createOscillator();
@@ -62,6 +78,36 @@ export function playGavel() {
 export function playFanfare() {
   try {
     [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => tone(freq, i * 0.12, 0.3, "triangle", 0.25));
+  } catch {
+    // ignore
+  }
+}
+
+// Two rising notes — someone joined the live auction room.
+export function playMemberJoin() {
+  try {
+    tone(659.25, 0, 0.12, "sine", 0.15);
+    tone(880, 0.08, 0.16, "sine", 0.15);
+  } catch {
+    // ignore
+  }
+}
+
+// Two falling notes, lower and softer than the join chime — someone left.
+export function playMemberLeave() {
+  try {
+    tone(587.33, 0, 0.12, "sine", 0.12);
+    tone(440, 0.08, 0.16, "sine", 0.12);
+  } catch {
+    // ignore
+  }
+}
+
+// A brighter double-tone — you were @mentioned in the chat.
+export function playMention() {
+  try {
+    tone(987.77, 0, 0.1, "triangle", 0.2);
+    tone(1318.51, 0.1, 0.18, "triangle", 0.2);
   } catch {
     // ignore
   }
