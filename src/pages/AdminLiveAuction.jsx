@@ -229,16 +229,20 @@ export default function AdminLiveAuction() {
     const dividendStr = formatMoney(outcome.dividendPerMember, plan.currency);
     const nextInstallmentStr = formatMoney(outcome.nextInstallment, plan.currency);
 
+    const groupLabel = group.group_name || group.group_code;
     const memberProfiles = await Promise.all(allActive.map(m => base44.entities.MemberProfile.get(m.member_profile_id)));
     for (const prof of memberProfiles) {
       if (prof?.mobile) {
         const isWinner = prof.id === winningBid.member_profile_id;
-        const template = isWinner ? "winner_announcement_winner" : "winner_announcement_all_v2";
+        const template = isWinner ? "winner_announcement_winner_v2" : "winner_announcement_all_v2";
+        const parameters = isWinner
+          ? [winnerName, monthLabel, prizeAmountStr, dividendStr, nextInstallmentStr, groupLabel]
+          : [winnerName, monthLabel, prizeAmountStr, dividendStr, nextInstallmentStr];
         try {
           await sendWhatsAppMessage({
             phone: prof.mobile,
             templateName: template,
-            parameters: [winnerName, monthLabel, prizeAmountStr, dividendStr, nextInstallmentStr],
+            parameters,
           });
         } catch (err) {
           console.error(`Failed to send ${template} to ${prof.full_name}:`, err);

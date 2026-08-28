@@ -113,6 +113,16 @@ export function playMention() {
   }
 }
 
+// A single soft pop — someone sent a regular chat or voice message (not a
+// mention, not a join/leave). Distinct from all three of those.
+export function playNewMessage() {
+  try {
+    tone(740, 0, 0.09, "sine", 0.16);
+  } catch {
+    // ignore
+  }
+}
+
 // Soft per-second tick while a call-stage countdown is running.
 export function playTick() {
   try {

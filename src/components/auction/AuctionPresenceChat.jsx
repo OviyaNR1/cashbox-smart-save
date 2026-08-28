@@ -1,8 +1,29 @@
 import React, { useEffect, useRef, useState } from "react";
 import { base44, supabase } from "@/api/base44Client";
 import { getSignedUrl, uploadAuctionVoiceMessage } from "@/lib/storage";
-import { playMemberJoin, playMemberLeave, playMention, primeAudio } from "@/lib/sound";
+import { playMemberJoin, playMemberLeave, playMention, playNewMessage, primeAudio } from "@/lib/sound";
 import { Users, Send, MessageCircle, X, Mic, Square } from "lucide-react";
+
+// Presence channels reconnect on their own well within the lifetime of a
+// real session — a spotty mobile connection, the tab going to the background
+// and back, a websocket hiccup — and each reconnect looks identical to a
+// genuine leave-then-rejoin. Logging a message on every one of those would
+// spam the feed with "X left" / "X joined" pairs a few seconds apart even
+// though the person never actually left. Module-level (not per-component
+// instance) so it survives a full component remount, not just an effect
+// re-run: delay writing "leave" long enough for a matching reconnect "join"
+// to cancel it out instead of logging either one.
+const pendingLeaves = new Map();
+const LEAVE_GRACE_MS = 7000;
+
+const formatTime = (iso) => {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+};
 
 // Live "who's watching this auction" + a persisted chat/activity feed,
 // rendered as a floating widget (like a support-chat bubble) rather than
@@ -60,6 +81,27 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
         ...extra,
       }).catch(() => {});
 
+    const roomKey = `${auctionId}:${userId}`;
+    const logJoin = () => {
+      const pending = pendingLeaves.get(roomKey);
+      if (pending) {
+        // A "leave" from moments ago is still waiting out its grace period —
+        // this is that same session reconnecting, not a new visit. Cancel
+        // the leave and don't log a fresh join either.
+        clearTimeout(pending.timer);
+        pendingLeaves.delete(roomKey);
+        return;
+      }
+      logEvent("join");
+    };
+    const scheduleLeave = () => {
+      const timer = setTimeout(() => {
+        pendingLeaves.delete(roomKey);
+        logEvent("leave");
+      }, LEAVE_GRACE_MS);
+      pendingLeaves.set(roomKey, { timer });
+    };
+
     const channel = supabase.channel(`auction-room-${auctionId}`, {
       config: { presence: { key: userId } },
     });
@@ -86,23 +128,24 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
         const m = payload.new;
         setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
         const iWasMentioned = m.sender_name !== senderName && m.body && m.body.includes(`@${senderName}`);
-        if (!openRef.current) {
+        if (m.sender_name !== senderName) {
           if (iWasMentioned) playMention();
-          if (m.sender_name !== senderName) setUnseen((n) => n + 1);
+          else if (m.message_type === "chat" || m.message_type === "voice") playNewMessage();
         }
+        if (!openRef.current && m.sender_name !== senderName) setUnseen((n) => n + 1);
       }
     );
 
     channel.subscribe((status) => {
       if (status === "SUBSCRIBED") {
         channel.track({ name: senderName });
-        logEvent("join");
+        logJoin();
       }
     });
 
     return () => {
       cancelled = true;
-      logEvent("leave");
+      scheduleLeave();
       supabase.removeChannel(channel);
     };
   }, [auctionId, groupId, userId, memberProfileId, senderName]);
@@ -282,13 +325,16 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
               <div key={m.id} className="text-sm">
                 <span className="font-medium text-foreground">{m.sender_name}: </span>
                 <span className="text-muted-foreground">{renderBody(m.body)}</span>
+                <span className="text-[10px] text-muted-foreground/60 ml-1.5 align-middle">{formatTime(m.created_at)}</span>
               </div>
             );
           }
           if (m.message_type === "voice") {
             return (
               <div key={m.id} className="text-sm">
-                <span className="font-medium text-foreground block mb-1">{m.sender_name}:</span>
+                <span className="font-medium text-foreground block mb-1">
+                  {m.sender_name}: <span className="text-[10px] text-muted-foreground/60 font-normal">{formatTime(m.created_at)}</span>
+                </span>
                 {audioUrls[m.id] ? (
                   <audio controls src={audioUrls[m.id]} className="w-full h-8" />
                 ) : (
@@ -299,7 +345,7 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
           }
           return (
             <p key={m.id} className="text-xs text-center text-muted-foreground/70">
-              {m.sender_name} {m.message_type === "join" ? "joined" : "left"}
+              {m.sender_name} {m.message_type === "join" ? "joined" : "left"} · {formatTime(m.created_at)}
             </p>
           );
         })}
