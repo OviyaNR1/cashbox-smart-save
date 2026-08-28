@@ -350,20 +350,29 @@ export default function LiveAuction() {
           <Building2 className="w-4 h-4" /> You've already won this group — bidding is closed for you.
         </div>
       ) : (
-        <div className="bg-card rounded-2xl border border-border p-5">
+        <div className="bg-primary/5 rounded-2xl border-2 border-primary/40 p-5">
           <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2"><Gavel className="w-4 h-4 text-primary" /> Place a bid</p>
+          <label className="block text-xs font-semibold text-primary uppercase tracking-wide mb-1.5">
+            Type your bid amount here
+          </label>
           <div className="flex gap-2">
-            <Input
-              type="number"
-              value={bidAmount}
-              onChange={(e) => { setBidAmount(e.target.value); setConfirmingBid(false); }}
-              placeholder={lowest ? `Below ${formatMoney(lowest.amount - (auction.min_decrement || 0), plan.currency)}` : `Up to ${formatMoney(auction.starting_amount, plan.currency)}`}
-              className="flex-1"
-            />
+            <div className="relative flex-1">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-semibold text-muted-foreground pointer-events-none">
+                ₹
+              </span>
+              <Input
+                type="number"
+                value={bidAmount}
+                onChange={(e) => { setBidAmount(e.target.value); setConfirmingBid(false); }}
+                placeholder={lowest ? `Below ${lowest.amount - (auction.min_decrement || 0)}` : `Up to ${auction.starting_amount}`}
+                autoFocus
+                className="h-14 pl-9 text-2xl font-semibold border-2 border-primary/50 focus-visible:border-primary rounded-xl"
+              />
+            </div>
             <Button
               onClick={onBidButtonClick}
               disabled={submitting || !bidAmount}
-              className={confirmingBid ? "bg-amber-500 hover:bg-amber-500/90 text-amber-950 rounded-full" : "bg-primary hover:bg-primary/90 rounded-full"}
+              className={`h-14 px-6 rounded-xl font-semibold ${confirmingBid ? "bg-amber-500 hover:bg-amber-500/90 text-amber-950" : "bg-primary hover:bg-primary/90"}`}
             >
               {submitting ? "Submitting…" : confirmingBid ? `Confirm ${formatMoney(Number(bidAmount), plan.currency)}?` : "Submit Bid"}
             </Button>
