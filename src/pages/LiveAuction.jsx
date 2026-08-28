@@ -13,11 +13,41 @@ import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
 
 const CALL_LABELS = { call_1: "CALL 1", call_2: "CALL 2", final_call: "FINAL CALL" };
 
+// place_bid()'s rejection_reason is written for the audit log, not for a
+// member reading it mid-auction — translate the handful of fixed strings it
+// can return into plain language with an actual next step, rather than
+// showing the raw database wording.
+function friendlyBidRejection(reason, auction) {
+  switch (reason) {
+    case "You are not a member of this group":
+      return "You're not part of this group, so you can't bid here.";
+    case "Member suspended":
+      return "Your membership is currently paused. Contact your group admin to find out why.";
+    case "Payment overdue":
+      return "You have an unpaid installment. Pay it first, then you'll be able to bid.";
+    case "Member already won":
+      return "You've already won a previous month in this group, so you can't bid again.";
+    case "Auction Closed":
+      return "This auction has already closed. Wait for next month's auction to open.";
+    case "Duplicate bid":
+      return "Someone already bid that exact amount. Try a lower number.";
+    case "Bid higher than current lowest":
+      return "Your bid needs to be lower than the current amount shown. Try a smaller number.";
+    case "Bid below minimum decrement":
+      return auction?.min_decrement
+        ? `Your bid needs to be at least ${auction.min_decrement} lower than the current amount. Try a smaller number.`
+        : "Your bid isn't low enough compared to the current amount. Try a smaller number.";
+    default:
+      return reason || "Your bid couldn't be placed. Please try again.";
+  }
+}
+
 export default function LiveAuction() {
   const [state, setState] = useState({ loading: true });
   const [bidAmount, setBidAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [confirmingBid, setConfirmingBid] = useState(false);
   const prevStatusRef = useRef(null);
   const joinLoggedRef = useRef(new Set());
 
@@ -158,8 +188,22 @@ export default function LiveAuction() {
     prevStatusRef.current = auction.status;
   }, [state.auction, state.myMembership]);
 
-  const submitBid = async () => {
+  // A mistyped digit under the countdown pressure locks in a real bid with
+  // no undo — the first click asks for confirmation instead of submitting
+  // immediately; only the second click (on the now-"Confirm" button) sends
+  // it. Any further edit to the amount cancels the pending confirmation, so
+  // it can't accidentally carry over onto a different number.
+  const onBidButtonClick = () => {
     if (!bidAmount || !state.auction) return;
+    if (!confirmingBid) {
+      setConfirmingBid(true);
+      return;
+    }
+    submitBid();
+  };
+
+  const submitBid = async () => {
+    setConfirmingBid(false);
     setSubmitting(true);
     setFeedback(null);
     const { data, error } = await supabase.rpc("place_bid", {
@@ -168,14 +212,14 @@ export default function LiveAuction() {
     });
     setSubmitting(false);
     if (error) {
-      setFeedback({ ok: false, message: error.message });
+      setFeedback({ ok: false, message: friendlyBidRejection(error.message, state.auction) });
       return;
     }
     if (data?.status === "valid") {
       setFeedback({ ok: true, message: "You're currently the lowest bid — not final until the admin closes the auction." });
       setBidAmount("");
     } else {
-      setFeedback({ ok: false, message: data?.rejection_reason || "Bid rejected" });
+      setFeedback({ ok: false, message: friendlyBidRejection(data?.rejection_reason, state.auction) });
     }
     load();
   };
@@ -312,14 +356,23 @@ export default function LiveAuction() {
             <Input
               type="number"
               value={bidAmount}
-              onChange={(e) => setBidAmount(e.target.value)}
+              onChange={(e) => { setBidAmount(e.target.value); setConfirmingBid(false); }}
               placeholder={lowest ? `Below ${formatMoney(lowest.amount - (auction.min_decrement || 0), plan.currency)}` : `Up to ${formatMoney(auction.starting_amount, plan.currency)}`}
               className="flex-1"
             />
-            <Button onClick={submitBid} disabled={submitting || !bidAmount} className="bg-primary hover:bg-primary/90 rounded-full">
-              {submitting ? "Submitting…" : "Submit Bid"}
+            <Button
+              onClick={onBidButtonClick}
+              disabled={submitting || !bidAmount}
+              className={confirmingBid ? "bg-amber-500 hover:bg-amber-500/90 text-amber-950 rounded-full" : "bg-primary hover:bg-primary/90 rounded-full"}
+            >
+              {submitting ? "Submitting…" : confirmingBid ? `Confirm ${formatMoney(Number(bidAmount), plan.currency)}?` : "Submit Bid"}
             </Button>
           </div>
+          {confirmingBid && (
+            <p className="text-xs text-amber-400 mt-2">
+              Tap Confirm to lock in this bid, or change the amount above to cancel.
+            </p>
+          )}
           {feedback && (
             <p className={`text-xs mt-2 ${feedback.ok ? "text-emerald-400" : "text-rose-400"}`}>{feedback.message}</p>
           )}

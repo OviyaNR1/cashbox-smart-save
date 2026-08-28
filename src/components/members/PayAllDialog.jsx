@@ -210,10 +210,16 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
               )}
 
               {method === "upi" && (
-                <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground">
-                    Button above not opening your UPI app? That happens if you opened this page from inside WhatsApp — copy the UPI ID instead and pay manually.
+                <div className="rounded-lg border border-border p-3 space-y-2">
+                  <p className="text-xs font-medium text-foreground">
+                    Button above not opening your UPI app? Pay manually instead:
                   </p>
+                  <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                    <li>Tap <span className="text-foreground font-medium">Copy UPI ID</span> below</li>
+                    <li>Open your UPI app (PhonePe, Google Pay, Paytm, etc.)</li>
+                    <li>Choose "Pay to UPI ID" or "Send money" and paste it</li>
+                    <li>Enter {totalDisplay} and complete the payment</li>
+                  </ol>
                   <button
                     type="button"
                     onClick={copyUpiId}
