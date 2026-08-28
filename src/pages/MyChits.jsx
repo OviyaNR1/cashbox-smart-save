@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { formatMoney } from "@/lib/currency";
 import { generateAuctionPlan } from "@/lib/auctionEngine";
@@ -13,7 +14,7 @@ export default function MyChits() {
   const loadData = useCallback(async () => {
     try {
       const me = await base44.auth.me();
-      const [memberships, groups, plans, winners, dividends, auctions, pendingPayments] = await Promise.all([
+      const [memberships, groups, plans, winners, dividends, auctions, pendingPayments, planRequests] = await Promise.all([
         base44.entities.GroupMembership.filter({ user_id: me.id }),
         base44.entities.ChitGroup.list("-created_date", 100),
         base44.entities.ChitPlan.list("-created_date", 100),
@@ -21,8 +22,9 @@ export default function MyChits() {
         base44.entities.Dividend.filter({ user_id: me.id }, "-created_date", 100),
         base44.entities.Auction.list("-month_number", 300),
         base44.entities.Payment.filter({ user_id: me.id, status: "pending" }),
+        base44.entities.PlanRequest.filter({ user_id: me.id }),
       ]);
-      setState({ loading: false, data: { me, memberships, groups, plans, winners, dividends, auctions, pendingPayments } });
+      setState({ loading: false, data: { me, memberships, groups, plans, winners, dividends, auctions, pendingPayments, planRequests } });
     } catch (err) {
       setState({ loading: false, error: err.message || String(err) });
     }
@@ -44,7 +46,7 @@ export default function MyChits() {
       </div>
     );
 
-  const { memberships, groups, plans, winners, dividends, auctions, pendingPayments } = state.data;
+  const { memberships, groups, plans, winners, dividends, auctions, pendingPayments, planRequests } = state.data;
 
   const pendingNumbersFor = (membershipId) =>
     new Set((pendingPayments || []).filter((p) => p.membership_id === membershipId).map((p) => p.installment_number));
@@ -71,11 +73,37 @@ export default function MyChits() {
         </p>
       </div>
 
-      {memberships.length === 0 && (
-        <div className="bg-card rounded-2xl border border-border p-8 text-center text-muted-foreground text-sm">
-          You haven't joined a chit group yet.
-        </div>
-      )}
+      {memberships.length === 0 && (() => {
+        const openRequests = (planRequests || []).filter((r) => r.status !== "approved");
+        return openRequests.length > 0 ? (
+          <div className="space-y-3">
+            {openRequests.map((r) => (
+              <div
+                key={r.id}
+                className={`rounded-2xl border p-5 text-sm ${
+                  r.status === "rejected" ? "bg-rose-500/10 border-rose-500/20" : "bg-primary/10 border-primary/20"
+                }`}
+              >
+                <p className={`font-semibold ${r.status === "rejected" ? "text-rose-400" : "text-foreground"}`}>
+                  {r.status === "rejected" ? "Request declined" : "Request pending admin approval"}
+                </p>
+                <p className="text-muted-foreground mt-1">
+                  {r.status === "rejected"
+                    ? `Your request to join "${r.plan_name}" was declined. Contact an admin for details, or browse other plans.`
+                    : `Your request to join "${r.plan_name}" is awaiting admin approval.`}
+                </p>
+              </div>
+            ))}
+            <Link to="/browse-plans" className="text-sm text-primary hover:underline">
+              Browse other plans →
+            </Link>
+          </div>
+        ) : (
+          <div className="bg-card rounded-2xl border border-border p-8 text-center text-muted-foreground text-sm">
+            You haven't joined a chit group yet.
+          </div>
+        );
+      })()}
 
       {memberships.map((m) => {
         const { group, plan } = planFor(m);

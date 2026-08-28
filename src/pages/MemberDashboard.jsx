@@ -24,15 +24,16 @@ export default function MemberDashboard() {
     try {
       setError(null);
       const me = await base44.auth.me();
-      const [profiles, memberships, plans, groups, auctions, pendingPayments] = await Promise.all([
+      const [profiles, memberships, plans, groups, auctions, pendingPayments, planRequests] = await Promise.all([
         base44.entities.MemberProfile.filter({ user_id: me.id }),
         base44.entities.GroupMembership.filter({ user_id: me.id }),
         base44.entities.ChitPlan.list("-created_date", 100),
         base44.entities.ChitGroup.list("-created_date", 100),
         base44.entities.Auction.list("-month_number", 300),
         base44.entities.Payment.filter({ user_id: me.id, status: "pending" }),
+        base44.entities.PlanRequest.filter({ user_id: me.id }),
       ]);
-      setData({ me, profile: profiles[0], memberships, plans, groups, auctions, pendingPayments });
+      setData({ me, profile: profiles[0], memberships, plans, groups, auctions, pendingPayments, planRequests });
     } catch (err) {
       setError(err.message || String(err));
     }
@@ -43,7 +44,7 @@ export default function MemberDashboard() {
   if (error) return <div className="h-64 grid place-items-center text-destructive text-sm text-center px-4">Error loading dashboard: {error}</div>;
   if (!data) return <div className="h-64 grid place-items-center text-muted-foreground text-sm">Loading your dashboard…</div>;
 
-  const { me, profile, memberships, plans, groups, auctions, pendingPayments } = data;
+  const { me, profile, memberships, plans, groups, auctions, pendingPayments, planRequests } = data;
 
   const pendingNumbersFor = (membershipId) =>
     new Set((pendingPayments || []).filter((p) => p.membership_id === membershipId).map((p) => p.installment_number));
@@ -92,23 +93,54 @@ export default function MemberDashboard() {
     .filter((x) => x.plan)
     .sort((a, b) => (a.preview?.dueDate || "9999").localeCompare(b.preview?.dueDate || "9999"));
 
+  // "approved" requests already have a matching active membership by the
+  // time an admin approves them, so only pending/rejected ones still need
+  // surfacing here — otherwise a member who just submitted a request sees
+  // the exact same "browse plans" empty state as someone who never applied.
+  const openRequests = (planRequests || []).filter((r) => r.status !== "approved");
+
   return (
     <div className="space-y-8">
       <Header firstName={firstName} />
 
       {activeMemberships.length === 0 ? (
-        <Link
-          to="/browse-plans"
-          className="bg-primary/10 rounded-2xl border border-primary/20 p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-primary/15 transition-colors"
-        >
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Looking to start saving?</h2>
-            <p className="text-sm text-muted-foreground mt-1">Browse available chit plans and join a savings group today.</p>
+        openRequests.length > 0 ? (
+          <div className="space-y-3">
+            {openRequests.map((r) => (
+              <div
+                key={r.id}
+                className={`rounded-2xl border p-5 sm:p-6 ${
+                  r.status === "rejected" ? "bg-rose-500/10 border-rose-500/20" : "bg-primary/10 border-primary/20"
+                }`}
+              >
+                <h2 className={`text-lg font-semibold ${r.status === "rejected" ? "text-rose-400" : "text-foreground"}`}>
+                  {r.status === "rejected" ? "Request declined" : "Request pending admin approval"}
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {r.status === "rejected"
+                    ? `Your request to join "${r.plan_name}" was declined. Contact an admin for details, or browse other plans.`
+                    : `Your request to join "${r.plan_name}" is awaiting admin approval. You'll be added to a group once it's reviewed.`}
+                </p>
+              </div>
+            ))}
+            <Link to="/browse-plans" className="text-sm text-primary hover:underline inline-flex items-center gap-1.5">
+              Browse other plans <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
-          <span className="shrink-0 px-5 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-2 w-full sm:w-auto justify-center">
-            Browse Plans <ArrowRight className="w-4 h-4" />
-          </span>
-        </Link>
+        ) : (
+          <Link
+            to="/browse-plans"
+            className="bg-primary/10 rounded-2xl border border-primary/20 p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-primary/15 transition-colors"
+          >
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Looking to start saving?</h2>
+              <p className="text-sm text-muted-foreground mt-1">Browse available chit plans and join a savings group today.</p>
+            </div>
+            <span className="shrink-0 px-5 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-2 w-full sm:w-auto justify-center">
+              Browse Plans <ArrowRight className="w-4 h-4" />
+            </span>
+          </Link>
+        )
       ) : (
         activeMemberships.map(({ membership: m, group, plan, preview }) => (
           <GroupHero
