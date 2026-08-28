@@ -14,15 +14,15 @@ const TEMPLATES = {
     body: "Dear Member,\n\nThis is a friendly reminder that your monthly chit installment is now due. Please make your payment at your earliest convenience to avoid late fees.\n\nThank you,\nCashBox Team",
     isTemplate: false,
   },
-  payment_reminder_overdue: {
-    body: "Member Name, Days Overdue, Outstanding Amount",
+  payment_reminder_overdue_v2: {
+    body: "Member Name, Days Overdue, Breakdown, Total Amount Due",
     isTemplate: true,
-    params: ["memberName", "daysOverdue", "amount"],
+    params: ["memberName", "daysOverdue", "breakdown", "totalAmount"],
   },
-  payment_reminder_urgent: {
-    body: "Member Name, Days Late, Outstanding Amount, Late Fee",
+  payment_reminder_urgent_v2: {
+    body: "Member Name, Days Late, Breakdown, Late Fee, Total Amount Due",
     isTemplate: true,
-    params: ["memberName", "daysLate", "amount", "lateFee"],
+    params: ["memberName", "daysLate", "breakdown", "lateFee", "totalAmount"],
   },
   winner_announcement_all: {
     body: "Winner Name, Month, Prize Amount",
@@ -147,8 +147,8 @@ export default function Notifications() {
               <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="payment_reminder">Payment reminder (static)</SelectItem>
-                <SelectItem value="payment_reminder_overdue">Payment reminder - Overdue</SelectItem>
-                <SelectItem value="payment_reminder_urgent">Payment reminder - Urgent</SelectItem>
+                <SelectItem value="payment_reminder_overdue_v2">Payment reminder - Overdue</SelectItem>
+                <SelectItem value="payment_reminder_urgent_v2">Payment reminder - Urgent</SelectItem>
                 <SelectItem value="winner_announcement_all">Winner announcement (all members)</SelectItem>
                 <SelectItem value="winner_announcement_winner">Winner announcement (personalized)</SelectItem>
                 <SelectItem value="auction_reminder">Auction reminder</SelectItem>
