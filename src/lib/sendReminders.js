@@ -8,6 +8,9 @@ export const sendPaymentReminders = async (groupId) => {
     const group = await base44.entities.ChitGroup.get(groupId);
     if (!group) throw new Error("Group not found");
 
+    // Monthly amount and currency live on the plan, not the group
+    const plan = await base44.entities.ChitPlan.get(group.plan_id);
+
     // Get all active members
     const memberships = await base44.entities.GroupMembership.filter({
       group_id: groupId,
@@ -62,8 +65,9 @@ export const sendPaymentReminders = async (groupId) => {
 
       try {
         const daysLateStr = daysLate.toString();
-        const amountStr = `${group.currency || "INR"} ${group.contribution_amount || "0"}`;
-        const lateFeeStr = `${group.currency || "INR"} ${Math.floor(daysLate * 10)}`; // Example: 10 per day
+        const currency = plan?.currency || "INR";
+        const amountStr = `${currency} ${plan?.monthly_contribution || "0"}`;
+        const lateFeeStr = `${currency} ${Math.floor(daysLate * 10)}`; // Example: 10 per day
 
         templateParams = [profile.full_name, daysLateStr, amountStr, lateFeeStr];
 
