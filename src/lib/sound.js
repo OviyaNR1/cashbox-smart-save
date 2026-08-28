@@ -8,17 +8,31 @@ function getCtx() {
 
 // Browsers refuse to actually produce sound from an AudioContext until it's
 // been resumed from inside a real user gesture (click/tap/key) at least
-// once on the page. Call1/Sold work because they're triggered directly by
-// the admin's own button click, which satisfies that on its own — but a
-// join/leave sound fires from another person's action arriving over the
-// network, with no guarantee *you* clicked anything on your own page first.
-// Call this from the first user gesture the app sees so the context is
-// already unlocked by the time an async event needs to play a sound.
+// once on the page. On the admin's own Live Auction page, Call1/Sold work
+// because speak()/playCallBell() etc. are called directly from the admin's
+// own button click, which satisfies that on its own. But a member watching
+// the SAME auction sees the call stage / sold announcement arrive over a
+// Realtime subscription — driven entirely by the admin's remote action, with
+// no local click anywhere in that call stack — so without priming, several
+// mobile browsers silently refuse to actually voice it the first time.
+// speechSynthesis has this same gesture requirement but is a separate API
+// from AudioContext, so it needs its own unlock, not just getCtx()'s.
+// Call this from the first user gesture the app sees so both are already
+// unlocked by the time an async event needs to play a sound or speak.
 export function primeAudio() {
   try {
     getCtx();
   } catch {
     // Web Audio unavailable — ignore, individual sound calls fail silently too.
+  }
+  try {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      const utter = new SpeechSynthesisUtterance("");
+      utter.volume = 0;
+      window.speechSynthesis.speak(utter);
+    }
+  } catch {
+    // Speech synthesis unavailable — ignore, speak() fails silently too.
   }
 }
 
