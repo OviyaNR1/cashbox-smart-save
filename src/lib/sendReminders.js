@@ -62,12 +62,15 @@ export const sendPaymentReminders = async (groupId) => {
       const outstandingAmount = unpaidInstallments.length * monthlyAmount;
       const amountStr = `${currency} ${outstandingAmount}`;
       const daysLateStr = daysLate.toString();
+      const breakdown = unpaidInstallments
+        .map((n) => `Month ${n} overdue = ${currency} ${monthlyAmount}`)
+        .join("\n");
       const template = daysLate <= 7 ? "payment_reminder_overdue" : "payment_reminder_urgent";
 
       try {
         const parameters = template === "payment_reminder_urgent"
-          ? [profile.full_name, daysLateStr, amountStr, `${currency} ${Math.floor(daysLate * 10)}`]
-          : [profile.full_name, daysLateStr, amountStr];
+          ? [profile.full_name, daysLateStr, breakdown, `${currency} ${Math.floor(daysLate * 10)}`, amountStr]
+          : [profile.full_name, daysLateStr, breakdown, amountStr];
 
         await sendWhatsAppMessage({
           phone: profile.mobile,
