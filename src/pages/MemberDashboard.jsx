@@ -5,7 +5,7 @@ import MemberOnboardingWizard from "@/components/members/MemberOnboardingWizard"
 import PayAllDialog from "@/components/members/PayAllDialog";
 import { formatMoney } from "@/lib/currency";
 import { getNextPaymentPreview } from "@/lib/paymentPreview";
-import { ArrowRight, CreditCard, Gavel, Calendar, Wallet, Users, XCircle } from "lucide-react";
+import { ArrowRight, CreditCard, ChevronRight, XCircle } from "lucide-react";
 
 function greeting() {
   const h = new Date().getHours();
@@ -121,6 +121,11 @@ export default function MemberDashboard() {
   const dueTotalDisplay = Object.keys(dueTotalsByCurrency).length
     ? Object.entries(dueTotalsByCurrency).map(([c, amt]) => formatMoney(amt, c)).join(" + ")
     : formatMoney(0, "INR");
+  // How many *of the member's tickets actually have something due* — not
+  // their total ticket count, which reads as "spread across all your
+  // tickets" even when e.g. 2 of 3 tickets already have a payment pending
+  // and only one still owes anything.
+  const dueTicketCount = new Set(allDueItems.map((i) => i.membership.id)).size;
 
   return (
     <div className="space-y-8">
@@ -172,7 +177,8 @@ export default function MemberDashboard() {
                 <p className="text-xs uppercase tracking-wide text-primary/80">Total Due</p>
                 <p className="text-3xl font-bold text-foreground tabular-nums mt-1">{dueTotalDisplay}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {allDueItems.length} installment{allDueItems.length > 1 ? "s" : ""} across {activeMemberships.length} ticket{activeMemberships.length > 1 ? "s" : ""}
+                  {allDueItems.length} installment{allDueItems.length > 1 ? "s" : ""}
+                  {dueTicketCount > 1 ? ` across ${dueTicketCount} tickets` : ""}
                 </p>
               </div>
               <button
@@ -184,16 +190,28 @@ export default function MemberDashboard() {
             </div>
           )}
 
-          {activeMemberships.map(({ membership: m, group, plan, preview }) => (
-            <GroupHero
-              key={m.id}
-              membership={m}
-              group={group}
-              plan={plan}
-              preview={preview}
-              auctions={auctions}
-            />
-          ))}
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Your tickets</p>
+            <div className="rounded-2xl border border-border divide-y divide-border overflow-hidden">
+              {activeMemberships.map(({ membership: m, group, plan, preview }) => (
+                <TicketRow
+                  key={m.id}
+                  membership={m}
+                  group={group}
+                  plan={plan}
+                  preview={preview}
+                  hasPending={pendingNumbersFor(m.id).size > 0}
+                />
+              ))}
+            </div>
+          </div>
+
+          <Link
+            to="/my-chits"
+            className="flex items-center justify-center gap-1.5 py-3 text-sm font-medium text-primary hover:underline"
+          >
+            View all tickets and details <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </>
       )}
 
@@ -217,94 +235,35 @@ function Header({ firstName }) {
   );
 }
 
-function GroupHero({ membership: m, group, plan, preview, auctions }) {
+// Compact one-line-per-ticket status row — replaces the old full-card-per-
+// ticket layout, which repeated the same auction/dividend/progress detail
+// (already shown on My Chits) once per ticket and got unreadable fast for
+// anyone holding more than one. This just answers "does this ticket need my
+// attention", with the rest a tap away on My Chits.
+function TicketRow({ membership: m, group, plan, preview, hasPending }) {
   const cur = plan.currency || "INR";
-  const total = plan.duration_months || 0;
-  const currentMonth = Math.min(group?.current_month || (m.paid_installments || 0) + 1, total || 1);
-  const isLiveAuction = plan.model === "live_auction";
+  const label = group?.group_name || group?.group_code || plan.plan_name;
 
-  const openAuction = isLiveAuction
-    ? auctions.find((a) => a.group_id === group?.id && a.status !== "closed")
-    : null;
+  let status = { text: "Paid up", tone: "text-emerald-400" };
+  if (preview?.overdueCount > 0) {
+    const totalDue = (preview.overdueAmount || 0) + (preview.nextInstallment || 0);
+    status = { text: `Overdue · ${formatMoney(totalDue, cur)} due`, tone: "text-destructive" };
+  } else if (preview?.label === "next") {
+    status = { text: `Due ${preview.dueDate} · ${formatMoney(preview.nextInstallment, cur)}`, tone: "text-amber-400" };
+  } else if (hasPending) {
+    status = { text: "Payment pending review", tone: "text-amber-400" };
+  }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="text-sm text-muted-foreground">Your CashBox Group</p>
-        <h2 className="text-xl font-semibold text-foreground">
-          {group?.group_name || group?.group_code || plan.plan_name}
-          {m.ticket_number ? <span className="text-muted-foreground font-normal"> · Ticket #{m.ticket_number}</span> : null}{" "}
-          <span className="text-muted-foreground font-normal">· Month {currentMonth} of {total}</span>
-        </h2>
+    <Link to="/my-chits" className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground truncate">
+          {label}
+          {m.ticket_number ? ` · Ticket #${m.ticket_number}` : ""}
+        </p>
+        <p className={`text-xs mt-0.5 ${status.tone}`}>{status.text}</p>
       </div>
-
-      {preview?.overdueCount > 0 && (
-        <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-4">
-          <p className="text-xs uppercase tracking-wide text-destructive/80 mb-1.5">Overdue</p>
-          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            <span className="text-3xl font-bold text-destructive tabular-nums">{formatMoney(preview.overdueAmount, cur)}</span>
-            <span className="text-xs font-semibold text-destructive bg-destructive/15 px-2.5 py-1 rounded-full">
-              {preview.overdueCount} unpaid installment{preview.overdueCount > 1 ? "s" : ""}
-            </span>
-          </div>
-          <p className="text-xs text-destructive/80 mt-2">
-            Since <span className="font-semibold text-destructive">{preview.overdueSinceDate || "an earlier month"}</span> — pay the oldest installment first to catch up.
-          </p>
-        </div>
-      )}
-
-      <div className="grid md:grid-cols-3 gap-4">
-        <div className="bg-card rounded-2xl border border-border p-5 flex flex-col">
-          <div className="flex items-center gap-2 text-muted-foreground mb-2">
-            <Wallet className="w-4 h-4" /> <span className="text-xs uppercase tracking-wide">Next Payment</span>
-          </div>
-          <p className="text-2xl font-bold text-foreground tabular-nums">{formatMoney(preview?.nextInstallment, cur)}</p>
-          {preview?.label !== "completed" && (
-            <p className="text-xs text-muted-foreground">Installment #{group?.current_month || (m.paid_installments || 0) + 1}</p>
-          )}
-          <p className={`text-xs mt-1 ${preview?.overdueCount > 0 ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-            {preview?.label === "completed" ? "Fully paid" : preview?.dueDate ? `Due ${preview.dueDate}` : "—"}
-          </p>
-          {preview?.dividendThisMonth > 0 && (
-            <p className="text-xs text-emerald-400 mt-1">This month's dividend: {formatMoney(preview.dividendThisMonth, cur)}</p>
-          )}
-        </div>
-
-        {isLiveAuction ? (
-          <Link to="/live-auction" className="bg-card rounded-2xl border border-border p-5 flex flex-col hover:border-primary/30 transition-colors">
-            <div className="flex items-center gap-2 text-muted-foreground mb-2">
-              <Gavel className="w-4 h-4" /> <span className="text-xs uppercase tracking-wide">Next Auction</span>
-            </div>
-            <p className="text-lg font-semibold text-foreground">
-              {openAuction ? `Month ${openAuction.month_number} — ${openAuction.status.replace("_", " ")}` : "Not started yet"}
-            </p>
-            <p className="text-xs text-primary mt-auto pt-3">View Auction →</p>
-          </Link>
-        ) : (
-          <div className="bg-card rounded-2xl border border-border p-5 flex flex-col">
-            <div className="flex items-center gap-2 text-muted-foreground mb-2">
-              <Calendar className="w-4 h-4" /> <span className="text-xs uppercase tracking-wide">Collection Day</span>
-            </div>
-            <p className="text-lg font-semibold text-foreground">the {group?.monthly_collection_date || 1}th</p>
-            <p className="text-xs text-muted-foreground mt-auto pt-3">of every month</p>
-          </div>
-        )}
-
-        <div className="bg-card rounded-2xl border border-border p-5 flex flex-col">
-          <div className="flex items-center gap-2 text-muted-foreground mb-2">
-            <Wallet className="w-4 h-4" /> <span className="text-xs uppercase tracking-wide">Total Contributed</span>
-          </div>
-          <p className="text-2xl font-bold text-foreground tabular-nums">{formatMoney(m.total_paid || 0, cur)}</p>
-          <p className="text-xs text-muted-foreground mt-1">paid in so far</p>
-        </div>
-      </div>
-
-      <Link to="/my-chits" className="bg-card rounded-2xl border border-border p-4 flex items-center justify-between hover:border-primary/30 transition-colors">
-        <div className="flex items-center gap-2 text-sm text-foreground">
-          <Users className="w-4 h-4 text-muted-foreground" /> {plan.member_count} members · {Math.max(0, (group?.current_month || 1) - 1)} months completed
-        </div>
-        <span className="text-xs text-primary">View Group →</span>
-      </Link>
-    </div>
+      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+    </Link>
   );
 }
