@@ -111,17 +111,22 @@ export const sendAuctionReminders = async (groupId) => {
       return { sent: 0, failed: 0, message: "No active members" };
     }
 
-    // Get upcoming auctions
-    const auctions = await base44.entities.Auction.filter({
-      group_id: groupId,
-      status: "pending",
-    });
+    // Get the group's current (not-yet-closed) auction. "pending" was never
+    // a real status — the auctions table only allows scheduled/open/call_1/
+    // call_2/final_call/closed/cancelled, so filtering on status: "pending"
+    // could never match a row and this silently sent 0 reminders forever.
+    const groupAuctions = await base44.entities.Auction.filter(
+      { group_id: groupId },
+      "-month_number",
+      5
+    );
+    const upcomingAuction = groupAuctions.find(
+      (a) => a.status !== "closed" && a.status !== "cancelled"
+    );
 
-    if (auctions.length === 0) {
+    if (!upcomingAuction) {
       return { sent: 0, failed: 0, message: "No upcoming auctions" };
     }
-
-    const upcomingAuction = auctions[0];
 
     // Get member profiles
     const memberProfiles = await Promise.all(
