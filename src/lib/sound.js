@@ -166,13 +166,16 @@ export function playUrgentTick() {
 export const CALL_TERMS = { call_1: "ஒரு தரம்", call_2: "ரெண்டு தரம்", final_call: "மூணு தரம்" };
 
 // Builds the spoken call-out for a stage: the actual amount, then the count
-// term — e.g. "₹90,000 — Oru Tharam". amountLabel is a pre-formatted
-// currency string (formatMoney's output); pass none for a plan/currency-less
-// fallback that's just the bare term.
+// term — e.g. "₹90,000. ஒரு தரம்". amountLabel is a pre-formatted currency
+// string (formatMoney's output); pass none for a plan/currency-less
+// fallback that's just the bare term. A period, not an em dash, joins the
+// two — WebKit's Tamil voice (and likely others) silently stops partway
+// through an utterance that has an em dash in it, which is why only the
+// amount was being heard and the term was getting dropped.
 export function callAnnouncement(status, amountLabel) {
   const term = CALL_TERMS[status];
   if (!term) return "";
-  return amountLabel ? `${amountLabel} — ${term}` : term;
+  return amountLabel ? `${amountLabel}. ${term}` : term;
 }
 
 // Spoken call-outs via the browser's built-in text-to-speech — no external

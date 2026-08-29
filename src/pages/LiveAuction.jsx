@@ -175,12 +175,12 @@ export default function LiveAuction() {
         const iWon = state.myMembership && auction.winner_member_profile_id === state.myMembership.member_profile_id;
         if (iWon) {
           playFanfare();
-          speak("Sold! Congratulations, you won this month's auction.");
+          speak(`Sold! You won Month ${auction.month_number}.`);
           fireWinnerConfetti();
         } else {
           playGavel();
           const winnerName = state.profiles?.find((p) => p.id === auction.winner_member_profile_id)?.full_name;
-          speak(winnerName ? `Sold! Congratulations to our winner, ${winnerName}!` : "Sold! The auction has closed.");
+          speak(winnerName ? `Sold! Month ${auction.month_number} goes to ${winnerName}!` : `Sold! Month ${auction.month_number} has closed.`);
           fireConfetti();
         }
       }

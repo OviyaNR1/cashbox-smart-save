@@ -289,7 +289,7 @@ export default function AdminLiveAuction() {
     }
 
     playGavel();
-    speak(`Sold! Congratulations to our winner, ${winnerProf?.full_name || "the member"}, at ${formatMoney(winningBid.amount, plan.currency)}!`);
+    speak(`Sold! Month ${auction.month_number} goes to ${winnerProf?.full_name || "the member"}, at ${formatMoney(winningBid.amount, plan.currency)}!`);
     fireConfetti();
     setBusy(false);
     setCloseConfirmOpen(false);
