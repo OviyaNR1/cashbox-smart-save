@@ -234,7 +234,7 @@ export default function AdminLiveAuction() {
     for (const prof of memberProfiles) {
       if (prof?.mobile) {
         const isWinner = prof.id === winningBid.member_profile_id;
-        const template = isWinner ? "winner_announcement_winner_v3" : "winner_announcement_all_v3";
+        const template = isWinner ? "winner_announcement_winner_v4" : "winner_announcement_all_v4";
         const parameters = isWinner
           ? [winnerName, monthLabel, prizeAmountStr, dividendStr, nextInstallmentStr, groupLabel]
           : [winnerName, monthLabel, prizeAmountStr, dividendStr, nextInstallmentStr];
@@ -272,7 +272,7 @@ export default function AdminLiveAuction() {
           <SelectTrigger className="w-96"><SelectValue placeholder="Choose a live auction group" /></SelectTrigger>
           <SelectContent>
             {liveAuctionGroups.map((g) => (
-              <SelectItem key={g.id} value={g.id}>{g.group_code} — {plans.find((p) => p.id === g.plan_id)?.plan_name}</SelectItem>
+              <SelectItem key={g.id} value={g.id}>{g.group_name || g.group_code} — {plans.find((p) => p.id === g.plan_id)?.plan_name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -324,7 +324,12 @@ export default function AdminLiveAuction() {
           groupId={group.id}
           userId={me?.id}
           memberProfileId={null}
-          senderName={me?.full_name || me?.email || "Admin"}
+          // base44.auth.me() never actually returns a full_name (the
+          // `profiles` table has no such column), so this used to silently
+          // fall through to the admin's raw email address and show that to
+          // every member in the "Live now" panel. Admins have no stored
+          // display name, so show a fixed generic label instead of leaking it.
+          senderName="Admin"
         />
       )}
 

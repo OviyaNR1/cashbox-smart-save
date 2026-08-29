@@ -80,7 +80,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
       import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
         sendWhatsAppMessage({
           phone: phoneNumber,
-          templateName: "registration_welcome_v3",
+          templateName: "registration_welcome_v4",
           parameters: [created.full_name],
         }).then((res) => {
           console.log("✅ Registration welcome sent:", res);

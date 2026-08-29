@@ -121,7 +121,8 @@ export default function PlanRequests() {
         logAudit({ module: "Plan Requests", action: "approve", record_id: approveTarget.id, details: `Approved request, assigned to group "${group.group_code}" (ticket${ticketCount > 1 ? "s" : ""} #${startTicket}${ticketCount > 1 ? `–${startTicket + ticketCount - 1}` : ""})` });
       }
 
-      const memberMobile = profileOf(approveTarget.member_profile_id)?.mobile;
+      const approvedProfile = profileOf(approveTarget.member_profile_id);
+      const memberMobile = approvedProfile?.mobile;
       if (group.whatsapp_group_link && memberMobile) {
         const startDate = group.start_date ? new Date(group.start_date).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }) : "TBD";
         const collectionDate = group.monthly_collection_date ? `${group.monthly_collection_date}th of every month` : "TBD";
@@ -131,8 +132,16 @@ export default function PlanRequests() {
         import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
           sendWhatsAppMessage({
             phone: memberMobile,
-            templateName: "group_approved_v2",
-            parameters: [group.group_name || group.group_code, plan.plan_name, startDate, collectionDate, firstDueDate, group.whatsapp_group_link],
+            templateName: "group_approved_v3",
+            parameters: [
+              approvedProfile?.full_name || "Member",
+              group.group_name || group.group_code,
+              plan.plan_name,
+              startDate,
+              collectionDate,
+              firstDueDate,
+              group.whatsapp_group_link,
+            ],
           }).then((res) => {
             console.log("✅ Group approved message sent:", res);
           }).catch((err) => {

@@ -36,7 +36,7 @@ export default function AddMemberDialog({ open, onClose, onAdded }) {
         // brand-new member, so it has to be an approved template.
         await sendWhatsAppMessage({
           phone: form.mobile,
-          templateName: "member_invite_v2",
+          templateName: "member_invite_v3",
           parameters: [form.full_name, regUrl],
         });
         toast({ title: "Member added", description: `${form.full_name} added and WhatsApp invite sent.` });

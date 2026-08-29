@@ -74,7 +74,7 @@ export default function PlanRequestCard({ plan, user: userProp, memberProfile: m
       import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
         sendWhatsAppMessage({
           phone: ADMIN_NOTIFY_PHONE,
-          templateName: "admin_plan_request_v2",
+          templateName: "admin_plan_request_v3",
           parameters: [memberProfile?.full_name || "A member", plan.plan_name],
         }).catch((err) => {
           console.error("Admin WhatsApp notification failed:", err);
