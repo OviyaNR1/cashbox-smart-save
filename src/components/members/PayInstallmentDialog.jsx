@@ -260,7 +260,7 @@ export default function PayInstallmentDialog({
                 // (plan.plan_name has a rupee symbol and commas).
                 note: `CashBox Installment ${installmentsToPay.map((i) => i.number).join(",")}`,
               })}
-              className="flex items-center justify-center gap-2 w-full h-10 rounded-lg border border-primary/30 bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/15 transition-colors"
+              className="flex items-center justify-center gap-2 w-full h-10 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
             >
               <Smartphone className="w-4 h-4" /> Pay {formatMoney(amount, currency)} via UPI App
             </a>
@@ -269,7 +269,10 @@ export default function PayInstallmentDialog({
           {method === "upi" && (
             <div className="rounded-lg border border-border p-3 space-y-2">
               <p className="text-xs font-medium text-foreground">
-                Button above not opening your UPI app? Pay manually instead:
+                Button above not opening your UPI app?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                If you got here from a WhatsApp message, tap <span className="text-foreground font-medium">⋮ (top-right) → Open in browser</span>, then try the button again. Or pay manually:
               </p>
               <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
                 <li>Tap <span className="text-foreground font-medium">Copy UPI ID</span> below</li>
