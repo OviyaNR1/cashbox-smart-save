@@ -6,7 +6,11 @@ import { logAudit } from "@/lib/audit";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Users, Calendar, Coins, Check, Loader2, UserPlus } from "lucide-react";
 
-const TICKET_COUNT_OPTIONS = Array.from({ length: 20 }, (_, i) => i + 1);
+// Max tickets a member can request at once — a business rule (5), not the
+// DB's own check constraint (20, the group's total seat count) — those are
+// two different limits and shouldn't be conflated.
+const MAX_TICKETS_PER_REQUEST = 5;
+const TICKET_COUNT_OPTIONS = Array.from({ length: MAX_TICKETS_PER_REQUEST }, (_, i) => i + 1);
 
 // Where a "new plan request" WhatsApp alert goes. No admin-settings UI
 // exists yet for this, so it's a plain constant — change it here, or ask
@@ -135,7 +139,7 @@ export default function PlanRequestCard({ plan, user: userProp, memberProfile: m
           ) : confirming ? (
             <div className="space-y-3">
               <div>
-                <p className="text-xs font-medium text-foreground mb-1.5">How many chit funds are you joining?</p>
+                <p className="text-xs font-medium text-foreground mb-1.5">How many tickets in this chit fund?</p>
                 <Select value={String(ticketCount)} onValueChange={(v) => setTicketCount(Number(v))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>

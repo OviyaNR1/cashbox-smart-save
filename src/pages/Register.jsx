@@ -96,7 +96,7 @@ export default function Register() {
               inputMode="numeric"
               autoComplete="one-time-code"
               autoFocus
-              placeholder="123456"
+              placeholder="e.g. 123456"
               value={code}
               onChange={(e) => setCode(e.target.value)}
               className="h-14 text-2xl font-semibold tracking-widest text-center border-2 border-primary/50 focus-visible:border-primary rounded-xl"
@@ -161,7 +161,7 @@ export default function Register() {
               inputMode="numeric"
               autoComplete="tel-national"
               autoFocus
-              placeholder="98765 43210"
+              placeholder="e.g. 98765 43210"
               value={phoneDigits}
               onChange={(e) => setPhoneDigits(e.target.value.replace(/\D/g, "").slice(0, 10))}
               className="pl-12 h-12"

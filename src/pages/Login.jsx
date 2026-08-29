@@ -90,7 +90,7 @@ export default function Login() {
               inputMode="numeric"
               autoComplete="tel-national"
               autoFocus
-              placeholder="98765 43210"
+              placeholder="e.g. 98765 43210"
               value={phoneDigits}
               onChange={(e) => setPhoneDigits(e.target.value.replace(/\D/g, "").slice(0, 10))}
               className="pl-12 h-12"
