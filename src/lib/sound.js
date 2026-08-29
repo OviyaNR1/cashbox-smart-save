@@ -165,13 +165,11 @@ export function playUrgentTick() {
 // generic, mispronounced "AI voice" instead of the real phrase.
 export const CALL_TERMS = { call_1: "ஒரு தரம்", call_2: "ரெண்டு தரம்", final_call: "மூணு தரம்" };
 
-// Builds the spoken call-out for a stage: the actual amount, then the count
-// term — e.g. "₹90,000. ஒரு தரம்". amountLabel is a pre-formatted currency
-// string (formatMoney's output); pass none for a plan/currency-less
-// fallback that's just the bare term. A period, not an em dash, joins the
-// two — WebKit's Tamil voice (and likely others) silently stops partway
-// through an utterance that has an em dash in it, which is why only the
-// amount was being heard and the term was getting dropped.
+// Builds the on-screen call-out text for a stage — e.g. "₹90,000. ஒரு
+// தரம்". amountLabel is a pre-formatted currency string (formatMoney's
+// output); pass none for a plan/currency-less fallback that's just the bare
+// term. Display-only — see speakCallAnnouncement for the spoken version,
+// which can't just read this same combined string aloud (below).
 export function callAnnouncement(status, amountLabel) {
   const term = CALL_TERMS[status];
   if (!term) return "";
@@ -180,28 +178,53 @@ export function callAnnouncement(status, amountLabel) {
 
 // Spoken call-outs via the browser's built-in text-to-speech — no external
 // service or API key required, and it works offline. Pass lang: "ta" for
-// text that's actually in Tamil (the call announcements) so it picks a real
-// Tamil voice when the device has one installed — common on Indian Android
-// phones — instead of an English voice mangling Tamil script letter by
-// letter. Falls back to the default English-voice behavior if none is
-// found, same as before.
+// text that's actually in Tamil so it picks a real Tamil voice when the
+// device has one installed — common on Indian Android phones — instead of
+// an English voice mangling Tamil script letter by letter. Falls back to
+// the default English-voice behavior if none is found.
 export function speak(text, lang) {
+  speakSequence([{ text, lang }]);
+}
+
+// A Tamil voice asked to read one utterance that starts in Latin script
+// (the currency amount) and switches to Tamil script partway through
+// simply stops after the part it can handle — no error, it just goes
+// silent, which is why only the amount was ever heard and the Oru/Rendu/
+// Moonu Tharam term never was, no matter what punctuation joined them.
+// speakSequence queues separate utterances instead — each with its own
+// voice/lang — which the Web Speech API plays back-to-back on its own.
+export function speakSequence(parts) {
   try {
-    if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    // 1.05 reads naturally in English but comes out rushed in Tamil — the
-    // same rate number doesn't carry across languages/voices.
-    utter.rate = lang === "ta" ? 0.8 : 1.05;
-    utter.pitch = 0.9;
     const voices = window.speechSynthesis.getVoices();
-    const preferred = lang
-      ? voices.find((v) => v.lang?.toLowerCase().startsWith(lang)) || voices.find((v) => /en/i.test(v.lang))
-      : voices.find((v) => /en/i.test(v.lang));
-    if (preferred) utter.voice = preferred;
-    if (lang) utter.lang = lang === "ta" ? "ta-IN" : lang;
-    window.speechSynthesis.speak(utter);
+    parts.forEach(({ text, lang }) => {
+      if (!text) return;
+      const utter = new SpeechSynthesisUtterance(text);
+      // 1.05 reads naturally in English but comes out rushed in Tamil — the
+      // same rate number doesn't carry across languages/voices.
+      utter.rate = lang === "ta" ? 0.8 : 1.05;
+      utter.pitch = 0.9;
+      const preferred = lang
+        ? voices.find((v) => v.lang?.toLowerCase().startsWith(lang)) || voices.find((v) => /en/i.test(v.lang))
+        : voices.find((v) => /en/i.test(v.lang));
+      if (preferred) utter.voice = preferred;
+      if (lang) utter.lang = lang === "ta" ? "ta-IN" : lang;
+      window.speechSynthesis.speak(utter);
+    });
   } catch {
     // Speech synthesis unavailable — fail silently.
   }
+}
+
+// The actual spoken version of a call stage — the amount in the default
+// voice, then the Oru/Rendu/Moonu Tharam term in Tamil, as two queued
+// utterances (see speakSequence for why this can't be one combined string).
+export function speakCallAnnouncement(status, amountLabel) {
+  const term = CALL_TERMS[status];
+  if (!term) return;
+  speakSequence([
+    amountLabel ? { text: amountLabel, lang: null } : null,
+    { text: term, lang: "ta" },
+  ].filter(Boolean));
 }

@@ -8,7 +8,7 @@ import {
 import { formatMoney } from "@/lib/currency";
 import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
-import { playCallBell, playGavel, speak, CALL_TERMS, callAnnouncement } from "@/lib/sound";
+import { playCallBell, playGavel, speak, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown } from "@/lib/useCountdown";
@@ -195,7 +195,7 @@ export default function AdminLiveAuction() {
     await base44.entities.Auction.update(auction.id, { status: nextStatus, call_stage_started_at: new Date().toISOString() });
     logAudit({ module: "Live Auction", action: nextStatus, record_id: auction.id, details: `${CALL_LABELS[nextStatus]} (${CALL_TERMS[nextStatus]}) started for group ${group.group_code} at ${formatMoney(calledAmount, plan.currency)}` });
     playCallBell();
-    speak(callAnnouncement(nextStatus, formatMoney(calledAmount, plan.currency)), "ta");
+    speakCallAnnouncement(nextStatus, formatMoney(calledAmount, plan.currency));
     setBusy(false);
     loadAuction();
   };

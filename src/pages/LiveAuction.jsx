@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { base44, supabase } from "@/api/base44Client";
 import { formatMoney } from "@/lib/currency";
 import { calcAuctionOutcome } from "@/lib/liveAuctionEngine";
-import { playCallBell, playFanfare, playGavel, speak, CALL_TERMS, callAnnouncement } from "@/lib/sound";
+import { playCallBell, playFanfare, playGavel, speak, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
 import { fireConfetti, fireWinnerConfetti } from "@/lib/confetti";
 import { useCountdown } from "@/lib/useCountdown";
 import { logAudit } from "@/lib/audit";
@@ -170,7 +170,7 @@ export default function LiveAuction() {
         playCallBell();
         const validBidsNow = (state.bids || []).filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
         const calledAmount = validBidsNow[0]?.amount ?? auction.starting_amount;
-        speak(callAnnouncement(auction.status, formatMoney(calledAmount, state.plan?.currency)), "ta");
+        speakCallAnnouncement(auction.status, formatMoney(calledAmount, state.plan?.currency));
       } else if (auction.status === "closed") {
         const iWon = state.myMembership && auction.winner_member_profile_id === state.myMembership.member_profile_id;
         if (iWon) {
