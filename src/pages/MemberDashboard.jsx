@@ -5,7 +5,7 @@ import MemberOnboardingWizard from "@/components/members/MemberOnboardingWizard"
 import PayAllDialog from "@/components/members/PayAllDialog";
 import { formatMoney } from "@/lib/currency";
 import { getNextPaymentPreview } from "@/lib/paymentPreview";
-import { ArrowRight, CreditCard, ChevronRight, XCircle } from "lucide-react";
+import { ArrowRight, CreditCard, ChevronRight, XCircle, Gavel } from "lucide-react";
 
 function greeting() {
   const h = new Date().getHours();
@@ -127,9 +127,42 @@ export default function MemberDashboard() {
   // and only one still owes anything.
   const dueTicketCount = new Set(allDueItems.map((i) => i.membership.id)).size;
 
+  // The dashboard previously had zero signal that an auction was actually
+  // live right now — the only hint anywhere in the app was a small dot on
+  // the nav menu's "Auction" item, easy to miss entirely. Surface it here
+  // too: any active ticket in a live_auction-model group with a
+  // not-yet-closed auction.
+  const liveAuctionGroupIds = new Set(
+    activeMemberships.filter((x) => x.plan?.model === "live_auction").map((x) => x.group?.id)
+  );
+  const openAuction = auctions.find(
+    (a) => liveAuctionGroupIds.has(a.group_id) && a.status !== "closed" && a.status !== "cancelled"
+  );
+  const openAuctionGroup = openAuction ? groups.find((g) => g.id === openAuction.group_id) : null;
+
   return (
     <div className="space-y-8">
       <Header firstName={firstName} />
+
+      {openAuction && (
+        <Link
+          to="/live-auction"
+          className="bg-rose-500/10 rounded-2xl border border-rose-500/30 p-5 sm:p-6 flex items-center justify-between gap-4 hover:bg-rose-500/15 transition-colors animate-pulse"
+        >
+          <div className="flex items-center gap-3">
+            <span className="w-10 h-10 rounded-full bg-rose-500/20 grid place-items-center shrink-0">
+              <Gavel className="w-5 h-5 text-rose-400" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-rose-400">
+                Auction is live now — {openAuctionGroup?.group_name || openAuctionGroup?.group_code}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Month {openAuction.month_number} bidding is open. Tap to join.</p>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-rose-400 shrink-0" />
+        </Link>
+      )}
 
       {activeMemberships.length === 0 ? (
         openRequests.length > 0 ? (

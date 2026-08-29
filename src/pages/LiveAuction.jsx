@@ -364,9 +364,16 @@ export default function LiveAuction() {
                 type="number"
                 value={bidAmount}
                 onChange={(e) => { setBidAmount(e.target.value); setConfirmingBid(false); }}
-                placeholder={lowest ? `Below ${lowest.amount - (auction.min_decrement || 0)}` : `Up to ${auction.starting_amount}`}
+                placeholder={
+                  lowest
+                    ? `Below ${(lowest.amount - (auction.min_decrement || 0)).toLocaleString("en-IN")}`
+                    : `Up to ${Number(auction.starting_amount).toLocaleString("en-IN")}`
+                }
                 autoFocus
-                className="h-14 pl-9 text-2xl font-semibold border-2 border-primary/50 focus-visible:border-primary rounded-xl"
+                // Hides the native up/down spinner — a tiny, easy-to-mis-tap
+                // touch target that serves no purpose on a currency field
+                // where you're typing a specific amount, not incrementing.
+                className="h-14 pl-9 text-2xl font-semibold border-2 border-primary/50 focus-visible:border-primary rounded-xl [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
             <Button
