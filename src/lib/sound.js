@@ -168,8 +168,7 @@ export const CALL_TERMS = { call_1: "ஒரு தரம்", call_2: "ரெண
 // Builds the on-screen call-out text for a stage — e.g. "₹90,000. ஒரு
 // தரம்". amountLabel is a pre-formatted currency string (formatMoney's
 // output); pass none for a plan/currency-less fallback that's just the bare
-// term. Display-only — see speakCallAnnouncement for the spoken version,
-// which can't just read this same combined string aloud (below).
+// term. Display-only — see speakCallAnnouncement for the spoken version.
 export function callAnnouncement(status, amountLabel) {
   const term = CALL_TERMS[status];
   if (!term) return "";
@@ -177,54 +176,77 @@ export function callAnnouncement(status, amountLabel) {
 }
 
 // Spoken call-outs via the browser's built-in text-to-speech — no external
-// service or API key required, and it works offline. Pass lang: "ta" for
-// text that's actually in Tamil so it picks a real Tamil voice when the
-// device has one installed — common on Indian Android phones — instead of
-// an English voice mangling Tamil script letter by letter. Falls back to
-// the default English-voice behavior if none is found.
-export function speak(text, lang) {
-  speakSequence([{ text, lang }]);
-}
-
-// A Tamil voice asked to read one utterance that starts in Latin script
-// (the currency amount) and switches to Tamil script partway through
-// simply stops after the part it can handle — no error, it just goes
-// silent, which is why only the amount was ever heard and the Oru/Rendu/
-// Moonu Tharam term never was, no matter what punctuation joined them.
-// speakSequence queues separate utterances instead — each with its own
-// voice/lang — which the Web Speech API plays back-to-back on its own.
-export function speakSequence(parts) {
+// service or API key required, and it works offline.
+export function speak(text) {
   try {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
     window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1.05;
+    utter.pitch = 0.9;
     const voices = window.speechSynthesis.getVoices();
-    parts.forEach(({ text, lang }) => {
-      if (!text) return;
-      const utter = new SpeechSynthesisUtterance(text);
-      // 1.05 reads naturally in English but comes out rushed in Tamil — the
-      // same rate number doesn't carry across languages/voices.
-      utter.rate = lang === "ta" ? 0.8 : 1.05;
-      utter.pitch = 0.9;
-      const preferred = lang
-        ? voices.find((v) => v.lang?.toLowerCase().startsWith(lang)) || voices.find((v) => /en/i.test(v.lang))
-        : voices.find((v) => /en/i.test(v.lang));
-      if (preferred) utter.voice = preferred;
-      if (lang) utter.lang = lang === "ta" ? "ta-IN" : lang;
-      window.speechSynthesis.speak(utter);
-    });
+    const preferred = voices.find((v) => /en/i.test(v.lang));
+    if (preferred) utter.voice = preferred;
+    window.speechSynthesis.speak(utter);
   } catch {
     // Speech synthesis unavailable — fail silently.
   }
 }
 
-// The actual spoken version of a call stage — the amount in the default
-// voice, then the Oru/Rendu/Moonu Tharam term in Tamil, as two queued
-// utterances (see speakSequence for why this can't be one combined string).
+// Real recorded clips of the Oru/Rendu/Moonu Tharam call terms — no browser
+// voice, on any device, actually speaks intelligible Tamil for this (tried
+// three different fixes; every device-installed Tamil voice either mangled
+// the words or dropped them outright when mixed with the Latin-script
+// amount in one utterance). The amount itself is still spoken live via
+// speak() below, since it changes with every bid and can't be pre-recorded
+// — only these three fixed phrases needed a real voice.
+const CALL_AUDIO = {
+  call_1: "/audio/call-oru-tharam.mp3",
+  call_2: "/audio/call-rendu-tharam.mp3",
+  final_call: "/audio/call-moonu-tharam.mp3",
+};
+
+// The actual spoken version of a call stage: the amount, spoken live, then
+// the recorded Tamil term clip plays right after it finishes.
 export function speakCallAnnouncement(status, amountLabel) {
   const term = CALL_TERMS[status];
   if (!term) return;
-  speakSequence([
-    amountLabel ? { text: amountLabel, lang: null } : null,
-    { text: term, lang: "ta" },
-  ].filter(Boolean));
+  const audioSrc = CALL_AUDIO[status];
+  const playTerm = () => {
+    if (!audioSrc) return;
+    try {
+      const clip = new Audio(audioSrc);
+      // Slightly faster than the recorded pace — the browser keeps pitch
+      // steady at this small a bump, so it just sounds a bit snappier
+      // rather than higher-pitched or rushed.
+      clip.playbackRate = 1.15;
+      clip.play().catch(() => {});
+    } catch {
+      // Audio playback unavailable — fail silently, same as speak() does.
+    }
+  };
+  if (!amountLabel) {
+    playTerm();
+    return;
+  }
+  try {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      playTerm();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(amountLabel);
+    utter.rate = 1.15; // matches the term clip's slightly-faster pace below
+    utter.pitch = 0.9;
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find((v) => /en/i.test(v.lang));
+    if (preferred) utter.voice = preferred;
+    // Play the term once the amount finishes — onerror too, so a browser
+    // that can't speak the amount at all still gets the term.
+    utter.onend = playTerm;
+    utter.onerror = playTerm;
+    window.speechSynthesis.speak(utter);
+  } catch {
+    playTerm();
+  }
 }
