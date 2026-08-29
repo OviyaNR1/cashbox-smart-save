@@ -64,7 +64,10 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
 
   const [form, setForm] = useState({
     full_name: initialProfile?.full_name || user?.full_name || "",
-    mobile: stripCc(initialProfile?.mobile) || "",
+    // Already known and WhatsApp-verified by the time anyone reaches this
+    // wizard — signup itself confirms the number via a code sent here — so
+    // this is never asked for again, just carried forward from the account.
+    mobile: stripCc(initialProfile?.mobile || user?.phone) || "",
     email: initialProfile?.email || user?.email || "",
     dob: initialProfile?.dob || "",
     gender: initialProfile?.gender || "female",
@@ -92,7 +95,6 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
 
   const submitStep1 = async () => {
     if (!form.full_name) return toast({ title: "Full name is required", variant: "destructive" });
-    if (!form.mobile) return toast({ title: "WhatsApp number is required", variant: "destructive" });
     setSaving(true);
     try {
       // member_code is assigned server-side (DB trigger + sequence) — a
@@ -143,8 +145,10 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
         pin_code: isCanada ? "" : form.pin_code,
         province: isCanada ? form.province : "",
         postal_code: isCanada ? form.postal_code : "",
-        aadhaar_number: isCanada ? "" : form.aadhaar_number,
-        pan_number: isCanada ? "" : form.pan_number,
+        // Aadhaar/PAN fields are hidden for now (see the commented-out
+        // block below) — re-enable these two lines alongside them.
+        // aadhaar_number: isCanada ? "" : form.aadhaar_number,
+        // pan_number: isCanada ? "" : form.pan_number,
       });
       setStep(3);
     } catch (e) {
@@ -163,7 +167,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
         guarantor_name: form.guarantor_name,
         guarantor_mobile: `${CC}${stripCc(form.guarantor_mobile)}`,
         guarantor_relationship: form.guarantor_relationship,
-        guarantor_email: form.guarantor_email,
+        // guarantor_email: form.guarantor_email, — field hidden for now, see the commented-out block below
         kyc_stage: "document_upload",
       });
       logAudit({ module: "Members", action: "self-verify", record_id: profile.id, details: `${form.full_name || profile.full_name} completed self-service verification` });
@@ -198,10 +202,11 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
             <Input value={form.full_name} onChange={(e) => set("full_name", e.target.value)} placeholder="Your full name" autoFocus />
           </div>
           <div>
-            <Label>WhatsApp number *</Label>
-            <div className="flex gap-2">
-              <span className="shrink-0 w-[72px] h-10 rounded-md border border-border bg-muted grid place-items-center text-sm text-muted-foreground">{CC} {flag}</span>
-              <Input value={form.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder={isCanada ? "e.g. 416 555 0123" : "e.g. 98765 43210"} className="flex-1" />
+            <Label>WhatsApp number</Label>
+            <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-border bg-muted text-sm text-muted-foreground">
+              <span className="shrink-0">{CC} {flag}</span>
+              <span className="flex-1 text-foreground">{form.mobile}</span>
+              <Check className="w-4 h-4 text-emerald-500 shrink-0" />
             </div>
           </div>
           <div>
@@ -288,6 +293,11 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
             </div>
           )}
 
+          {/*
+          Aadhaar/PAN collection turned off for now — uncomment to bring it
+          back. Also re-enable the two fields in submitStep2Details' update
+          payload below when this comes back.
+
           {!isCanada && (
             <div className="pt-2 border-t border-border">
               <p className="text-sm font-medium text-foreground mb-3">Identity</p>
@@ -303,6 +313,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
               </div>
             </div>
           )}
+          */}
 
           <Button onClick={submitStep2Details} disabled={saving} className="w-full rounded-full bg-primary hover:bg-primary/90">
             {saving ? "Saving…" : "Continue"}
@@ -355,10 +366,15 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
               <Input value={form.guarantor_mobile} onChange={(e) => set("guarantor_mobile", e.target.value)} placeholder={isCanada ? "e.g. 416 555 0123" : "e.g. 98765 43210"} className="flex-1" />
             </div>
           </div>
+          {/*
+          Guarantor email turned off for now — phone is enough to reach
+          them. Uncomment to bring it back, and re-add guarantor_email to
+          submitStep3Guarantor's update payload above.
           <div>
             <Label>Guarantor email</Label>
             <Input type="email" value={form.guarantor_email} onChange={(e) => set("guarantor_email", e.target.value)} placeholder="e.g. guarantor@email.com" />
           </div>
+          */}
           <Button onClick={submitStep3Guarantor} disabled={saving} className="w-full rounded-full bg-primary hover:bg-primary/90">
             {saving ? "Saving…" : "Continue"}
           </Button>
