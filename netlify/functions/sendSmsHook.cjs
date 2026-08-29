@@ -22,7 +22,10 @@ function verifySignature(rawBody, headers, secret) {
   const signatureHeader = headers["webhook-signature"];
   if (!id || !timestamp || !signatureHeader) return false;
 
-  const secretBytes = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+  // Supabase's secret comes as "v1,whsec_<base64>" — strip both the
+  // version prefix and the whsec_ marker, wherever whsec_ actually starts,
+  // rather than assuming it's at position 0.
+  const secretBytes = Buffer.from(secret.replace(/^.*whsec_/, ""), "base64");
   const signedContent = `${id}.${timestamp}.${rawBody}`;
   const expected = crypto.createHmac("sha256", secretBytes).update(signedContent).digest("base64");
 
