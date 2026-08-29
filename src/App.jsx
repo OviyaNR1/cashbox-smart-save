@@ -13,7 +13,6 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 
 const Login = lazy(() => import('@/pages/Login'));
 const AdminLogin = lazy(() => import('@/pages/AdminLogin'));
-const Register = lazy(() => import('@/pages/Register'));
 const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
 const Home = lazy(() => import('@/pages/Home'));
@@ -86,9 +85,14 @@ const AuthenticatedApp = () => {
         </Route>
         <Route path="/in" element={<CountryEntry country="IN" />} />
         <Route path="/ca" element={<CountryEntry country="CA" />} />
+        {/* Both routes render the same phone-first component (Login.jsx) —
+            the number itself decides whether it's a login or a signup, so
+            there's no meaningful difference between the two URLs anymore.
+            Both are kept because existing links throughout the app (header
+            nav, WhatsApp templates, etc.) point at one or the other. */}
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Login />} />
         <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route element={<ProtectedRoute />}>

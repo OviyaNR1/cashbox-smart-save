@@ -176,6 +176,18 @@ export const base44 = {
       const { error } = await supabase.auth.signInWithPassword({ phone, password });
       if (error) throw error;
     },
+    // Lets the combined phone-entry screen decide whether to show a
+    // password field or a create-account form, before the person has to
+    // pick one themselves. auth.users.phone is stored without the leading
+    // "+" (E.164 in, bare digits out — Supabase's own normalization), so
+    // this strips it to match what's actually in the column.
+    async phoneExists(phone) {
+      const { data, error } = await supabase.rpc('phone_number_exists', {
+        check_phone: phone.replace(/^\+/, ''),
+      });
+      if (error) throw error;
+      return !!data;
+    },
     async loginWithProvider(provider, returnTo) {
       const redirectTo = new URL(returnTo || '/', window.location.origin).toString();
       const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
