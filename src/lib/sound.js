@@ -159,8 +159,11 @@ export function playUrgentTick() {
 // "rendu tharam" (twice), "moonu tharam" (thrice) — called out against the
 // current lowest bid before it's sold, instead of a generic "any lower
 // bids?". Shared between the admin's calling screen and members' live view
-// so both sides announce and display the identical wording.
-export const CALL_TERMS = { call_1: "Oru Tharam", call_2: "Rendu Tharam", final_call: "Moonu Tharam" };
+// so both sides announce and display the identical wording. Written in
+// actual Tamil script, not romanized letters — an English voice reading
+// "Oru Tharam" as English letters is exactly what made it sound like a
+// generic, mispronounced "AI voice" instead of the real phrase.
+export const CALL_TERMS = { call_1: "ஒரு தரம்", call_2: "ரெண்டு தரம்", final_call: "மூணு தரம்" };
 
 // Builds the spoken call-out for a stage: the actual amount, then the count
 // term — e.g. "₹90,000 — Oru Tharam". amountLabel is a pre-formatted
@@ -173,8 +176,13 @@ export function callAnnouncement(status, amountLabel) {
 }
 
 // Spoken call-outs via the browser's built-in text-to-speech — no external
-// service or API key required, and it works offline.
-export function speak(text) {
+// service or API key required, and it works offline. Pass lang: "ta" for
+// text that's actually in Tamil (the call announcements) so it picks a real
+// Tamil voice when the device has one installed — common on Indian Android
+// phones — instead of an English voice mangling Tamil script letter by
+// letter. Falls back to the default English-voice behavior if none is
+// found, same as before.
+export function speak(text, lang) {
   try {
     if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
     window.speechSynthesis.cancel();
@@ -182,8 +190,11 @@ export function speak(text) {
     utter.rate = 1.05;
     utter.pitch = 0.9;
     const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find((v) => /en/i.test(v.lang));
+    const preferred = lang
+      ? voices.find((v) => v.lang?.toLowerCase().startsWith(lang)) || voices.find((v) => /en/i.test(v.lang))
+      : voices.find((v) => /en/i.test(v.lang));
     if (preferred) utter.voice = preferred;
+    if (lang) utter.lang = lang === "ta" ? "ta-IN" : lang;
     window.speechSynthesis.speak(utter);
   } catch {
     // Speech synthesis unavailable — fail silently.

@@ -195,7 +195,7 @@ export default function AdminLiveAuction() {
     await base44.entities.Auction.update(auction.id, { status: nextStatus, call_stage_started_at: new Date().toISOString() });
     logAudit({ module: "Live Auction", action: nextStatus, record_id: auction.id, details: `${CALL_LABELS[nextStatus]} (${CALL_TERMS[nextStatus]}) started for group ${group.group_code} at ${formatMoney(calledAmount, plan.currency)}` });
     playCallBell();
-    speak(callAnnouncement(nextStatus, formatMoney(calledAmount, plan.currency)));
+    speak(callAnnouncement(nextStatus, formatMoney(calledAmount, plan.currency)), "ta");
     setBusy(false);
     loadAuction();
   };
@@ -383,7 +383,7 @@ export default function AdminLiveAuction() {
           {countdown !== null && (
             <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6 text-center animate-pulse">
               <p className="text-sm font-semibold text-rose-400 mb-1 tracking-wide">
-                {formatMoney(calledAmount, plan.currency)} — {CALL_TERMS[auction.status]?.toUpperCase()}
+                {formatMoney(calledAmount, plan.currency)} — {CALL_TERMS[auction.status]}
               </p>
               <p className="text-5xl font-bold text-foreground tabular-nums">{countdown}</p>
             </div>

@@ -170,7 +170,7 @@ export default function LiveAuction() {
         playCallBell();
         const validBidsNow = (state.bids || []).filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
         const calledAmount = validBidsNow[0]?.amount ?? auction.starting_amount;
-        speak(callAnnouncement(auction.status, formatMoney(calledAmount, state.plan?.currency)));
+        speak(callAnnouncement(auction.status, formatMoney(calledAmount, state.plan?.currency)), "ta");
       } else if (auction.status === "closed") {
         const iWon = state.myMembership && auction.winner_member_profile_id === state.myMembership.member_profile_id;
         if (iWon) {
@@ -334,7 +334,7 @@ export default function LiveAuction() {
       {countdown !== null && (
         <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6 text-center animate-pulse">
           <p className="text-sm font-semibold text-rose-400 mb-1 tracking-wide">
-            {formatMoney(lowest ? lowest.amount : auction.starting_amount, plan.currency)} — {CALL_TERMS[auction.status]?.toUpperCase()}
+            {formatMoney(lowest ? lowest.amount : auction.starting_amount, plan.currency)} — {CALL_TERMS[auction.status]}
           </p>
           <p className="text-5xl font-bold text-foreground tabular-nums">{countdown}</p>
         </div>
