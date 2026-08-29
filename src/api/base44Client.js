@@ -188,6 +188,26 @@ export const base44 = {
       if (error) throw error;
       return !!data;
     },
+    // Phone accounts have no email to send a reset link to, so "forgot
+    // password" reuses the same OTP machinery as signup: an OTP proves you
+    // control the number, and a verified OTP is itself a real login — no
+    // separate "reset token" concept needed. shouldCreateUser: false is the
+    // whole point here — this must fail for a number with no account,
+    // rather than silently creating one.
+    async sendPasswordResetOtp(phone) {
+      const { error } = await supabase.auth.signInWithOtp({ phone, options: { shouldCreateUser: false } });
+      if (error) throw error;
+    },
+    // Verifying the code logs them in for real (same as verifyPhoneSignup)
+    // — from here they're authenticated and can call updatePassword below.
+    async verifyPasswordResetOtp(phone, token) {
+      const { error } = await supabase.auth.verifyOtp({ phone, token, type: "sms" });
+      if (error) throw error;
+    },
+    async updatePassword(newPassword) {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+    },
     async loginWithProvider(provider, returnTo) {
       const redirectTo = new URL(returnTo || '/', window.location.origin).toString();
       const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
