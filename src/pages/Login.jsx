@@ -59,18 +59,20 @@ export default function Login() {
       icon={LogIn}
       title="Welcome back"
       subtitle="Log in with your WhatsApp number"
-      footer={
-        <>
-          Don't have an account?{" "}
-          <Link
-            to={"/register" + (returnTo !== "/" ? "?returnTo=" + encodeURIComponent(returnTo) : "")}
-            className="text-primary font-medium hover:underline"
-          >
-            Create one
-          </Link>
-        </>
-      }
     >
+      {/* Anyone landing here without an account yet (e.g. a shared app link
+          while logged out) sees a password field and nothing else unless
+          they scroll to the small link at the very bottom — easy to miss on
+          a first visit. This puts the same option somewhere they can't miss
+          it, before they even look at the form. */}
+      <Link
+        to={"/register" + (returnTo !== "/" ? "?returnTo=" + encodeURIComponent(returnTo) : "")}
+        className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm hover:bg-primary/15 transition-colors"
+      >
+        <span className="text-foreground">New to CashBox?</span>
+        <span className="font-semibold text-primary">Create an account →</span>
+      </Link>
+
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
           {error}

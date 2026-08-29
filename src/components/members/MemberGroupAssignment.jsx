@@ -7,6 +7,7 @@ import { logAudit } from "@/lib/audit";
 import { addMonthsUTC } from "@/lib/dates";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { generateChitNumber } from "@/lib/codeGenerator";
+import { MAX_TICKETS_PER_REQUEST } from "@/components/members/PlanRequestCard";
 
 export default function MemberGroupAssignment({ member, onUpdated }) {
   const [groups, setGroups] = useState([]);
@@ -68,6 +69,11 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
 
   const assign = async () => {
     if (!selectedGroup) return;
+    // Same 5-tickets-per-person business rule PlanRequestCard.jsx enforces
+    // on the member-facing request flow — this admin screen bypasses that
+    // flow entirely, so it needs its own copy of the same cap, or an admin
+    // can click "Add another ticket" indefinitely with nothing to stop them.
+    if (ticketCountIn(selectedGroup) >= MAX_TICKETS_PER_REQUEST) return;
     setAdding(true);
     try {
       const group = groups.find((g) => g.id === selectedGroup);
@@ -211,7 +217,11 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
                   return (
                     <SelectItem key={g.id} value={g.id}>
                       {g.group_name || g.group_code}{p ? ` · ${p.plan_name}` : ""}
-                      {count > 0 ? ` (already has ${count} ticket${count > 1 ? "s" : ""})` : ""}
+                      {count >= MAX_TICKETS_PER_REQUEST
+                        ? ` (max ${MAX_TICKETS_PER_REQUEST} tickets reached)`
+                        : count > 0
+                        ? ` (already has ${count} ticket${count > 1 ? "s" : ""})`
+                        : ""}
                     </SelectItem>
                   );
                 })}
@@ -219,10 +229,16 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
             </Select>
             <button
               onClick={assign}
-              disabled={adding || !selectedGroup}
+              disabled={adding || !selectedGroup || ticketCountIn(selectedGroup) >= MAX_TICKETS_PER_REQUEST}
               className="px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 whitespace-nowrap"
             >
-              {adding ? "Adding…" : ticketCountIn(selectedGroup) > 0 ? "Add another ticket" : "Assign"}
+              {adding
+                ? "Adding…"
+                : selectedGroup && ticketCountIn(selectedGroup) >= MAX_TICKETS_PER_REQUEST
+                ? `Max ${MAX_TICKETS_PER_REQUEST} tickets reached`
+                : ticketCountIn(selectedGroup) > 0
+                ? "Add another ticket"
+                : "Assign"}
             </button>
           </div>
         </div>

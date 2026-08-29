@@ -8,6 +8,7 @@ import { logAudit } from "@/lib/audit";
 import { addMonthsUTC } from "@/lib/dates";
 import { generateChitNumber } from "@/lib/codeGenerator";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
+import { MAX_TICKETS_PER_REQUEST } from "@/components/members/PlanRequestCard";
 
 export default function GroupMembersDialog({ group, plan, onClose }) {
   const [memberships, setMemberships] = useState(null);
@@ -50,6 +51,11 @@ export default function GroupMembersDialog({ group, plan, onClose }) {
   const addMember = async () => {
     if (!selectedMember) return;
     if (isFull) return;
+    // Same 5-tickets-per-person business rule PlanRequestCard.jsx enforces
+    // on the member-facing request flow — this admin screen bypasses that
+    // flow entirely, so it needs its own copy of the same cap, or an admin
+    // can click "Add another ticket" indefinitely with nothing to stop them.
+    if (ticketCountOf(selectedMember) >= MAX_TICKETS_PER_REQUEST) return;
     setAdding(true);
     const prof = allProfiles.find((p) => p.id === selectedMember);
     const firstDue = addMonthsUTC(group.start_date, 1) || "";
@@ -156,14 +162,28 @@ export default function GroupMembersDialog({ group, plan, onClose }) {
                     return (
                       <SelectItem key={p.id} value={p.id}>
                         {p.full_name} · {p.member_code || p.mobile}
-                        {count > 0 ? ` (already has ${count} ticket${count > 1 ? "s" : ""})` : ""}
+                        {count >= MAX_TICKETS_PER_REQUEST
+                          ? ` (max ${MAX_TICKETS_PER_REQUEST} tickets reached)`
+                          : count > 0
+                          ? ` (already has ${count} ticket${count > 1 ? "s" : ""})`
+                          : ""}
                       </SelectItem>
                     );
                   })}
                 </SelectContent>
               </Select>
-              <Button onClick={addMember} disabled={adding || !selectedMember} className="bg-primary hover:bg-primary/90 rounded-full">
-                {adding ? "Adding…" : ticketCountOf(selectedMember) > 0 ? "Add another ticket" : "Add"}
+              <Button
+                onClick={addMember}
+                disabled={adding || !selectedMember || ticketCountOf(selectedMember) >= MAX_TICKETS_PER_REQUEST}
+                className="bg-primary hover:bg-primary/90 rounded-full"
+              >
+                {adding
+                  ? "Adding…"
+                  : selectedMember && ticketCountOf(selectedMember) >= MAX_TICKETS_PER_REQUEST
+                  ? `Max ${MAX_TICKETS_PER_REQUEST} reached`
+                  : ticketCountOf(selectedMember) > 0
+                  ? "Add another ticket"
+                  : "Add"}
               </Button>
             </div>
           </div>

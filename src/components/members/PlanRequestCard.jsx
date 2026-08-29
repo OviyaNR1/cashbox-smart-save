@@ -9,7 +9,7 @@ import { Users, Calendar, Coins, Check, Loader2, UserPlus } from "lucide-react";
 // Max tickets a member can request at once — a business rule (5), not the
 // DB's own check constraint (20, the group's total seat count) — those are
 // two different limits and shouldn't be conflated.
-const MAX_TICKETS_PER_REQUEST = 5;
+export const MAX_TICKETS_PER_REQUEST = 5;
 const TICKET_COUNT_OPTIONS = Array.from({ length: MAX_TICKETS_PER_REQUEST }, (_, i) => i + 1);
 
 // Where a "new plan request" WhatsApp alert goes. No admin-settings UI

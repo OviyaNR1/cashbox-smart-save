@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import {
-  User, Phone, Mail, MapPin, Users as UsersIcon, CheckCircle2, Clock, XCircle, FileText,
+  User, Phone, Mail, MapPin, Users as UsersIcon, CheckCircle2, Clock, XCircle, FileText, LogOut,
 } from "lucide-react";
 import MemberDocumentUpload from "@/components/members/MemberDocumentUpload";
 
@@ -96,6 +96,16 @@ export default function MyProfile() {
         </p>
         <MemberDocumentUpload memberProfileId={profile.id} />
       </SectionCard>
+
+      {/* The sidebar has its own sign-out icon, but it's unlabeled and easy
+          to miss (especially on mobile, tucked behind the hamburger menu) —
+          this page is where a member would naturally look for it instead. */}
+      <button
+        onClick={() => base44.auth.logout("/login")}
+        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+      >
+        <LogOut className="w-4 h-4" /> Log out
+      </button>
     </div>
   );
 }
