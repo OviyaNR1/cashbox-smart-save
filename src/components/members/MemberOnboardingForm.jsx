@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
+import { generateChitNumber } from "@/lib/codeGenerator";
 
 const empty = {
   full_name: "", address: "", city: "", state: "", pin_code: "", mobile: "", phone: "", email: "",
@@ -68,9 +69,11 @@ export default function MemberOnboardingForm({ open, onClose, onSaved, member })
 
         if (form.group_id) {
           const group = groups.find((g) => g.id === form.group_id);
+          const chitNumber = await generateChitNumber();
           await base44.entities.GroupMembership.create({
             group_id: form.group_id,
             member_profile_id: memberId,
+            chit_number: chitNumber,
             status: "active",
             paid_installments: 0,
             total_paid: 0,

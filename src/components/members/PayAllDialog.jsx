@@ -156,7 +156,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">
                       {item.group?.group_name || item.group?.group_code}
-                      {item.membership.ticket_number ? ` · Ticket #${item.membership.ticket_number}` : ""}
+                      {item.membership.chit_number || item.membership.ticket_number ? ` · Chit #${item.membership.chit_number || item.membership.ticket_number}` : ""}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Installment #{item.number} · {item.dueDate ? `Due ${item.dueDate}` : "—"}

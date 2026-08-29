@@ -40,11 +40,10 @@ export default function Members() {
           groupLabel: group?.group_name || group?.group_code || "—",
           ticketNumber: m.ticket_number,
           totalTickets: plan?.member_count,
-          // A short, stable identifier for this specific ticket — the plain
-          // "1 of 20" position is meaningful context but isn't something you
-          // can search for or read out over the phone, so pair it with a
-          // code in the same {prefix}-{padded number} shape as member_code.
-          ticketCode: group?.group_code ? `${group.group_code}-T${String(m.ticket_number || 0).padStart(4, "0")}` : null,
+          // A short, stable, globally-unique identifier for this specific
+          // ticket — the plain "1 of 20" position is meaningful context but
+          // isn't something you can search for or read out over the phone.
+          ticketCode: m.chit_number || null,
         };
         (byProfile[m.member_profile_id] ||= []).push(ticket);
       }
@@ -178,7 +177,7 @@ export default function Members() {
                       <td className="px-5 py-3 text-muted-foreground">
                         {t ? (
                           <>
-                            <p className="text-foreground font-mono text-sm">{t.ticketCode || `Ticket ${t.ticketNumber || "—"}`}</p>
+                            <p className="text-foreground font-mono text-sm">{t.ticketCode ? `Chit #${t.ticketCode}` : `Ticket ${t.ticketNumber || "—"}`}</p>
                             <p className="text-xs text-muted-foreground">
                               {t.groupLabel}{t.ticketNumber && t.totalTickets ? ` · ${t.ticketNumber} of ${t.totalTickets}` : ""}
                             </p>

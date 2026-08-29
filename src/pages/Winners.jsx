@@ -328,7 +328,7 @@ export default function Winners() {
                     <Crown className="w-8 h-8 text-primary" />
                   </div>
                   <p className="text-lg font-semibold text-foreground">{prof?.full_name || "Member"}</p>
-                  <p className="text-sm text-muted-foreground">Ticket #{ms?.ticket_number}</p>
+                  <p className="text-sm text-muted-foreground">Chit #{ms?.chit_number || ms?.ticket_number}</p>
                 </div>
                 {!isLakhBox && (
                   <Button variant="outline" onClick={drawWinner} disabled={saving} className="w-full rounded-full">

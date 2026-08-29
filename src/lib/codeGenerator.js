@@ -16,6 +16,36 @@ export async function generateMemberCode() {
 }
 
 /**
+ * Auto-generates a chit number: 000001, 000002, etc. — a plain 6-digit
+ * number (no letter prefix, unlike member_code) identifying one ticket
+ * globally across every group, shown to members instead of the per-group
+ * `ticket_number` (1, 2, 3... which repeats across different groups and
+ * carries real auction-ordering meaning it shouldn't be reformatted out of —
+ * see ticket_number's use in Winners.jsx for the Lakhbox payout order).
+ * Derived from the highest existing chit number, not a row count, for the
+ * same reason as generateMemberCode above.
+ */
+export async function generateChitNumber() {
+  const [chitNumber] = await generateChitNumbers(1);
+  return chitNumber;
+}
+
+/**
+ * Same as generateChitNumber, but reserves `count` consecutive numbers in
+ * one pass — for approving a multi-ticket request via bulkCreate, calling
+ * generateChitNumber() in a loop would re-fetch the same list and hand back
+ * the same "next" number to every ticket in the batch.
+ */
+export async function generateChitNumbers(count) {
+  const existing = await base44.entities.GroupMembership.list("-created_date", 5000);
+  const maxNum = existing.reduce((max, m) => {
+    const match = /^(\d{6})$/.exec(m.chit_number || "");
+    return match ? Math.max(max, parseInt(match[1], 10)) : max;
+  }, 0);
+  return Array.from({ length: count }, (_, i) => String(maxNum + 1 + i).padStart(6, "0"));
+}
+
+/**
  * Auto-generates a group code based on currency:
  * CB_CA_YYYY_XX (Canada) or CB_IN_YYYY_XX (India)
  * where XX is a 2-digit sequence for that year+region.

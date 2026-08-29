@@ -6,6 +6,8 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { UserPlus, Trash2 } from "lucide-react";
 import { logAudit } from "@/lib/audit";
 import { addMonthsUTC } from "@/lib/dates";
+import { generateChitNumber } from "@/lib/codeGenerator";
+import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 
 export default function GroupMembersDialog({ group, plan, onClose }) {
   const [memberships, setMemberships] = useState(null);
@@ -51,11 +53,13 @@ export default function GroupMembersDialog({ group, plan, onClose }) {
     setAdding(true);
     const prof = allProfiles.find((p) => p.id === selectedMember);
     const firstDue = addMonthsUTC(group.start_date, 1) || "";
+    const chitNumber = await generateChitNumber();
     const created = await base44.entities.GroupMembership.create({
       group_id: group.id,
       member_profile_id: selectedMember,
       user_id: prof.user_id || "",
       ticket_number: nextTicket,
+      chit_number: chitNumber,
       paid_installments: 0,
       total_paid: 0,
       next_due_date: firstDue,
@@ -64,6 +68,21 @@ export default function GroupMembersDialog({ group, plan, onClose }) {
     });
     await base44.entities.ChitGroup.update(group.id, { filled_seats: (memberships?.length || 0) + 1 });
     logAudit({ module: "Savings Groups", action: "add-member", record_id: created.id, details: `Added "${prof?.full_name || "member"}" to group "${group.group_code}" (ticket #${nextTicket})` });
+    // This screen was the one path to "add a member to a group" with no
+    // WhatsApp notification at all — MemberGroupAssignment.jsx (the other
+    // path to the same outcome) already sends one, so this needed the same
+    // fix, not just the missing-link fallback the other two paths got.
+    if (prof?.mobile) {
+      const groupLink = group.whatsapp_group_link || `${window.location.origin}/my-chits`;
+      sendWhatsAppMessage({
+        phone: prof.mobile,
+        templateName: "group_assignment_invite_v4",
+        parameters: [prof.full_name || "Member", group.group_name || group.group_code, plan?.plan_name || "your plan", groupLink],
+      }).catch((err) => {
+        console.error("Group-invite WhatsApp notification failed:", err);
+        logAudit({ module: "Savings Groups", action: "whatsapp-notify-failed", record_id: created.id, details: `Failed to WhatsApp-notify "${prof?.full_name || "member"}" of group assignment: ${err?.message || err}` });
+      });
+    }
     setSelectedMember("");
     setAdding(false);
     await load();
@@ -109,7 +128,9 @@ export default function GroupMembersDialog({ group, plan, onClose }) {
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground truncate">{prof?.full_name || "Member"}</p>
-                      <p className="text-xs text-muted-foreground">{prof?.mobile || ""}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {m.chit_number ? `Chit #${m.chit_number}` : ""}{m.chit_number && prof?.mobile ? " · " : ""}{prof?.mobile || ""}
+                      </p>
                     </div>
                     <button onClick={() => removeMember(m)} className="text-muted-foreground/60 hover:text-destructive p-1">
                       <Trash2 className="w-4 h-4" />

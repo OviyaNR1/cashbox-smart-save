@@ -138,7 +138,7 @@ export default function MyChits() {
               <div>
                 <p className="font-medium text-foreground">{plan.plan_name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {group?.group_name || group?.group_code} · Ticket #{m.ticket_number || "—"} ·{" "}
+                  {group?.group_name || group?.group_code} · Chit #{m.chit_number || m.ticket_number || "—"} ·{" "}
                   {group?.status === "active" ? "Active" : group?.status}
                 </p>
               </div>

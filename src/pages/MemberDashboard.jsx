@@ -295,7 +295,7 @@ function TicketRow({ membership: m, group, plan, preview, hasPending }) {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground truncate">
           {label}
-          {m.ticket_number ? ` · Ticket #${m.ticket_number}` : ""}
+          {m.chit_number || m.ticket_number ? ` · Chit #${m.chit_number || m.ticket_number}` : ""}
         </p>
         <p className={`text-xs mt-0.5 ${status.tone}`}>{status.text}</p>
       </div>

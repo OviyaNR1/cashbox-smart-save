@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 import { logAudit } from "@/lib/audit";
 import { addMonthsUTC } from "@/lib/dates";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
+import { generateChitNumbers } from "@/lib/codeGenerator";
 
 export default function PlanRequests() {
   const { country: countryFilter } = useAdminCountry();
@@ -102,12 +103,14 @@ export default function PlanRequests() {
         // installment/payment/win tracking), all pointing at the same
         // member_profile_id. See codeGenerator.js / the 2026-08-28 schema
         // change for why membership identity is per-ticket, not per-person.
+        const chitNumbers = await generateChitNumbers(ticketCount);
         await base44.entities.GroupMembership.bulkCreate(
           Array.from({ length: ticketCount }, (_, i) => ({
             group_id: group.id,
             member_profile_id: approveTarget.member_profile_id,
             user_id: approveTarget.user_id || "",
             ticket_number: startTicket + i,
+            chit_number: chitNumbers[i],
             paid_installments: 0,
             total_paid: 0,
             next_due_date: firstDue,
@@ -123,10 +126,16 @@ export default function PlanRequests() {
 
       const approvedProfile = profileOf(approveTarget.member_profile_id);
       const memberMobile = approvedProfile?.mobile;
-      if (group.whatsapp_group_link && memberMobile) {
+      if (memberMobile) {
         const startDate = group.start_date ? new Date(group.start_date).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }) : "TBD";
         const collectionDate = group.monthly_collection_date ? `${group.monthly_collection_date}th of every month` : "TBD";
         const firstDueDate = firstDue ? new Date(firstDue).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" }) : "TBD";
+        // Not every group has a WhatsApp chat set up — that must not silently
+        // cancel the whole "you've been approved" message (it used to gate
+        // the entire send on this link existing). Point to the member's own
+        // in-app group view instead so the message still has somewhere
+        // useful to send them.
+        const groupLink = group.whatsapp_group_link || `${window.location.origin}/my-chits`;
 
         console.log("📱 Sending group_approved to:", memberMobile, { group_code: group.group_code, startDate, collectionDate, firstDueDate });
         import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
@@ -140,7 +149,7 @@ export default function PlanRequests() {
               startDate,
               collectionDate,
               firstDueDate,
-              group.whatsapp_group_link,
+              groupLink,
             ],
           }).then((res) => {
             console.log("✅ Group approved message sent:", res);

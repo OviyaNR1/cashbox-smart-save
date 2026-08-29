@@ -279,7 +279,7 @@ export default function Payments() {
                     const grp = groupOf(m.group_id);
                     return (
                       <SelectItem key={m.id} value={m.id}>
-                        {prof?.full_name || "Member"} · {grp?.group_code || "Group"} · Ticket #{m.ticket_number}
+                        {prof?.full_name || "Member"} · {grp?.group_code || "Group"} · Chit #{m.chit_number || m.ticket_number}
                       </SelectItem>
                     );
                   })}

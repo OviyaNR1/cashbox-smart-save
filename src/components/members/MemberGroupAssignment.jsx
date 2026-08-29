@@ -6,6 +6,7 @@ import { UserPlus, Trash2 } from "lucide-react";
 import { logAudit } from "@/lib/audit";
 import { addMonthsUTC } from "@/lib/dates";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
+import { generateChitNumber } from "@/lib/codeGenerator";
 
 export default function MemberGroupAssignment({ member, onUpdated }) {
   const [groups, setGroups] = useState([]);
@@ -73,11 +74,13 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
       const existingMemberships = await base44.entities.GroupMembership.filter({ group_id: selectedGroup });
       const nextTicket = Math.max(0, ...existingMemberships.map((m) => m.ticket_number || 0)) + 1;
       const firstDue = addMonthsUTC(group?.start_date, 1) || "";
+      const chitNumber = await generateChitNumber();
       const created = await base44.entities.GroupMembership.create({
         group_id: selectedGroup,
         member_profile_id: member.id,
         user_id: member.user_id || "",
         ticket_number: nextTicket,
+        chit_number: chitNumber,
         paid_installments: 0,
         total_paid: 0,
         next_due_date: firstDue,
@@ -105,16 +108,20 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
       // Same invite-link send PlanRequests.jsx does on approval — this
       // screen is the other path to the same outcome (direct assignment
       // instead of request/approve), so it needs the same notification or
-      // members assigned this way never hear about the group chat at all.
-      if (group?.whatsapp_group_link && member.mobile) {
+      // members assigned this way never hear about it at all. Not every
+      // group has a WhatsApp chat set up — that must not silently cancel
+      // the whole notification, so fall back to the member's own in-app
+      // group view instead of skipping the send.
+      if (group && member.mobile) {
         const plan = planOf(group.id);
+        const groupLink = group.whatsapp_group_link || `${window.location.origin}/my-chits`;
         // Free-form text only reaches numbers that messaged the business in
         // the last 24 hours — a member assigned this way has no guarantee
         // of that, so this has to be an approved template.
         sendWhatsAppMessage({
           phone: member.mobile,
           templateName: "group_assignment_invite_v4",
-          parameters: [member.full_name || "Member", group.group_name || group.group_code, plan?.plan_name || "your plan", group.whatsapp_group_link],
+          parameters: [member.full_name || "Member", group.group_name || group.group_code, plan?.plan_name || "your plan", groupLink],
         }).catch((err) => {
           console.error("Group-invite WhatsApp notification failed:", err);
           logAudit({ module: "Savings Groups", action: "whatsapp-notify-failed", record_id: created.id, details: `Failed to WhatsApp-notify "${member.full_name || "member"}" of group assignment: ${err?.message || err}` });
@@ -175,7 +182,9 @@ export default function MemberGroupAssignment({ member, onUpdated }) {
                 <p className="text-sm text-foreground truncate">
                   {g?.group_name || g?.group_code || "Group"}
                 </p>
-                <p className="text-xs text-muted-foreground">{p?.plan_name || "—"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {p?.plan_name || "—"}{m.chit_number ? ` · Chit #${m.chit_number}` : ""}
+                </p>
               </div>
               <button onClick={() => remove(m)} className="text-muted-foreground/60 hover:text-destructive p-1">
                 <Trash2 className="w-4 h-4" />
