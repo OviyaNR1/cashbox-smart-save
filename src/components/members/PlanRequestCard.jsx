@@ -3,7 +3,10 @@ import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { formatMoney } from "@/lib/currency";
 import { logAudit } from "@/lib/audit";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Users, Calendar, Coins, Check, Loader2, UserPlus } from "lucide-react";
+
+const TICKET_COUNT_OPTIONS = Array.from({ length: 20 }, (_, i) => i + 1);
 
 // Where a "new plan request" WhatsApp alert goes. No admin-settings UI
 // exists yet for this, so it's a plain constant — change it here, or ask
@@ -26,7 +29,6 @@ export default function PlanRequestCard({ plan, user: userProp, memberProfile: m
   const [profileChecked, setProfileChecked] = useState(!!memberProfileProp);
   const [confirming, setConfirming] = useState(false);
   const [ticketCount, setTicketCount] = useState(1);
-  const [customCount, setCustomCount] = useState("");
 
   useEffect(() => {
     const withUser = userProp ? Promise.resolve(userProp) : base44.auth.me();
@@ -53,9 +55,11 @@ export default function PlanRequestCard({ plan, user: userProp, memberProfile: m
     }).catch(() => setProfileChecked(true));
   }, [plan.id, userProp, memberProfileProp]);
 
-  // "4+" reveals a free-entry field instead of a fixed quick-pick — cap at
-  // 20 to match the DB check constraint and catch an obvious fat-finger.
-  const resolvedTicketCount = ticketCount === "custom" ? Math.min(20, Math.max(1, parseInt(customCount, 10) || 1)) : ticketCount;
+  // Single dropdown, 1–20 — matches the DB check constraint. Replaced the
+  // old "1/2/3/4+" button row (the "4+" revealed a free-entry number field)
+  // with one direct picker, consistent with the same fix applied to
+  // relationship and date of birth elsewhere in onboarding.
+  const resolvedTicketCount = ticketCount;
 
   const handleChoose = async () => {
     setSubmitting(true);
@@ -74,7 +78,7 @@ export default function PlanRequestCard({ plan, user: userProp, memberProfile: m
       import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
         sendWhatsAppMessage({
           phone: ADMIN_NOTIFY_PHONE,
-          templateName: "admin_plan_request_v3",
+          templateName: "admin_plan_request_v4",
           parameters: [memberProfile?.full_name || "A member", plan.plan_name],
         }).catch((err) => {
           console.error("Admin WhatsApp notification failed:", err);
@@ -132,40 +136,14 @@ export default function PlanRequestCard({ plan, user: userProp, memberProfile: m
             <div className="space-y-3">
               <div>
                 <p className="text-xs font-medium text-foreground mb-1.5">How many chit funds are you joining?</p>
-                <div className="flex gap-1.5">
-                  {[1, 2, 3].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setTicketCount(n)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-semibold border ${
-                        ticketCount === n ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setTicketCount("custom")}
-                    className={`flex-1 py-2 rounded-lg text-sm font-semibold border ${
-                      ticketCount === "custom" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    4+
-                  </button>
-                </div>
-                {ticketCount === "custom" && (
-                  <input
-                    type="number"
-                    min={4}
-                    max={20}
-                    value={customCount}
-                    onChange={(e) => setCustomCount(e.target.value)}
-                    placeholder="How many?"
-                    className="mt-2 w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm"
-                  />
-                )}
+                <Select value={String(ticketCount)} onValueChange={(v) => setTicketCount(Number(v))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TICKET_COUNT_OPTIONS.map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n} ticket{n > 1 ? "s" : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-3">
                 You're requesting <span className="font-semibold text-foreground">{resolvedTicketCount} ticket{resolvedTicketCount > 1 ? "s" : ""}</span> in <span className="font-semibold text-foreground">{plan.plan_name}</span> — a {plan.duration_months}-month commitment at {formatMoney(plan.monthly_contribution, currency)}/month{resolvedTicketCount > 1 ? " per ticket" : ""}. An admin will review your request and assign you to a group.

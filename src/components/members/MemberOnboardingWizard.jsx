@@ -12,6 +12,8 @@ import { getCountryPref, getCurrencyPref } from "@/lib/countryPref";
 
 const stripCc = (v) => (v || "").replace(/^\+\d{1,3}/, "");
 
+const RELATIONSHIP_OPTIONS = ["Father", "Mother", "Husband", "Wife", "Brother", "Sister", "Son", "Daughter", "Relative", "Friend", "Neighbour"];
+
 // Request-gating order: a member's full profile — identity, KYC details,
 // and guarantor — has to be complete BEFORE they can request a group, not
 // after. Requesting used to sit at step 2, ahead of guarantor details
@@ -24,6 +26,33 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
   const [step, setStep] = useState(startStep);
   const [profile, setProfile] = useState(initialProfile || null);
   const [saving, setSaving] = useState(false);
+  // Tracked separately from form.guarantor_relationship rather than derived
+  // from it — an empty string while "Other" is selected would otherwise
+  // read as "no relationship chosen yet" and silently reset the dropdown
+  // to its placeholder while the free-text field is still showing.
+  const [relOther, setRelOther] = useState(() => !!initialProfile?.guarantor_relationship && !RELATIONSHIP_OPTIONS.includes(initialProfile.guarantor_relationship));
+
+  // Day/Month/Year dropdowns instead of a native <input type="date"> —
+  // members reported real trouble navigating a calendar grid back to a
+  // birth year decades in the past (many clicks, no direct year jump).
+  // Tracked as separate local state, not derived from form.dob, so a
+  // partial pick (e.g. year chosen, day/month not yet) doesn't get lost —
+  // synced into form.dob only once all three are set.
+  const initialDobParts = initialProfile?.dob ? initialProfile.dob.split("-") : ["", "", ""];
+  const [dobYear, setDobYear] = useState(initialDobParts[0] || "");
+  const [dobMonth, setDobMonth] = useState(initialDobParts[1] || "");
+  const [dobDay, setDobDay] = useState(initialDobParts[2] || "");
+  useEffect(() => {
+    if (dobYear && dobMonth && dobDay) set("dob", `${dobYear}-${dobMonth}-${dobDay}`);
+  }, [dobYear, dobMonth, dobDay]);
+  const thisYear = new Date().getFullYear();
+  const DOB_YEARS = Array.from({ length: 85 }, (_, i) => String(thisYear - 16 - i));
+  const DOB_MONTHS = [
+    ["01", "January"], ["02", "February"], ["03", "March"], ["04", "April"],
+    ["05", "May"], ["06", "June"], ["07", "July"], ["08", "August"],
+    ["09", "September"], ["10", "October"], ["11", "November"], ["12", "December"],
+  ];
+  const DOB_DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0"));
   const { toast } = useToast();
 
   // Country is decided once, at the ?country=CA entry point (see Home.jsx) —
@@ -86,7 +115,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
       import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
         sendWhatsAppMessage({
           phone: phoneNumber,
-          templateName: "registration_welcome_v4",
+          templateName: "registration_welcome_v5",
           parameters: [created.full_name],
         }).then((res) => {
           console.log("✅ Registration welcome sent:", res);
@@ -190,7 +219,26 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Date of birth</Label>
-              <Input type="date" value={form.dob} onChange={(e) => set("dob", e.target.value)} />
+              <div className="grid grid-cols-3 gap-1.5">
+                <Select value={dobDay || undefined} onValueChange={setDobDay}>
+                  <SelectTrigger><SelectValue placeholder="Day" /></SelectTrigger>
+                  <SelectContent>
+                    {DOB_DAYS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={dobMonth || undefined} onValueChange={setDobMonth}>
+                  <SelectTrigger><SelectValue placeholder="Month" /></SelectTrigger>
+                  <SelectContent>
+                    {DOB_MONTHS.map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={dobYear || undefined} onValueChange={setDobYear}>
+                  <SelectTrigger><SelectValue placeholder="Year" /></SelectTrigger>
+                  <SelectContent>
+                    {DOB_YEARS.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <Label>Gender</Label>
@@ -270,7 +318,35 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
           </div>
           <div>
             <Label>Relationship *</Label>
-            <Input value={form.guarantor_relationship} onChange={(e) => set("guarantor_relationship", e.target.value)} placeholder="Spouse, Parent, Sibling…" />
+            <Select
+              value={relOther ? "Other" : (form.guarantor_relationship || undefined)}
+              onValueChange={(v) => {
+                if (v === "Other") {
+                  setRelOther(true);
+                  set("guarantor_relationship", "");
+                } else {
+                  setRelOther(false);
+                  set("guarantor_relationship", v);
+                }
+              }}
+            >
+              <SelectTrigger><SelectValue placeholder="Select relationship" /></SelectTrigger>
+              <SelectContent>
+                {RELATIONSHIP_OPTIONS.map((r) => (
+                  <SelectItem key={r} value={r}>{r}</SelectItem>
+                ))}
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            {relOther && (
+              <Input
+                className="mt-2"
+                value={form.guarantor_relationship}
+                onChange={(e) => set("guarantor_relationship", e.target.value)}
+                placeholder="e.g. Uncle, Colleague…"
+                autoFocus
+              />
+            )}
           </div>
           <div>
             <Label>Guarantor phone *</Label>
