@@ -28,5 +28,17 @@ export function buildUpiPaymentLink({ amount, note }) {
     cu: "INR",
   });
   if (note) params.set("tn", note);
+
+  // On Android, wrap the same params as an intent:// URL instead of a bare
+  // upi:// one. Chromium-based WebViews (including the Custom Tabs many
+  // in-app browsers, WhatsApp's included, are built on) give intent:// URLs
+  // special native handling that a plain custom scheme doesn't get, so this
+  // sometimes still launches the UPI app chooser from inside WhatsApp where
+  // upi:// alone gets silently swallowed. Not guaranteed — some in-app
+  // browsers ignore intent:// too — but it's strictly an improvement over
+  // the plain link, never worse. iOS has no equivalent, so it keeps upi://.
+  if (typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent)) {
+    return `intent://pay?${params.toString()}#Intent;scheme=upi;end`;
+  }
   return `upi://pay?${params.toString()}`;
 }
