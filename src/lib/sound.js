@@ -187,7 +187,9 @@ export function speak(text, lang) {
     if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 1.05;
+    // 1.05 reads naturally in English but comes out rushed in Tamil — the
+    // same rate number doesn't carry across languages/voices.
+    utter.rate = lang === "ta" ? 0.8 : 1.05;
     utter.pitch = 0.9;
     const voices = window.speechSynthesis.getVoices();
     const preferred = lang
