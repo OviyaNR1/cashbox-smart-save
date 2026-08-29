@@ -40,42 +40,54 @@ function verifySignature(rawBody, headers, secret) {
   });
 }
 
+// Supabase's hook caller parses the response body as JSON and rejects it
+// outright if Content-Type isn't application/json — Netlify Functions
+// default to text/plain, which silently broke every response from this
+// function (valid JSON body, wrong header) until this was added.
+function json(statusCode, obj) {
+  return {
+    statusCode,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(obj),
+  };
+}
+
 const handler = async (event) => {
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method not allowed" };
+    return json(405, { error: { http_code: 405, message: "Method not allowed" } });
   }
 
   const hookSecret = process.env.SEND_SMS_HOOK_SECRET;
   if (!hookSecret) {
     console.error("Missing SEND_SMS_HOOK_SECRET in environment");
-    return { statusCode: 500, body: JSON.stringify({ error: { http_code: 500, message: "SMS hook not configured" } }) };
+    return json(500, { error: { http_code: 500, message: "SMS hook not configured" } });
   }
 
   const rawBody = event.body || "";
   const headers = Object.fromEntries(Object.entries(event.headers || {}).map(([k, v]) => [k.toLowerCase(), v]));
 
   if (!verifySignature(rawBody, headers, hookSecret)) {
-    return { statusCode: 401, body: JSON.stringify({ error: { http_code: 401, message: "Invalid webhook signature" } }) };
+    return json(401, { error: { http_code: 401, message: "Invalid webhook signature" } });
   }
 
   let payload;
   try {
     payload = JSON.parse(rawBody);
   } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: { http_code: 400, message: "Invalid JSON body" } }) };
+    return json(400, { error: { http_code: 400, message: "Invalid JSON body" } });
   }
 
   const phone = payload?.user?.phone;
   const otp = payload?.sms?.otp;
   if (!phone || !otp) {
-    return { statusCode: 400, body: JSON.stringify({ error: { http_code: 400, message: "Missing phone or otp in payload" } }) };
+    return json(400, { error: { http_code: 400, message: "Missing phone or otp in payload" } });
   }
 
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const businessPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!accessToken || !businessPhoneNumberId) {
     console.error("Missing WhatsApp credentials in environment");
-    return { statusCode: 500, body: JSON.stringify({ error: { http_code: 500, message: "WhatsApp not configured" } }) };
+    return json(500, { error: { http_code: 500, message: "WhatsApp not configured" } });
   }
 
   try {
@@ -104,16 +116,13 @@ const handler = async (event) => {
     const result = await response.json();
     if (!response.ok) {
       console.error("WhatsApp OTP send failed:", result);
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: { http_code: 500, message: result.error?.message || "Failed to send WhatsApp OTP" } }),
-      };
+      return json(500, { error: { http_code: 500, message: result.error?.message || "Failed to send WhatsApp OTP" } });
     }
 
-    return { statusCode: 200, body: JSON.stringify({}) };
+    return json(200, {});
   } catch (err) {
     console.error("sendSmsHook error:", err);
-    return { statusCode: 500, body: JSON.stringify({ error: { http_code: 500, message: err.message } }) };
+    return json(500, { error: { http_code: 500, message: err.message } });
   }
 };
 
