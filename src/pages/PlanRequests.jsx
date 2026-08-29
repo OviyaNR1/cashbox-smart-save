@@ -132,7 +132,7 @@ export default function PlanRequests() {
         import("@/lib/sendWhatsAppMessage").then(({ sendWhatsAppMessage }) => {
           sendWhatsAppMessage({
             phone: memberMobile,
-            templateName: "group_approved_v3",
+            templateName: "group_approved_v4",
             parameters: [
               approvedProfile?.full_name || "Member",
               group.group_name || group.group_code,

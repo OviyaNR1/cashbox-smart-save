@@ -90,7 +90,7 @@ export default function MemberOnboardingForm({ open, onClose, onSaved, member })
             // to a brand-new member, so it has to be an approved template.
             await sendWhatsAppMessage({
               phone: form.mobile,
-              templateName: "member_invite_v3",
+              templateName: "member_invite_v4",
               parameters: [form.full_name, regUrl],
             });
           } catch (e) {

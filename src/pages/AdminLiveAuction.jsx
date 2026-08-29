@@ -234,7 +234,7 @@ export default function AdminLiveAuction() {
     for (const prof of memberProfiles) {
       if (prof?.mobile) {
         const isWinner = prof.id === winningBid.member_profile_id;
-        const template = isWinner ? "winner_announcement_winner_v4" : "winner_announcement_all_v4";
+        const template = isWinner ? "winner_announcement_winner_v5" : "winner_announcement_all_v5";
         const parameters = isWinner
           ? [winnerName, monthLabel, prizeAmountStr, dividendStr, nextInstallmentStr, groupLabel]
           : [winnerName, monthLabel, prizeAmountStr, dividendStr, nextInstallmentStr];

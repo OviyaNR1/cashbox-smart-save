@@ -75,7 +75,7 @@ export default function Receipt() {
       // other admin-triggered notification in the app.
       await sendWhatsAppMessage({
         phone: prof.mobile,
-        templateName: "receipt_ready_v2",
+        templateName: "receipt_ready_v3",
         parameters: [prof?.full_name || "Member", String(p.installment_number || "—"), formatMoney(p.amount, cur), receiptUrl],
       });
       toast({ title: "Sent via WhatsApp" });

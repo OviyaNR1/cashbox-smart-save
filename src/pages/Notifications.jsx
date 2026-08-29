@@ -15,27 +15,27 @@ const TEMPLATES = {
     isTemplate: true,
     params: [],
   },
-  payment_reminder_overdue_v3: {
+  payment_reminder_overdue_v4: {
     body: "Member Name, Days Overdue, Breakdown, Total Amount Due",
     isTemplate: true,
     params: ["memberName", "daysOverdue", "breakdown", "totalAmount"],
   },
-  payment_reminder_urgent_v3: {
+  payment_reminder_urgent_v4: {
     body: "Member Name, Days Late, Breakdown, Late Fee, Total Amount Due",
     isTemplate: true,
     params: ["memberName", "daysLate", "breakdown", "lateFee", "totalAmount"],
   },
-  winner_announcement_all_v4: {
+  winner_announcement_all_v5: {
     body: "Winner Name, Month, Prize Amount, Dividend, Next Installment",
     isTemplate: true,
     params: ["winnerName", "month", "prizeAmount", "dividend", "nextInstallment"],
   },
-  winner_announcement_winner_v4: {
+  winner_announcement_winner_v5: {
     body: "Winner Name, Month, Prize Amount, Dividend, Next Installment, Group Name (personalized to winner)",
     isTemplate: true,
     params: ["winnerName", "month", "prizeAmount", "dividend", "nextInstallment", "groupName"],
   },
-  auction_reminder_v3: {
+  auction_reminder_v4: {
     body: "Member Name, Auction Date, Group Name, Auction Link",
     isTemplate: true,
     params: ["memberName", "auctionDate", "groupName", "auctionLink"],
@@ -148,11 +148,11 @@ export default function Notifications() {
               <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="payment_reminder">Payment reminder (static)</SelectItem>
-                <SelectItem value="payment_reminder_overdue_v3">Payment reminder - Overdue</SelectItem>
-                <SelectItem value="payment_reminder_urgent_v3">Payment reminder - Urgent</SelectItem>
-                <SelectItem value="winner_announcement_all_v4">Winner announcement (all members)</SelectItem>
-                <SelectItem value="winner_announcement_winner_v4">Winner announcement (personalized)</SelectItem>
-                <SelectItem value="auction_reminder_v3">Auction reminder</SelectItem>
+                <SelectItem value="payment_reminder_overdue_v4">Payment reminder - Overdue</SelectItem>
+                <SelectItem value="payment_reminder_urgent_v4">Payment reminder - Urgent</SelectItem>
+                <SelectItem value="winner_announcement_all_v5">Winner announcement (all members)</SelectItem>
+                <SelectItem value="winner_announcement_winner_v5">Winner announcement (personalized)</SelectItem>
+                <SelectItem value="auction_reminder_v4">Auction reminder</SelectItem>
                 <SelectItem value="kyc_reminder">KYC reminder</SelectItem>
                 <SelectItem value="custom">Custom message</SelectItem>
               </SelectContent>
