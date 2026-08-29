@@ -1,8 +1,39 @@
 import { createClient } from '@supabase/supabase-js';
 
+const REMEMBER_KEY = 'cashbox-remember-me';
+
+function chooseBackingStorage() {
+  if (typeof window === 'undefined') return undefined;
+  // Unset (never chosen yet) behaves exactly like it always has —
+  // persisted in localStorage — so existing sessions aren't affected by
+  // this being added.
+  return window.localStorage.getItem(REMEMBER_KEY) === 'false' ? window.sessionStorage : window.localStorage;
+}
+
+// Backs a "Remember me" checkbox on the login form: checked (default)
+// keeps the session in localStorage, surviving a browser restart;
+// unchecked keeps it in sessionStorage, so closing the tab logs them out.
+// supabase-js calls through this on every read/write, so the preference is
+// checked live rather than picked once when the client is created — call
+// setRememberMe() before the login call that starts the new session.
+const rememberAwareStorage = {
+  getItem: (key) => chooseBackingStorage()?.getItem(key) ?? null,
+  setItem: (key, value) => chooseBackingStorage()?.setItem(key, value),
+  removeItem: (key) => chooseBackingStorage()?.removeItem(key),
+};
+
+export function setRememberMe(remember) {
+  try {
+    window.localStorage.setItem(REMEMBER_KEY, remember ? 'true' : 'false');
+  } catch {
+    // ignore — worst case it falls back to the default (remembered)
+  }
+}
+
 export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+  { auth: { storage: rememberAwareStorage } }
 );
 
 const TABLES = {

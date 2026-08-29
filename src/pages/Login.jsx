@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { base44, setRememberMe } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { LogIn, Lock, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import { safeReturnTo } from "@/lib/authReturnTo";
@@ -23,6 +24,11 @@ function toE164(tenDigits) {
 export default function Login() {
   const [phoneDigits, setPhoneDigits] = useState("");
   const [password, setPassword] = useState("");
+  // Checked by default — repeatedly re-typing a password is exactly the
+  // friction this whole phone+password flow was built to avoid, so staying
+  // signed in is the expected default; unchecking is for a shared/public
+  // device where you don't want the session to survive closing the tab.
+  const [rememberMe, setRememberMeChecked] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const returnTo = safeReturnTo();
@@ -36,6 +42,10 @@ export default function Login() {
     }
     setLoading(true);
     try {
+      // Must happen before login — the session gets written to storage as
+      // part of that call, and the storage adapter reads this preference
+      // live to decide where.
+      setRememberMe(rememberMe);
       await base44.auth.loginViaPhonePassword(toE164(phoneDigits), password);
       window.location.href = returnTo === "/" ? "/app" : returnTo;
     } catch (err) {
@@ -109,6 +119,10 @@ export default function Login() {
             />
           </div>
         </div>
+        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+          <Checkbox checked={rememberMe} onCheckedChange={(v) => setRememberMeChecked(!!v)} />
+          <span className="text-sm text-muted-foreground">Remember me on this device</span>
+        </label>
         <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
           {loading ? (
             <>
