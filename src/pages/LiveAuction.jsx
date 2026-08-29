@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { base44, supabase } from "@/api/base44Client";
 import { formatMoney } from "@/lib/currency";
 import { calcAuctionOutcome } from "@/lib/liveAuctionEngine";
-import { playCallBell, playFanfare, playGavel, speak, CALL_ANNOUNCEMENTS } from "@/lib/sound";
+import { playCallBell, playFanfare, playGavel, speak, CALL_TERMS, callAnnouncement } from "@/lib/sound";
 import { fireConfetti, fireWinnerConfetti } from "@/lib/confetti";
 import { useCountdown } from "@/lib/useCountdown";
 import { logAudit } from "@/lib/audit";
@@ -10,8 +10,6 @@ import { Crown, Gavel, Building2, Trophy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
-
-const CALL_LABELS = { call_1: "CALL 1", call_2: "CALL 2", final_call: "FINAL CALL" };
 
 // place_bid()'s rejection_reason is written for the audit log, not for a
 // member reading it mid-auction — translate the handful of fixed strings it
@@ -170,7 +168,9 @@ export default function LiveAuction() {
     if (prev !== null && prev !== auction.status) {
       if (["call_1", "call_2", "final_call"].includes(auction.status)) {
         playCallBell();
-        speak(CALL_ANNOUNCEMENTS[auction.status]);
+        const validBidsNow = (state.bids || []).filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
+        const calledAmount = validBidsNow[0]?.amount ?? auction.starting_amount;
+        speak(callAnnouncement(auction.status, formatMoney(calledAmount, state.plan?.currency)));
       } else if (auction.status === "closed") {
         const iWon = state.myMembership && auction.winner_member_profile_id === state.myMembership.member_profile_id;
         if (iWon) {
@@ -333,7 +333,9 @@ export default function LiveAuction() {
 
       {countdown !== null && (
         <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6 text-center animate-pulse">
-          <p className="text-sm font-semibold text-rose-400 mb-1 tracking-wide">{CALL_LABELS[auction.status]} — ANY LOWER BIDS?</p>
+          <p className="text-sm font-semibold text-rose-400 mb-1 tracking-wide">
+            {formatMoney(lowest ? lowest.amount : auction.starting_amount, plan.currency)} — {CALL_TERMS[auction.status]?.toUpperCase()}
+          </p>
           <p className="text-5xl font-bold text-foreground tabular-nums">{countdown}</p>
         </div>
       )}

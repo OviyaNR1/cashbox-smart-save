@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { base44, supabase } from "@/api/base44Client";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import {
 import { formatMoney } from "@/lib/currency";
 import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
-import { playCallBell, playGavel, speak, CALL_ANNOUNCEMENTS } from "@/lib/sound";
+import { playCallBell, playGavel, speak, CALL_TERMS, callAnnouncement } from "@/lib/sound";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown } from "@/lib/useCountdown";
@@ -116,6 +116,44 @@ export default function AdminLiveAuction() {
   const countdown = useCountdown(auction?.call_stage_started_at, auction?.status);
 
   const startingAmount = plan ? getStartingAmount(plan) : 0;
+  // What's actually being "called" right now — the current lowest bid, or
+  // the starting ceiling if calling begins before anyone has bid.
+  const calledAmount = validBids[0]?.amount ?? startingAmount;
+
+  // Auto-advance the call sequence on its own timer instead of requiring a
+  // manual button click for every stage — call 1 -> call 2 -> final call,
+  // announcing "<amount> — Oru/Rendu/Moonu Tharam" as each begins. Stops at
+  // final call: closing the auction stays a manual, confirmed action (see
+  // closeAuction) since real bids can still be happening by phone/in person
+  // alongside the app.
+  const autoAdvancedKeyRef = useRef(null);
+  useEffect(() => {
+    if (countdown === null || countdown > 0 || !auction) return;
+    const stageKey = `${auction.id}-${auction.status}-${auction.call_stage_started_at}`;
+    if (autoAdvancedKeyRef.current === stageKey) return;
+    if (auction.status === "call_1") {
+      autoAdvancedKeyRef.current = stageKey;
+      advanceCall("call_2");
+    } else if (auction.status === "call_2") {
+      autoAdvancedKeyRef.current = stageKey;
+      advanceCall("final_call");
+    }
+  }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at]);
+
+  // A new, lower bid mid-call means the price just being called is stale —
+  // restart the count at "Oru Tharam" for the new lowest bid rather than
+  // continuing call 2/final call for a price nobody's actually offering
+  // anymore.
+  const leadingBidIdRef = useRef(null);
+  useEffect(() => {
+    if (!auction) { leadingBidIdRef.current = null; return; }
+    const leadingId = validBids[0]?.id || null;
+    const inCallStage = ["call_1", "call_2", "final_call"].includes(auction.status);
+    if (inCallStage && leadingBidIdRef.current && leadingId && leadingId !== leadingBidIdRef.current) {
+      advanceCall("call_1");
+    }
+    leadingBidIdRef.current = leadingId;
+  }, [validBids[0]?.id, auction?.status]);
 
   const recordCompanyMonth = async () => {
     setBusy(true);
@@ -155,9 +193,9 @@ export default function AdminLiveAuction() {
   const advanceCall = async (nextStatus) => {
     setBusy(true);
     await base44.entities.Auction.update(auction.id, { status: nextStatus, call_stage_started_at: new Date().toISOString() });
-    logAudit({ module: "Live Auction", action: nextStatus, record_id: auction.id, details: `${CALL_LABELS[nextStatus]} started for group ${group.group_code}` });
+    logAudit({ module: "Live Auction", action: nextStatus, record_id: auction.id, details: `${CALL_LABELS[nextStatus]} (${CALL_TERMS[nextStatus]}) started for group ${group.group_code} at ${formatMoney(calledAmount, plan.currency)}` });
     playCallBell();
-    speak(CALL_ANNOUNCEMENTS[nextStatus]);
+    speak(callAnnouncement(nextStatus, formatMoney(calledAmount, plan.currency)));
     setBusy(false);
     loadAuction();
   };
@@ -344,7 +382,9 @@ export default function AdminLiveAuction() {
 
           {countdown !== null && (
             <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6 text-center animate-pulse">
-              <p className="text-sm font-semibold text-rose-400 mb-1 tracking-wide">{CALL_LABELS[auction.status]?.toUpperCase()} — ANY LOWER BIDS?</p>
+              <p className="text-sm font-semibold text-rose-400 mb-1 tracking-wide">
+                {formatMoney(calledAmount, plan.currency)} — {CALL_TERMS[auction.status]?.toUpperCase()}
+              </p>
               <p className="text-5xl font-bold text-foreground tabular-nums">{countdown}</p>
             </div>
           )}

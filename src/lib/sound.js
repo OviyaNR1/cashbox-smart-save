@@ -155,11 +155,22 @@ export function playUrgentTick() {
   }
 }
 
-export const CALL_ANNOUNCEMENTS = {
-  call_1: "Call one. Any lower bids?",
-  call_2: "Call two. Last chance for a lower bid.",
-  final_call: "Final call. Going once. Going twice.",
-};
+// The traditional South Indian chit-auction call count — "oru tharam" (once),
+// "rendu tharam" (twice), "moonu tharam" (thrice) — called out against the
+// current lowest bid before it's sold, instead of a generic "any lower
+// bids?". Shared between the admin's calling screen and members' live view
+// so both sides announce and display the identical wording.
+export const CALL_TERMS = { call_1: "Oru Tharam", call_2: "Rendu Tharam", final_call: "Moonu Tharam" };
+
+// Builds the spoken call-out for a stage: the actual amount, then the count
+// term — e.g. "₹90,000 — Oru Tharam". amountLabel is a pre-formatted
+// currency string (formatMoney's output); pass none for a plan/currency-less
+// fallback that's just the bare term.
+export function callAnnouncement(status, amountLabel) {
+  const term = CALL_TERMS[status];
+  if (!term) return "";
+  return amountLabel ? `${amountLabel} — ${term}` : term;
+}
 
 // Spoken call-outs via the browser's built-in text-to-speech — no external
 // service or API key required, and it works offline.
