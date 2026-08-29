@@ -124,6 +124,27 @@ export const base44 = {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
     },
+    // Phone/WhatsApp signup: creates the account with a password up front,
+    // but leaves it unconfirmed. Supabase sends a one-time confirmation
+    // code via its Send SMS Hook (which we've pointed at WhatsApp delivery
+    // instead of a paid SMS provider) — call verifyPhoneSignup() with that
+    // code to actually confirm the account and get a session. No session
+    // exists yet after this call returns.
+    async signUpWithPhone(phone, password) {
+      const { error } = await supabase.auth.signUp({ phone, password });
+      if (error) throw error;
+    },
+    // One-time, at signup only — confirms the phone number and returns a
+    // session. Every login after this uses loginViaPhonePassword() instead,
+    // no OTP involved.
+    async verifyPhoneSignup(phone, token) {
+      const { error } = await supabase.auth.verifyOtp({ phone, token, type: "sms" });
+      if (error) throw error;
+    },
+    async loginViaPhonePassword(phone, password) {
+      const { error } = await supabase.auth.signInWithPassword({ phone, password });
+      if (error) throw error;
+    },
     async loginWithProvider(provider, returnTo) {
       const redirectTo = new URL(returnTo || '/', window.location.origin).toString();
       const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
