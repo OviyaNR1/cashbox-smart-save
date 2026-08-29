@@ -12,7 +12,13 @@ import { getCountryPref, getCurrencyPref } from "@/lib/countryPref";
 
 const stripCc = (v) => (v || "").replace(/^\+\d{1,3}/, "");
 
-const STEPS = ["Create account", "Join your Chit", "Verification"];
+// Request-gating order: a member's full profile — identity, KYC details,
+// and guarantor — has to be complete BEFORE they can request a group, not
+// after. Requesting used to sit at step 2, ahead of guarantor details
+// entirely, so someone could request a slot with no guarantor on file at
+// all. Now "Join your Chit" is the last step, reached only once everything
+// else is saved.
+const STEPS = ["Create account", "Your details", "Guarantor", "Join your Chit"];
 
 export default function MemberOnboardingWizard({ user, profile: initialProfile, startStep = 1, onDone }) {
   const [step, setStep] = useState(startStep);
@@ -96,10 +102,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
     setSaving(false);
   };
 
-  const submitStep3 = async () => {
-    if (!form.guarantor_name || !form.guarantor_mobile || !form.guarantor_relationship) {
-      return toast({ title: "Guarantor name, phone, and relationship are required", variant: "destructive" });
-    }
+  const submitStep2Details = async () => {
     setSaving(true);
     try {
       await base44.entities.MemberProfile.update(profile.id, {
@@ -113,6 +116,21 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
         postal_code: isCanada ? form.postal_code : "",
         aadhaar_number: isCanada ? "" : form.aadhaar_number,
         pan_number: isCanada ? "" : form.pan_number,
+      });
+      setStep(3);
+    } catch (e) {
+      toast({ title: "Could not save your details", description: e.message, variant: "destructive" });
+    }
+    setSaving(false);
+  };
+
+  const submitStep3Guarantor = async () => {
+    if (!form.guarantor_name || !form.guarantor_mobile || !form.guarantor_relationship) {
+      return toast({ title: "Guarantor name, phone, and relationship are required", variant: "destructive" });
+    }
+    setSaving(true);
+    try {
+      await base44.entities.MemberProfile.update(profile.id, {
         guarantor_name: form.guarantor_name,
         guarantor_mobile: `${CC}${stripCc(form.guarantor_mobile)}`,
         guarantor_relationship: form.guarantor_relationship,
@@ -120,10 +138,9 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
         kyc_stage: "document_upload",
       });
       logAudit({ module: "Members", action: "self-verify", record_id: profile.id, details: `${form.full_name || profile.full_name} completed self-service verification` });
-      toast({ title: "Profile complete!", description: "Welcome to CashBox." });
-      onDone();
+      setStep(4);
     } catch (e) {
-      toast({ title: "Could not save your details", description: e.message, variant: "destructive" });
+      toast({ title: "Could not save your guarantor details", description: e.message, variant: "destructive" });
     }
     setSaving(false);
   };
@@ -135,9 +152,9 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
           <UserPlus className="w-7 h-7 text-primary" />
         </div>
         <h1 className="text-2xl font-semibold text-foreground">
-          {step === 1 ? "Create your account" : step === 2 ? "Join your Chit" : "Complete your verification"}
+          {step === 1 ? "Create your account" : step === 2 ? "Your details" : step === 3 ? "Guarantor details" : "Join your Chit"}
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">Step {step} of 3 — {STEPS[step - 1]}</p>
+        <p className="text-sm text-muted-foreground mt-1">Step {step} of {STEPS.length} — {STEPS[step - 1]}</p>
         <div className="flex gap-1.5 mt-4 max-w-[240px] mx-auto">
           {STEPS.map((_, i) => (
             <div key={i} className={`h-1.5 flex-1 rounded-full ${i < step ? "bg-primary" : "bg-muted"}`} />
@@ -155,7 +172,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
             <Label>WhatsApp number *</Label>
             <div className="flex gap-2">
               <span className="shrink-0 w-[72px] h-10 rounded-md border border-border bg-muted grid place-items-center text-sm text-muted-foreground">{CC} {flag}</span>
-              <Input value={form.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder={isCanada ? "416 555 0123" : "98765 43210"} className="flex-1" />
+              <Input value={form.mobile} onChange={(e) => set("mobile", e.target.value)} placeholder={isCanada ? "e.g. 416 555 0123" : "e.g. 98765 43210"} className="flex-1" />
             </div>
           </div>
           <div>
@@ -169,10 +186,6 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
       )}
 
       {step === 2 && (
-        <Step2 user={user} profile={profile} onNext={() => setStep(3)} />
-      )}
-
-      {step === 3 && (
         <div className="bg-card rounded-2xl border border-border p-4 sm:p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -205,12 +218,12 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
             {isCanada ? (
               <div>
                 <Label>Province</Label>
-                <Input value={form.province} onChange={(e) => set("province", e.target.value)} placeholder="Ontario" />
+                <Input value={form.province} onChange={(e) => set("province", e.target.value)} placeholder="e.g. Ontario" />
               </div>
             ) : (
               <div>
                 <Label>State</Label>
-                <Input value={form.state} onChange={(e) => set("state", e.target.value)} placeholder="Kerala" />
+                <Input value={form.state} onChange={(e) => set("state", e.target.value)} placeholder="e.g. Kerala" />
               </div>
             )}
           </div>
@@ -218,12 +231,12 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
           {isCanada ? (
             <div>
               <Label>Postal code</Label>
-              <Input value={form.postal_code} onChange={(e) => set("postal_code", e.target.value)} placeholder="M5V 2T6" />
+              <Input value={form.postal_code} onChange={(e) => set("postal_code", e.target.value)} placeholder="e.g. M5V 2T6" />
             </div>
           ) : (
             <div>
               <Label>PIN code</Label>
-              <Input value={form.pin_code} onChange={(e) => set("pin_code", e.target.value)} placeholder="686001" />
+              <Input value={form.pin_code} onChange={(e) => set("pin_code", e.target.value)} placeholder="e.g. 686001" />
             </div>
           )}
 
@@ -233,53 +246,60 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>Aadhaar number</Label>
-                  <Input value={form.aadhaar_number} onChange={(e) => set("aadhaar_number", e.target.value)} placeholder="1234 5678 9012" />
+                  <Input value={form.aadhaar_number} onChange={(e) => set("aadhaar_number", e.target.value)} placeholder="e.g. 1234 5678 9012" />
                 </div>
                 <div>
                   <Label>PAN number</Label>
-                  <Input value={form.pan_number} onChange={(e) => set("pan_number", e.target.value)} placeholder="ABCDE1234F" />
+                  <Input value={form.pan_number} onChange={(e) => set("pan_number", e.target.value)} placeholder="e.g. ABCDE1234F" />
                 </div>
               </div>
             </div>
           )}
 
-          <div className="pt-2 border-t border-border">
-            <p className="text-sm font-medium text-foreground mb-3">Guarantor details *</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label>Guarantor name</Label>
-                <Input value={form.guarantor_name} onChange={(e) => set("guarantor_name", e.target.value)} placeholder="Guarantor full name" />
-              </div>
-              <div>
-                <Label>Relationship</Label>
-                <Input value={form.guarantor_relationship} onChange={(e) => set("guarantor_relationship", e.target.value)} placeholder="Spouse, Parent, Sibling…" />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-              <div>
-                <Label>Guarantor phone *</Label>
-                <div className="flex gap-2">
-                  <span className="shrink-0 w-[72px] h-10 rounded-md border border-border bg-muted grid place-items-center text-sm text-muted-foreground">{CC} {flag}</span>
-                  <Input value={form.guarantor_mobile} onChange={(e) => set("guarantor_mobile", e.target.value)} placeholder={isCanada ? "416 555 0123" : "98765 43210"} className="flex-1" />
-                </div>
-              </div>
-              <div>
-                <Label>Guarantor email</Label>
-                <Input type="email" value={form.guarantor_email} onChange={(e) => set("guarantor_email", e.target.value)} placeholder="guarantor@email.com" />
-              </div>
-            </div>
-          </div>
-
-          <Button onClick={submitStep3} disabled={saving} className="w-full rounded-full bg-primary hover:bg-primary/90">
-            {saving ? "Saving…" : "Complete"}
+          <Button onClick={submitStep2Details} disabled={saving} className="w-full rounded-full bg-primary hover:bg-primary/90">
+            {saving ? "Saving…" : "Continue"}
           </Button>
         </div>
+      )}
+
+      {step === 3 && (
+        <div className="bg-card rounded-2xl border border-border p-4 sm:p-6 space-y-4">
+          <div>
+            <Label>Guarantor name *</Label>
+            <Input value={form.guarantor_name} onChange={(e) => set("guarantor_name", e.target.value)} placeholder="Guarantor full name" autoFocus />
+          </div>
+          <div>
+            <Label>Relationship *</Label>
+            <Input value={form.guarantor_relationship} onChange={(e) => set("guarantor_relationship", e.target.value)} placeholder="Spouse, Parent, Sibling…" />
+          </div>
+          <div>
+            <Label>Guarantor phone *</Label>
+            <div className="flex gap-2">
+              <span className="shrink-0 w-[72px] h-10 rounded-md border border-border bg-muted grid place-items-center text-sm text-muted-foreground">{CC} {flag}</span>
+              <Input value={form.guarantor_mobile} onChange={(e) => set("guarantor_mobile", e.target.value)} placeholder={isCanada ? "e.g. 416 555 0123" : "e.g. 98765 43210"} className="flex-1" />
+            </div>
+          </div>
+          <div>
+            <Label>Guarantor email</Label>
+            <Input type="email" value={form.guarantor_email} onChange={(e) => set("guarantor_email", e.target.value)} placeholder="e.g. guarantor@email.com" />
+          </div>
+          <Button onClick={submitStep3Guarantor} disabled={saving} className="w-full rounded-full bg-primary hover:bg-primary/90">
+            {saving ? "Saving…" : "Continue"}
+          </Button>
+        </div>
+      )}
+
+      {step === 4 && (
+        <JoinChitStep user={user} profile={profile} onDone={onDone} />
       )}
     </div>
   );
 }
 
-function Step2({ user, profile, onNext }) {
+// Last step, by design — a member's profile (identity, KYC details,
+// guarantor) is fully saved by the time they reach this, so requesting a
+// group always happens with complete info on file, never ahead of it.
+function JoinChitStep({ user, profile, onDone }) {
   const [plans, setPlans] = useState(null);
   // Same currency-scoping BrowsePlans.jsx already does — a Canada member
   // shouldn't be offered INR plans mixed in here.
@@ -309,11 +329,11 @@ function Step2({ user, profile, onNext }) {
         </div>
       )}
       <div className="flex items-center justify-between pt-1">
-        <button onClick={onNext} className="text-sm text-muted-foreground hover:text-foreground">
+        <button onClick={onDone} className="text-sm text-muted-foreground hover:text-foreground">
           Browse plans later, skip for now →
         </button>
-        <Button onClick={onNext} className="rounded-full bg-primary hover:bg-primary/90">
-          <Check className="w-4 h-4 mr-1" /> Continue
+        <Button onClick={onDone} className="rounded-full bg-primary hover:bg-primary/90">
+          <Check className="w-4 h-4 mr-1" /> Done
         </Button>
       </div>
     </div>

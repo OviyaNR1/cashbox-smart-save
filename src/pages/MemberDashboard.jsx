@@ -58,7 +58,10 @@ export default function MemberDashboard() {
     return <MemberOnboardingWizard user={me} startStep={1} onDone={onWizardDone} />;
   }
   if (profile.kyc_stage === "registration") {
-    return <MemberOnboardingWizard user={me} profile={profile} startStep={3} onDone={onWizardDone} />;
+    // "registration" means step 1 (bare account) is done but step
+    // 2/3 (details + guarantor) never got confirmed — resume there, not
+    // at the old single "verification" step this used to be.
+    return <MemberOnboardingWizard user={me} profile={profile} startStep={2} onDone={onWizardDone} />;
   }
 
   const firstName = (profile.full_name || me.full_name || "there").split(" ")[0];
