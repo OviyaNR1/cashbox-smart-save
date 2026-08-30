@@ -155,7 +155,11 @@ export default function ChitGroups() {
               ) : filteredGroups.length === 0 ? (
                 <tr><td colSpan={9} className="px-5 py-8 text-center text-muted-foreground">No groups match this filter.</td></tr>
               ) : filteredGroups.map((g) => (
-                <tr key={g.id}>
+                <tr
+                  key={g.id}
+                  onClick={() => setManageGroup(g)}
+                  className="cursor-pointer hover:bg-muted/40"
+                >
                   <td className="px-5 py-3 font-medium text-foreground">{g.group_code}</td>
                   <td className="px-5 py-3 text-muted-foreground">{g.group_name || "—"}</td>
                   <td className="px-5 py-3 text-muted-foreground">{planName(g.plan_id)}</td>
@@ -168,7 +172,7 @@ export default function ChitGroups() {
                   <td className="px-5 py-3 text-right">
                     <span className={`text-xs px-2.5 py-1 rounded-full ${statusTone(g.status)}`}>{g.status}</span>
                   </td>
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-5 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => setManageGroup(g)}
