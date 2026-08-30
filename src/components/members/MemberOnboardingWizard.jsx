@@ -11,6 +11,14 @@ import { UserPlus, Check } from "lucide-react";
 import { getCountryPref, getCurrencyPref } from "@/lib/countryPref";
 
 const stripCc = (v) => (v || "").replace(/^\+\d{1,3}/, "");
+// user.phone comes straight from Supabase auth (via profiles.phone) in its
+// own stored form: digits only, no "+", always "91"-prefixed — phone
+// signup is India-only regardless of which country's KYC fields this
+// wizard is showing (see toE164 in Login.jsx). stripCc only strips a
+// literal "+" prefix, so applied to this value alone it left the "91" in
+// place and the country code got prepended on top of it, producing a
+// doubled "+9191...".
+const stripAuthPhonePrefix = (v) => (v || "").replace(/^91/, "");
 
 const RELATIONSHIP_OPTIONS = ["Father", "Mother", "Husband", "Wife", "Brother", "Sister", "Son", "Daughter", "Relative", "Friend", "Neighbour"];
 
@@ -67,7 +75,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
     // Already known and WhatsApp-verified by the time anyone reaches this
     // wizard — signup itself confirms the number via a code sent here — so
     // this is never asked for again, just carried forward from the account.
-    mobile: stripCc(initialProfile?.mobile || user?.phone) || "",
+    mobile: stripCc(initialProfile?.mobile) || stripAuthPhonePrefix(user?.phone) || "",
     email: initialProfile?.email || user?.email || "",
     dob: initialProfile?.dob || "",
     gender: initialProfile?.gender || "female",
