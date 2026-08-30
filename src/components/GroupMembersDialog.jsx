@@ -108,7 +108,7 @@ export default function GroupMembersDialog({ group, plan, onClose }) {
 
   return (
     <Dialog open={!!group} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span>{group.group_code} — Members</span>
@@ -124,7 +124,7 @@ export default function GroupMembersDialog({ group, plan, onClose }) {
           ) : memberships.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">No members assigned yet.</p>
           ) : (
-            <div className="space-y-2 max-h-72 overflow-y-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-96 overflow-y-auto">
               {memberships.map((m) => {
                 const prof = profileOf(m.member_profile_id);
                 return (
