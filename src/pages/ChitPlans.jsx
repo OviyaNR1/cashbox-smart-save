@@ -22,7 +22,7 @@ import { logAudit } from "@/lib/audit";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
 import { useToast } from "@/components/ui/use-toast";
 
-const empty = { plan_name: "", model: "chit_fund", company_label: "", chit_amount: 100000, member_count: 20, duration_months: 20, monthly_contribution: 5000, fixed_dividend: 0, commission_percent: 5, late_interest_percent: 2, auction_min_decrement: 25, currency: "INR", status: "active" };
+const empty = { plan_name: "", model: "chit_fund", company_label: "", chit_amount: 100000, member_count: 20, duration_months: 20, monthly_contribution: 5000, fixed_dividend: 0, commission_percent: 5, late_interest_percent: 2, auction_min_decrement: 25, auction_min_bid: 0, currency: "INR", status: "active" };
 
 function getMaxDividend(plan) {
   const result = generateAuctionPlan(plan, null);
@@ -111,6 +111,7 @@ export default function ChitPlans() {
           commission_percent: +form.commission_percent,
           late_interest_percent: 0,
           auction_min_decrement: +form.auction_min_decrement,
+          auction_min_bid: +form.auction_min_bid || 0,
         }
       : { ...form, chit_amount: +form.chit_amount, member_count: memberCount, duration_months: +form.duration_months, monthly_contribution: +form.monthly_contribution, fixed_dividend: 0, commission_percent: +form.commission_percent, late_interest_percent: +form.late_interest_percent };
     if (editing === "new") {
@@ -172,6 +173,9 @@ export default function ChitPlans() {
                 <>
                   <div><p className="text-xs text-muted-foreground">Model</p><p className="text-foreground">Live Auction</p></div>
                   <div><p className="text-xs text-muted-foreground">Min decrement</p><p className="text-foreground tabular-nums">{formatMoney(p.auction_min_decrement, p.currency)}</p></div>
+                  {p.auction_min_bid > 0 && (
+                    <div><p className="text-xs text-muted-foreground">Minimum bid</p><p className="text-foreground tabular-nums">{formatMoney(p.auction_min_bid, p.currency)}</p></div>
+                  )}
                 </>
               ) : (
                 <>
@@ -235,8 +239,12 @@ export default function ChitPlans() {
                 <div><Label>Members</Label><Input type="number" value={form.member_count} onChange={(e) => set("member_count", e.target.value)} /></div>
                 <div><Label>Commission % (fixed)</Label><Input type="number" value={form.commission_percent} onChange={(e) => set("commission_percent", e.target.value)} /></div>
                 <div><Label>Minimum decrement</Label><Input type="number" value={form.auction_min_decrement} onChange={(e) => set("auction_min_decrement", e.target.value)} /></div>
+                <div>
+                  <Label>Minimum bid (floor)</Label>
+                  <Input type="number" placeholder="0 = no floor" value={form.auction_min_bid} onChange={(e) => set("auction_min_bid", e.target.value)} />
+                </div>
                 <p className="col-span-2 text-xs text-muted-foreground -mt-2">
-                  Duration is set automatically to {form.member_count || 0} months (one auction per month, month 1 is the company's allocation). Monthly contribution is derived as Chit amount ÷ Members. Plan name is generated automatically.
+                  Duration is set automatically to {form.member_count || 0} months (one auction per month, month 1 is the company's allocation). Monthly contribution is derived as Chit amount ÷ Members. Plan name is generated automatically. Bids can never go below the minimum bid floor, no matter how many members are still competing.
                 </p>
               </>
             ) : (

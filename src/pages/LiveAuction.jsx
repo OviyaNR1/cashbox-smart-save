@@ -15,7 +15,7 @@ import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
 // member reading it mid-auction — translate the handful of fixed strings it
 // can return into plain language with an actual next step, rather than
 // showing the raw database wording.
-function friendlyBidRejection(reason, auction) {
+function friendlyBidRejection(reason, auction, plan) {
   switch (reason) {
     case "You are not a member of this group":
       return "You're not part of this group, so you can't bid here.";
@@ -35,6 +35,10 @@ function friendlyBidRejection(reason, auction) {
       return auction?.min_decrement
         ? `Your bid needs to be at least ${auction.min_decrement} lower than the current amount. Try a smaller number.`
         : "Your bid isn't low enough compared to the current amount. Try a smaller number.";
+    case "Bid below minimum allowed":
+      return plan?.auction_min_bid
+        ? `Bids can't go below ${formatMoney(plan.auction_min_bid, plan.currency)} for this plan. Try a higher number.`
+        : "That bid is below the minimum allowed for this plan. Try a higher number.";
     default:
       return reason || "Your bid couldn't be placed. Please try again.";
   }
@@ -212,14 +216,14 @@ export default function LiveAuction() {
     });
     setSubmitting(false);
     if (error) {
-      setFeedback({ ok: false, message: friendlyBidRejection(error.message, state.auction) });
+      setFeedback({ ok: false, message: friendlyBidRejection(error.message, state.auction, state.plan) });
       return;
     }
     if (data?.status === "valid") {
       setFeedback({ ok: true, message: "You're currently the lowest bid — not final until the admin closes the auction." });
       setBidAmount("");
     } else {
-      setFeedback({ ok: false, message: friendlyBidRejection(data?.rejection_reason, state.auction) });
+      setFeedback({ ok: false, message: friendlyBidRejection(data?.rejection_reason, state.auction, state.plan) });
     }
     load();
   };
@@ -386,6 +390,11 @@ export default function LiveAuction() {
               {submitting ? "Submitting…" : confirmingBid ? `Confirm ${formatMoney(Number(bidAmount), plan.currency)}?` : "Submit Bid"}
             </Button>
           </div>
+          {plan.auction_min_bid > 0 && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Bids can't go below {formatMoney(plan.auction_min_bid, plan.currency)} for this plan.
+            </p>
+          )}
           {confirmingBid && (
             <p className="text-xs text-amber-400 mt-2">
               Tap Confirm to lock in this bid, or change the amount above to cancel.
