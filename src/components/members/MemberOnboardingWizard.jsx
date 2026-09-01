@@ -8,8 +8,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { logAudit } from "@/lib/audit";
 import PlanRequestCard from "@/components/members/PlanRequestCard";
 import { UserPlus, Check } from "lucide-react";
-import { getCountryPref, getCurrencyPref } from "@/lib/countryPref";
-
 const stripCc = (v) => (v || "").replace(/^\+\d{1,3}/, "");
 // user.phone comes straight from Supabase auth (via profiles.phone) in its
 // own stored form: digits only, no "+" — e.g. "918344551836" (91 + 10) for
@@ -26,6 +24,14 @@ const stripAuthPhonePrefix = (v) => {
   if (v.length === 11) return v.slice(1); // "1" + 10 digits
   return v;
 };
+
+// Which country/currency this member is in has to come from the phone
+// number they actually signed up with, not a browser-local "last country
+// visited" flag (cashbox_country in localStorage, set once at /in or /ca
+// and never revisited) — that flag is sticky per-device and has nothing to
+// do with which number a given signup used, so it can silently show a
+// +91 signup Canada's CAD plans forever once it's been set wrong once.
+const isCanadaPhone = (authPhone) => (authPhone || "").length === 11;
 
 const RELATIONSHIP_OPTIONS = ["Father", "Mother", "Husband", "Wife", "Brother", "Sister", "Son", "Daughter", "Relative", "Friend", "Neighbour"];
 
@@ -70,10 +76,9 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
   const DOB_DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0"));
   const { toast } = useToast();
 
-  // Country is decided once, at the ?country=CA entry point (see Home.jsx) —
-  // read here rather than hardcoded so this whole wizard follows whichever
-  // country the visitor actually picked.
-  const isCanada = getCountryPref() === "CA";
+  // Derived from the phone number this account actually signed up with —
+  // see isCanadaPhone above for why this replaced a browser-local flag.
+  const isCanada = isCanadaPhone(user?.phone);
   const CC = isCanada ? "+1" : "+91";
   const flag = isCanada ? "🇨🇦" : "🇮🇳";
 
@@ -408,9 +413,10 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
 // group always happens with complete info on file, never ahead of it.
 function JoinChitStep({ user, profile, onDone }) {
   const [plans, setPlans] = useState(null);
-  // Same currency-scoping BrowsePlans.jsx already does — a Canada member
-  // shouldn't be offered INR plans mixed in here.
-  const currencyFilter = getCurrencyPref();
+  // Derived from the actual signup phone, not the sticky browser-local
+  // country flag — see isCanadaPhone above. A Canada member shouldn't be
+  // offered INR plans mixed in here, and vice versa.
+  const currencyFilter = isCanadaPhone(user?.phone) ? "CAD" : "INR";
 
   useEffect(() => {
     base44.entities.ChitPlan.filter({ status: "active" }).then(setPlans).catch(() => setPlans([]));
