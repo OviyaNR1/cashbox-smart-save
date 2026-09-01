@@ -188,6 +188,26 @@ export const base44 = {
       if (error) throw error;
       return !!data;
     },
+    // Distinguishes "no account" from "account exists but was never
+    // confirmed" (signup started, OTP never entered) — the combined
+    // phone-entry screen needs the difference: an unconfirmed account has
+    // to resume OTP verification, since it has no working password yet and
+    // never will until it's confirmed. Returns 'none' | 'unconfirmed' | 'confirmed'.
+    async phoneAccountStatus(phone) {
+      const { data, error } = await supabase.rpc('phone_account_status', {
+        check_phone: phone.replace(/^\+/, ''),
+      });
+      if (error) throw error;
+      return data;
+    },
+    // Resends the signup confirmation code for an existing-but-unconfirmed
+    // account, without touching the password already set on it — the
+    // purpose-built counterpart to signUpWithPhone for resuming a signup
+    // that was abandoned before the OTP step.
+    async resendPhoneConfirmation(phone) {
+      const { error } = await supabase.auth.resend({ type: "sms", phone });
+      if (error) throw error;
+    },
     // Phone accounts have no email to send a reset link to, so "forgot
     // password" reuses the same OTP machinery as signup: an OTP proves you
     // control the number, and a verified OTP is itself a real login — no

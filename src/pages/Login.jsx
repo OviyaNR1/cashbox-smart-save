@@ -56,8 +56,19 @@ export default function Login() {
     }
     setChecking(true);
     try {
-      const exists = await base44.auth.phoneExists(phone);
-      setStep(exists ? "password" : "create-password");
+      const status = await base44.auth.phoneAccountStatus(phone);
+      if (status === "confirmed") {
+        setStep("password");
+      } else if (status === "unconfirmed") {
+        // A signup that was started but never finished (the code never got
+        // entered) — resume it instead of sending them to a password field
+        // that would only ever fail with "Phone not confirmed". No new
+        // password needed; the one from the original signup is still set.
+        await base44.auth.resendPhoneConfirmation(phone);
+        setStep("verify");
+      } else {
+        setStep("create-password");
+      }
     } catch (err) {
       setError(err.message || "Couldn't check that number — try again");
     }
@@ -167,7 +178,7 @@ export default function Login() {
           </Button>
           <button
             type="button"
-            onClick={() => { setStep("create-password"); setCode(""); setError(""); }}
+            onClick={() => { setStep("phone"); setCode(""); setError(""); }}
             className="w-full text-sm text-muted-foreground hover:text-foreground"
           >
             Wrong number? Go back
