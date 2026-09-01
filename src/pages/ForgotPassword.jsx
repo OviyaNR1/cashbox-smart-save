@@ -4,11 +4,17 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Phone, Lock, ShieldCheck, ArrowLeft, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 
-function toE164(tenDigits) {
-  return `+91${tenDigits.replace(/\D/g, "")}`;
+const COUNTRY_CODES = [
+  { value: "+91", label: "+91 🇮🇳" },
+  { value: "+1", label: "+1 🇨🇦" },
+];
+
+function toE164(countryCode, tenDigits) {
+  return `${countryCode}${tenDigits.replace(/\D/g, "")}`;
 }
 
 // Phone accounts have no email to send a reset link to, so this reuses the
@@ -16,6 +22,7 @@ function toE164(tenDigits) {
 // then set a new password directly — no emailed link, no second page.
 export default function ForgotPassword() {
   const [step, setStep] = useState("phone"); // phone -> code -> new-password -> done
+  const [countryCode, setCountryCode] = useState("+91");
   const [phoneDigits, setPhoneDigits] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
@@ -24,7 +31,7 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
 
   const phoneValid = /^\d{10}$/.test(phoneDigits);
-  const phone = toE164(phoneDigits);
+  const phone = toE164(countryCode, phoneDigits);
 
   const submitPhone = async (e) => {
     e.preventDefault();
@@ -213,10 +220,15 @@ export default function ForgotPassword() {
       <form onSubmit={submitPhone} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="phone">WhatsApp number</Label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
-              +91
-            </span>
+          <div className="flex gap-2">
+            <Select value={countryCode} onValueChange={setCountryCode}>
+              <SelectTrigger className="w-[92px] h-12"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {COUNTRY_CODES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Input
               id="phone"
               type="tel"
@@ -226,7 +238,7 @@ export default function ForgotPassword() {
               placeholder="e.g. 98765 43210"
               value={phoneDigits}
               onChange={(e) => setPhoneDigits(e.target.value.replace(/\D/g, "").slice(0, 10))}
-              className="pl-12 h-12"
+              className="flex-1 h-12"
               required
             />
           </div>

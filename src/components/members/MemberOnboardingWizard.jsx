@@ -12,13 +12,20 @@ import { getCountryPref, getCurrencyPref } from "@/lib/countryPref";
 
 const stripCc = (v) => (v || "").replace(/^\+\d{1,3}/, "");
 // user.phone comes straight from Supabase auth (via profiles.phone) in its
-// own stored form: digits only, no "+", always "91"-prefixed — phone
-// signup is India-only regardless of which country's KYC fields this
-// wizard is showing (see toE164 in Login.jsx). stripCc only strips a
-// literal "+" prefix, so applied to this value alone it left the "91" in
-// place and the country code got prepended on top of it, producing a
-// doubled "+9191...".
-const stripAuthPhonePrefix = (v) => (v || "").replace(/^91/, "");
+// own stored form: digits only, no "+" — e.g. "918344551836" (91 + 10) for
+// an India signup, "14165551234" (1 + 10) for a Canada one (see
+// COUNTRY_CODES in Login.jsx). stripCc only strips a literal "+" prefix, so
+// applied to this value alone it left the country code digits in place and
+// the wizard's own CC got prepended on top, producing a doubled
+// "+9191..." (or "+11..." for a +1 signup). Every supported calling code
+// here has a 10-digit local number, so the total length alone says which
+// prefix is present — no need to hardcode which specific code it is.
+const stripAuthPhonePrefix = (v) => {
+  if (!v) return "";
+  if (v.length === 12) return v.slice(2); // "91" + 10 digits
+  if (v.length === 11) return v.slice(1); // "1" + 10 digits
+  return v;
+};
 
 const RELATIONSHIP_OPTIONS = ["Father", "Mother", "Husband", "Wife", "Brother", "Sister", "Son", "Daughter", "Relative", "Friend", "Neighbour"];
 

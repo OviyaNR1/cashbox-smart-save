@@ -5,15 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { LogIn, Lock, Loader2, Phone, ShieldCheck, ArrowLeft } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import { safeReturnTo } from "@/lib/authReturnTo";
 
-// India-only for now — the whole app is currently India-first (see the
-// landing page), so a bare 10-digit field kept simple beats a country-code
-// picker nobody but a handful of Canada members would ever touch.
-function toE164(tenDigits) {
-  return `+91${tenDigits.replace(/\D/g, "")}`;
+const COUNTRY_CODES = [
+  { value: "+91", label: "+91 🇮🇳" },
+  { value: "+1", label: "+1 🇨🇦" },
+];
+
+function toE164(countryCode, tenDigits) {
+  return `${countryCode}${tenDigits.replace(/\D/g, "")}`;
 }
 
 // One entry point for both /login and /register (App.jsx routes both here)
@@ -30,6 +33,7 @@ export default function Login() {
   // "create-password" (new account) -> "verify" (new account's WhatsApp
   // code) -> done. Going back from either branch returns to "phone".
   const [step, setStep] = useState("phone");
+  const [countryCode, setCountryCode] = useState("+91");
   const [phoneDigits, setPhoneDigits] = useState("");
   const [checking, setChecking] = useState(false);
   const [password, setPassword] = useState("");
@@ -45,7 +49,7 @@ export default function Login() {
   const returnTo = safeReturnTo();
 
   const phoneValid = /^\d{10}$/.test(phoneDigits);
-  const phone = toE164(phoneDigits);
+  const phone = toE164(countryCode, phoneDigits);
 
   const submitPhone = async (e) => {
     e.preventDefault();
@@ -212,10 +216,15 @@ export default function Login() {
         <form onSubmit={submitPhone} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="phone">WhatsApp number</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
-                +91
-              </span>
+            <div className="flex gap-2">
+              <Select value={countryCode} onValueChange={setCountryCode}>
+                <SelectTrigger className="w-[92px] h-12"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {COUNTRY_CODES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Input
                 id="phone"
                 type="tel"
@@ -225,7 +234,7 @@ export default function Login() {
                 placeholder="e.g. 98765 43210"
                 value={phoneDigits}
                 onChange={(e) => setPhoneDigits(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                className="pl-12 h-12"
+                className="flex-1 h-12"
                 required
               />
             </div>
@@ -253,7 +262,7 @@ export default function Login() {
             onClick={backToPhone}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="w-3.5 h-3.5" /> +91 {phoneDigits}
+            <ArrowLeft className="w-3.5 h-3.5" /> {countryCode} {phoneDigits}
           </button>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -301,7 +310,7 @@ export default function Login() {
             onClick={backToPhone}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="w-3.5 h-3.5" /> +91 {phoneDigits}
+            <ArrowLeft className="w-3.5 h-3.5" /> {countryCode} {phoneDigits}
           </button>
           <div className="space-y-2">
             <Label htmlFor="new-password">Create a password</Label>
