@@ -21,6 +21,14 @@ export default function Members() {
   const { toast } = useToast();
 
   const [ticketsByProfile, setTicketsByProfile] = useState({});
+  // Which market(s) each profile actually belongs to, by the currency of
+  // the chit funds they hold tickets in — not by their own phone number.
+  // A member can sign up with a Canada (+1) number but hold an India (INR)
+  // chit ticket (e.g. NRI/diaspora members); profile.country only reflects
+  // which number they signed up with, so filtering by that alone made them
+  // invisible under the market they actually belong to. See PlanRequests.jsx,
+  // which already got this right by scoping to the request's own currency.
+  const [countriesByProfile, setCountriesByProfile] = useState({});
 
   const load = () => {
     setLoading(true);
@@ -32,6 +40,7 @@ export default function Members() {
     ]).then(([p, memberships, groups, plans]) => {
       setProfiles(p);
       const byProfile = {};
+      const countries = {};
       for (const m of memberships) {
         const group = groups.find((g) => g.id === m.group_id);
         const plan = plans.find((pl) => pl.id === group?.plan_id);
@@ -46,12 +55,19 @@ export default function Members() {
           ticketCode: m.chit_number || null,
         };
         (byProfile[m.member_profile_id] ||= []).push(ticket);
+        (countries[m.member_profile_id] ||= new Set()).add((plan?.currency || "INR") === "CAD" ? "Canada" : "India");
       }
       Object.values(byProfile).forEach((list) => list.sort((a, b) => (a.ticketNumber || 0) - (b.ticketNumber || 0)));
       setTicketsByProfile(byProfile);
+      setCountriesByProfile(countries);
       setLoading(false);
     });
   };
+
+  // A member with no group yet has nothing to derive a market from — fall
+  // back to profile.country (which country's signup/KYC form they filled)
+  // for that case only; once they hold a ticket, the ticket's currency wins.
+  const profileMarkets = (p) => countriesByProfile[p.id] || new Set([p.country || "India"]);
 
   useEffect(() => { load(); }, []);
 
@@ -59,7 +75,7 @@ export default function Members() {
     return profiles.filter((p) => {
       const stage = p.kyc_stage || "registration";
       const matchKyc = kycFilter === "all" || stage === kycFilter;
-      const matchCountry = (p.country || "India") === countryFilter;
+      const matchCountry = profileMarkets(p).has(countryFilter);
       const q = query.toLowerCase();
       const matchQuery = !q ||
         (p.full_name || "").toLowerCase().includes(q) ||
@@ -69,14 +85,14 @@ export default function Members() {
         (p.branch || "").toLowerCase().includes(q);
       return matchKyc && matchCountry && matchQuery;
     });
-  }, [profiles, query, kycFilter, countryFilter]);
+  }, [profiles, query, kycFilter, countryFilter, countriesByProfile]);
 
   // Country-scoped but not further narrowed by the active KYC chip or search
   // — these are the summary totals for the whole selected market, not a
   // reflection of whatever sub-filter happens to be highlighted right now.
   const profilesInCountry = useMemo(
-    () => profiles.filter((p) => (p.country || "India") === countryFilter),
-    [profiles, countryFilter]
+    () => profiles.filter((p) => profileMarkets(p).has(countryFilter)),
+    [profiles, countryFilter, countriesByProfile]
   );
   const stats = {
     total: profilesInCountry.length,
