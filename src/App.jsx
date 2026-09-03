@@ -57,10 +57,19 @@ const RouteFallback = () => (
 );
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth } = useAuth();
+  const { authChecked } = useAuth();
 
-  // Show loading spinner while checking auth
-  if (isLoadingAuth) {
+  // Show a full-page spinner only for the very first auth check on initial
+  // load — gating on isLoadingAuth instead would re-trigger this on EVERY
+  // auth state change (any sign-in/sign-out anywhere), which unmounts and
+  // remounts this entire route tree each time. That silently wiped local
+  // component state on any page that signs the user in mid-flow — e.g.
+  // ForgotPassword.jsx's OTP verification IS a real sign-in, so succeeding
+  // was itself resetting its own "step" state back to the start, making a
+  // successful password reset look like it looped back to square one.
+  // ProtectedRoute already shows its own loading state for routes that
+  // actually need to wait on auth, so this only needs to cover first load.
+  if (!authChecked) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>

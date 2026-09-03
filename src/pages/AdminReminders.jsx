@@ -8,6 +8,16 @@ import {
   computeAuctionReminderTargets, sendAuctionReminders,
   computeUpcomingDueTargets, sendUpcomingDueReminders,
 } from "@/lib/sendReminders";
+import { collectionDateUTC } from "@/lib/dates";
+
+// "YYYY-MM-DD" -> "5 Sept 2026", read directly from the string's own
+// components rather than through a local-timezone Date conversion — see
+// dates.js for why that silently shifts the day for viewers west of UTC.
+function formatUTCDateStr(dateStr) {
+  if (!dateStr) return "—";
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
 
 // Every reminder is a two-step action: preview computes exactly who would
 // receive one and what it says, with nothing sent yet; only "Confirm & Send"
@@ -108,7 +118,7 @@ export default function AdminReminders() {
             <div>
               <p className="text-sm font-semibold text-foreground">{selectedGroup.group_name}</p>
               <p className="text-xs text-muted-foreground">
-                Collection Date: {new Date(selectedGroup.start_date).toLocaleDateString()}
+                This month's due date: {formatUTCDateStr(collectionDateUTC(selectedGroup.start_date, selectedGroup.current_month, selectedGroup.monthly_collection_date))}
               </p>
             </div>
 
@@ -132,7 +142,7 @@ export default function AdminReminders() {
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Users className="w-4 h-4 text-primary" />
-              {preview.targets.length} member{preview.targets.length === 1 ? "" : "s"} will receive a {previewLabel(preview.type)} reminder
+              {preview.targets.length} member{preview.targets.length === 1 ? "" : "s"} will receive {preview.type === "auction" ? "an" : "a"} {previewLabel(preview.type)} reminder
             </p>
             <button onClick={resetPreview} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
           </div>
