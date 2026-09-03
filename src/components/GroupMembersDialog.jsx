@@ -19,6 +19,10 @@ export default function GroupMembersDialog({ group, plan, onClose }) {
 
   const load = async () => {
     const ms = await base44.entities.GroupMembership.filter({ group_id: group.id });
+    // filter() has no guaranteed order (a just-reassigned ticket can jump
+    // to the top from its updated_at changing), so the grid looked shuffled
+    // instead of laid out by seat number — sort explicitly.
+    ms.sort((a, b) => (a.ticket_number || 0) - (b.ticket_number || 0));
     setMemberships(ms);
     const profIds = [...new Set(ms.map((m) => m.member_profile_id))];
     const profs = profIds.length ? await Promise.all(profIds.map((id) => base44.entities.MemberProfile.get(id))) : [];
