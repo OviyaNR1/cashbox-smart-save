@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
 import LiveActivityToasts from "@/components/auction/LiveActivityToasts";
-import SoundToggle from "@/components/auction/SoundToggle";
 
 // place_bid()'s rejection_reason is written for the audit log, not for a
 // member reading it mid-auction — translate the handful of fixed strings it
@@ -33,6 +32,8 @@ function friendlyBidRejection(reason, auction, plan) {
       return "You've already won a previous month in this group, so you can't bid again.";
     case "Auction Closed":
       return "This auction has already closed. Wait for next month's auction to open.";
+    case "Final call has ended":
+      return "Final call has ended — bidding is locked. Waiting for the admin to close the auction.";
     case "Duplicate bid":
       return "Someone already bid that exact amount. Try a lower number.";
     case "Bid higher than current lowest":
@@ -372,15 +373,12 @@ export default function LiveAuction() {
           <h1 className="text-3xl font-semibold text-foreground mt-1">{group.group_name || group.group_code} — Month {auction.month_number}</h1>
           <p className="text-xs text-muted-foreground mt-1">{plan.member_count || "—"} members · {validBids.length} bids so far</p>
         </div>
-        <div className="flex items-center gap-2">
-          {/* A constant, honest "this has been live for X" signal — like a
-              phone call's recording timer — distinct from the per-call-stage
-              countdown below, which only runs during an active call. */}
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 font-medium tabular-nums text-xs">
-            <Radio className="w-3 h-3 animate-pulse" /> LIVE {elapsed}
-          </span>
-          <SoundToggle />
-        </div>
+        {/* A constant, honest "this has been live for X" signal — like a
+            phone call's recording timer — distinct from the per-call-stage
+            countdown below, which only runs during an active call. */}
+        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 font-medium tabular-nums text-xs">
+          <Radio className="w-3 h-3 animate-pulse" /> LIVE {elapsed}
+        </span>
       </div>
 
       {/* Hero: the one thing a member should see in the first second. */}
@@ -413,6 +411,17 @@ export default function LiveAuction() {
       )}
 
       {countdown !== null && (() => {
+        // Final call has its own 30s clock (see useCountdown) -- once it
+        // hits 0, place_bid() itself starts rejecting new bids, so this
+        // shouldn't keep looking like a live countdown still in progress.
+        if (auction.status === "final_call" && countdown === 0) {
+          return (
+            <div className="rounded-2xl p-6 text-center border bg-rose-500/10 border-rose-500/25">
+              <p className="text-sm font-semibold text-rose-400">🔒 Bidding closed</p>
+              <p className="text-xs text-muted-foreground mt-1">Final call has ended — waiting for the admin to close the auction.</p>
+            </div>
+          );
+        }
         // Escalating urgency as the call stage runs down — calm at first,
         // then increasingly dramatic in the final seconds.
         const tier = countdown <= 10 ? "dramatic" : countdown <= 30 ? "elevated" : "normal";

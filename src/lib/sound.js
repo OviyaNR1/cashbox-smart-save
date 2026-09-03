@@ -36,6 +36,23 @@ export function primeAudio() {
   } catch {
     // Speech synthesis unavailable — ignore, speak() fails silently too.
   }
+  try {
+    // A third, separate unlock domain from AudioContext/speechSynthesis —
+    // the pre-recorded Oru/Rendu/Moonu Tharam term clips and the smart-voice
+    // remote clips both play via a plain HTMLAudioElement (new Audio().play()),
+    // which browsers gate independently. Without this, a member's very first
+    // clip of the session (always arriving via a realtime event, never a
+    // click) silently fails even though the tones/speech above are unlocked.
+    // A muted, near-instant silent WAV played once here satisfies the
+    // gesture requirement for every later programmatic .play() on the page.
+    const unlock = new Audio(
+      "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+    );
+    unlock.muted = true;
+    unlock.play().then(() => unlock.pause()).catch(() => {});
+  } catch {
+    // ignore
+  }
 }
 
 function tone(freq, start, duration, type = "sine", gainPeak = 0.2) {

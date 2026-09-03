@@ -16,11 +16,10 @@ import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown } from "@/lib/useCountdown";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
-import { Gavel, Crown, Trophy, Building2, Phone, Radio, Eye, Volume2 } from "lucide-react";
+import { Gavel, Crown, Trophy, Building2, Phone, Radio, Eye } from "lucide-react";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
 import LiveActivityToasts from "@/components/auction/LiveActivityToasts";
-import SoundToggle from "@/components/auction/SoundToggle";
 
 const CALL_LABELS = { call_1: "Call 1", call_2: "Call 2", final_call: "Final Call" };
 
@@ -229,11 +228,6 @@ export default function AdminLiveAuction() {
     loadAuction();
   };
 
-  const testVoice = () => {
-    const { spoken } = announceAuctionStart(group?.group_name || group?.group_code || "this group");
-    speakSmart(spoken, { force: true });
-  };
-
   const closeAuction = async () => {
     setBusy(true);
     // Winner determination happens entirely server-side in this RPC — it
@@ -305,21 +299,9 @@ export default function AdminLiveAuction() {
   return (
     <div className="space-y-6">
       <LiveActivityToasts toasts={toasts} />
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-primary">Admin</p>
-          <h1 className="text-3xl font-semibold text-foreground mt-1">Live Auction</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <SoundToggle />
-          <button
-            type="button"
-            onClick={testVoice}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-muted text-foreground hover:bg-muted/70"
-          >
-            <Volume2 className="w-3.5 h-3.5" /> Test Voice
-          </button>
-        </div>
+      <div>
+        <p className="text-xs uppercase tracking-[0.2em] text-primary">Admin</p>
+        <h1 className="text-3xl font-semibold text-foreground mt-1">Live Auction</h1>
       </div>
 
       <div className="bg-card rounded-2xl border border-border p-4 flex items-center gap-3 flex-wrap">
@@ -412,6 +394,16 @@ export default function AdminLiveAuction() {
           </div>
 
           {countdown !== null && (() => {
+            // final_call's own 30s clock (see useCountdown) -- once it hits
+            // 0, place_bid() itself starts rejecting new bids server-side.
+            if (auction.status === "final_call" && countdown === 0) {
+              return (
+                <div className="rounded-2xl p-6 text-center border bg-rose-500/10 border-rose-500/25">
+                  <p className="text-sm font-semibold text-rose-400">🔒 Bidding closed</p>
+                  <p className="text-xs text-muted-foreground mt-1">Final call has ended — close the auction to confirm the winner.</p>
+                </div>
+              );
+            }
             const tier = countdown <= 10 ? "dramatic" : countdown <= 30 ? "elevated" : "normal";
             return (
               <div
