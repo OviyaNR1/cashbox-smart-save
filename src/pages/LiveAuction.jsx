@@ -8,7 +8,8 @@ import { useCountdown } from "@/lib/useCountdown";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { logAudit } from "@/lib/audit";
-import { Crown, Gavel, Building2, Trophy, Radio, Eye } from "lucide-react";
+import { Crown, Gavel, Building2, Trophy, Radio, Users, Calendar } from "lucide-react";
+import { collectionDateUTC } from "@/lib/dates";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
@@ -55,8 +56,8 @@ export default function LiveAuction() {
   const [confirmingBid, setConfirmingBid] = useState(false);
   const prevStatusRef = useRef(null);
   const joinLoggedRef = useRef(new Set());
-  const [watchingCount, setWatchingCount] = useState(0);
   const [bidFlash, setBidFlash] = useState(0);
+  const [showRules, setShowRules] = useState(false);
   const { toasts, pushToast } = useLiveToasts();
 
   const load = useCallback(async () => {
@@ -237,7 +238,7 @@ export default function LiveAuction() {
       return;
     }
     if (data?.status === "valid") {
-      setFeedback({ ok: true, message: "You're currently the lowest bid — not final until the admin closes the auction." });
+      setFeedback({ ok: true, message: "✅ Bid placed! Check Your Position below." });
       setBidAmount("");
     } else {
       setFeedback({ ok: false, message: friendlyBidRejection(data?.rejection_reason, state.auction, state.plan) });
@@ -280,6 +281,9 @@ export default function LiveAuction() {
   const myBids = bids.filter((b) => b.member_profile_id === myMembership?.member_profile_id);
   const lowest = validBids[0];
   const iAmWinning = lowest && myMembership && lowest.member_profile_id === myMembership.member_profile_id;
+  // The member's own best (lowest) valid bid, if any — validBids is already
+  // sorted ascending, so filtering it keeps that order.
+  const myBestBid = validBids.find((b) => b.member_profile_id === myMembership?.member_profile_id);
 
   if (auction.status === "closed") {
     const outcome = calcAuctionOutcome({ plan, winningBid: auction.winning_bid_amount });
@@ -340,49 +344,121 @@ export default function LiveAuction() {
     );
   }
 
+  // The number to preview dividend math for: what's typed right now takes
+  // priority ("if YOUR bid wins"), falling back to the current lowest bid
+  // ("if the auction closed right now"). Nothing to preview before any
+  // number exists at all.
+  const previewAmount = bidAmount ? Number(bidAmount) : lowest?.amount;
+  const previewOutcome = previewAmount ? calcAuctionOutcome({ plan, winningBid: previewAmount }) : null;
+  const collectionDate = group.start_date
+    ? collectionDateUTC(group.start_date, auction.month_number, group.monthly_collection_date)
+    : null;
+  const collectionDateLabel = collectionDate
+    ? (() => {
+        const [y, m, d] = collectionDate.split("-").map(Number);
+        return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+      })()
+    : null;
+
   return (
     <div className="space-y-6">
       <LiveActivityToasts toasts={toasts} />
+
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-primary">Live Auction</p>
           <h1 className="text-3xl font-semibold text-foreground mt-1">{group.group_name || group.group_code} — Month {auction.month_number}</h1>
-          <p className="text-sm text-muted-foreground mt-1 capitalize">Status: {auction.status.replace("_", " ")}</p>
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          {/* A constant, honest "this has been live for X" signal — like a
-              phone call's recording timer — distinct from the per-call-stage
-              countdown below, which only runs during an active call. */}
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 font-medium tabular-nums">
-            <Radio className="w-3 h-3 animate-pulse" /> LIVE {elapsed}
-          </span>
-          {watchingCount > 0 && (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-foreground font-medium">
-              <Eye className="w-3 h-3" /> {watchingCount} watching
-            </span>
-          )}
-        </div>
+        {/* A constant, honest "this has been live for X" signal — like a
+            phone call's recording timer — distinct from the per-call-stage
+            countdown below, which only runs during an active call. */}
+        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 font-medium tabular-nums text-xs">
+          <Radio className="w-3 h-3 animate-pulse" /> LIVE {elapsed}
+        </span>
       </div>
 
-      <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-sm text-amber-300">
-        Bids aren't final until your group's admin closes the auction. The lowest bid at that moment wins — someone can still outbid you.
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" /> {formatMoney(plan.chit_amount, plan.currency)} plan</span>
+        {collectionDateLabel && (
+          <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {collectionDateLabel}</span>
+        )}
+        <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {plan.member_count || "—"} members</span>
+        <span>{validBids.length} bids so far</span>
+        <span>Ends when admin closes</span>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setShowRules((v) => !v)}
+        className="text-xs text-primary hover:underline flex items-center gap-1 -mt-1"
+      >
+        ⓘ How does this auction work?
+      </button>
+      {showRules && (
+        <div className="bg-card rounded-xl border border-border p-4 text-xs text-muted-foreground space-y-2 -mt-2">
+          <p><b className="text-foreground">1. Enter your bid.</b> It must be lower than the current lowest bid shown below.</p>
+          <p><b className="text-foreground">2. Lowest bid wins.</b> Whoever has the lowest valid bid when the admin closes the auction wins this month.</p>
+          <p><b className="text-foreground">3. The dividend is shared.</b> The gap between the chit value and the winning bid is split evenly across all members and reduces everyone's next installment.</p>
+          <p><b className="text-foreground">4. The admin closes the auction.</b> Nothing is final until then — you can keep bidding while it's open.</p>
+        </div>
+      )}
+
+      {/* Hero: the one thing a member should see in the first second. */}
+      <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-2 border-primary/30 rounded-2xl p-6 text-center">
+        <p className="text-xs uppercase tracking-widest text-muted-foreground">Current Lowest Bid</p>
+        <p className="text-5xl sm:text-6xl font-bold text-foreground tabular-nums mt-1">
+          {formatMoney(lowest ? lowest.amount : auction.starting_amount, plan.currency)}
+        </p>
+        <p className="text-sm text-foreground flex items-center justify-center gap-1.5 mt-2">
+          <Crown className="w-4 h-4 text-primary" />
+          {lowest ? (
+            <>Leader: <b>{profileOf(lowest.member_profile_id)?.full_name || "Member"}{lowest.member_profile_id === myMembership?.member_profile_id ? " (You)" : ""}</b></>
+          ) : (
+            "No bids yet — this is the starting amount"
+          )}
+        </p>
+        <p className="text-xs text-muted-foreground mt-2">Lowest bid wins when the admin closes the auction.</p>
+      </div>
+
+      <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-sm text-amber-300 flex items-start gap-2">
+        <span>🔔</span>
+        <span><b>Important:</b> The lowest bid does not win until the admin officially closes the auction. You can keep bidding while it's open.</span>
+      </div>
+
+      {myBestBid && !myMembership?.has_won && (
+        <div className={`rounded-2xl border p-5 ${iAmWinning ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
+          <p className={`text-sm font-semibold flex items-center gap-2 mb-3 ${iAmWinning ? "text-emerald-400" : "text-rose-400"}`}>
+            {iAmWinning ? "🟢 You're currently winning!" : "🔴 You've been outbid"}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm text-foreground">
+            <span>Your bid: <b className="tabular-nums">{formatMoney(myBestBid?.amount, plan.currency)}</b></span>
+            <span>Current lowest: <b className="tabular-nums">{formatMoney(lowest.amount, plan.currency)}</b></span>
+          </div>
+        </div>
+      )}
 
       {countdown !== null && (
         <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6 text-center animate-pulse">
           <p className="text-sm font-semibold text-rose-400 mb-1 tracking-wide">
-            {formatMoney(lowest ? lowest.amount : auction.starting_amount, plan.currency)} — {CALL_TERMS[auction.status]}
+            ⚠️ {CALL_TERMS[auction.status]} — {formatMoney(lowest ? lowest.amount : auction.starting_amount, plan.currency)}
           </p>
           <p className="text-5xl font-bold text-foreground tabular-nums">{countdown}</p>
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Lowest Bid" value={lowest ? formatMoney(lowest.amount, plan.currency) : "—"} />
-        <Stat label="Current Leader" value={lowest ? profileOf(lowest.member_profile_id)?.full_name || "Member" : "—"} />
-        <Stat label="Total Bids" value={validBids.length} />
-        <Stat label="Your Bids" value={myBids.length} />
-      </div>
+      {previewOutcome && (
+        <div className="bg-card rounded-2xl border border-border p-5">
+          <p className="text-sm font-medium text-foreground mb-3">
+            💰 {bidAmount ? "If your bid wins" : "If the current lowest bid wins"}
+          </p>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <MoneyRow label="Winning bid" value={formatMoney(previewAmount, plan.currency)} />
+            <MoneyRow label="Total dividend" value={formatMoney(previewOutcome.discount, plan.currency)} />
+            <MoneyRow label="Your dividend share" value={formatMoney(previewOutcome.dividendPerMember, plan.currency)} emphasize />
+            <MoneyRow label="Next installment" value={formatMoney(previewOutcome.nextInstallment, plan.currency)} emphasize />
+          </div>
+        </div>
+      )}
 
       {myMembership?.has_won ? (
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5 text-sm text-emerald-400 flex items-center gap-2">
@@ -390,10 +466,12 @@ export default function LiveAuction() {
         </div>
       ) : (
         <div className="bg-primary/5 rounded-2xl border-2 border-primary/40 p-5">
-          <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2"><Gavel className="w-4 h-4 text-primary" /> Place a bid</p>
-          <label className="block text-xs font-semibold text-primary uppercase tracking-wide mb-1.5">
-            Type your bid amount here
-          </label>
+          <p className="text-sm font-medium text-foreground mb-1 flex items-center gap-2"><Gavel className="w-4 h-4 text-primary" /> Enter Your Bid</p>
+          <p className="text-xs text-muted-foreground mb-3">
+            {lowest
+              ? <>Your bid must be lower than <b className="text-foreground">{formatMoney(lowest.amount, plan.currency)}</b></>
+              : <>Your bid must be <b className="text-foreground">{formatMoney(auction.starting_amount, plan.currency)}</b> or lower</>}
+          </p>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-semibold text-muted-foreground pointer-events-none">
@@ -405,8 +483,8 @@ export default function LiveAuction() {
                 onChange={(e) => { setBidAmount(e.target.value); setConfirmingBid(false); }}
                 placeholder={
                   lowest
-                    ? `Below ${(lowest.amount - (auction.min_decrement || 0)).toLocaleString("en-IN")}`
-                    : `Up to ${Number(auction.starting_amount).toLocaleString("en-IN")}`
+                    ? `${(lowest.amount - (auction.min_decrement || 0)).toLocaleString("en-IN")} or lower`
+                    : `${Number(auction.starting_amount).toLocaleString("en-IN")} or lower`
                 }
                 autoFocus
                 // Hides the native up/down spinner — a tiny, easy-to-mis-tap
@@ -423,14 +501,10 @@ export default function LiveAuction() {
               disabled={submitting || !bidAmount}
               className={`h-14 px-6 rounded-xl font-semibold ${confirmingBid ? "bg-amber-500 hover:bg-amber-500/90 text-amber-950" : "bg-primary hover:bg-primary/90"}`}
             >
-              {submitting ? "Submitting…" : confirmingBid ? `Confirm ${formatMoney(Number(bidAmount), plan.currency)}?` : "Submit Bid"}
+              {submitting ? "Submitting…" : confirmingBid ? `Confirm ${formatMoney(Number(bidAmount), plan.currency)}?` : "Place Bid"}
             </Button>
           </div>
-          {plan.auction_min_bid > 0 && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Bids can't go below {formatMoney(plan.auction_min_bid, plan.currency)} for this plan.
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground mt-2">💡 Lower bid = higher dividend for all members.</p>
           {confirmingBid && (
             <p className="text-xs text-amber-400 mt-2">
               Tap Confirm to lock in this bid, or change the amount above to cancel.
@@ -439,12 +513,18 @@ export default function LiveAuction() {
           {feedback && (
             <p className={`text-xs mt-2 ${feedback.ok ? "text-emerald-400" : "text-rose-400"}`}>{feedback.message}</p>
           )}
-          {iAmWinning && <p className="text-xs text-primary mt-2">You're currently the lowest bidder!</p>}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-3 pt-3 border-t border-border/60">
+            <span>Starting bid: <b className="text-foreground">{formatMoney(auction.starting_amount, plan.currency)}</b></span>
+            {plan.auction_min_bid > 0 && (
+              <span>Minimum allowed bid: <b className="text-foreground">{formatMoney(plan.auction_min_bid, plan.currency)}</b></span>
+            )}
+            <span>Lower bid wins</span>
+          </div>
         </div>
       )}
 
       <div className="bg-card rounded-2xl border border-border p-5">
-        <p className="text-sm font-medium text-foreground flex items-center gap-2 mb-4"><Crown className="w-4 h-4 text-primary" /> Leaderboard</p>
+        <p className="text-sm font-medium text-foreground flex items-center gap-2 mb-4"><Crown className="w-4 h-4 text-primary" /> Live Leaderboard</p>
         {validBids.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">No bids yet — be the first!</p>
         ) : (
@@ -454,10 +534,13 @@ export default function LiveAuction() {
             {validBids.map((b, i) => (
               <div
                 key={i === 0 ? `${b.id}-${bidFlash}` : b.id}
-                className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${b.member_profile_id === myMembership?.member_profile_id ? "border-primary/50 bg-primary/5" : "border-border"} ${i === 0 ? "animate-in fade-in zoom-in-95 duration-500" : ""}`}>
+                className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${i === 0 ? "border-emerald-500/40 bg-emerald-500/5" : b.member_profile_id === myMembership?.member_profile_id ? "border-primary/50 bg-primary/5" : "border-border"} ${i === 0 ? "animate-in fade-in zoom-in-95 duration-500" : ""}`}>
                 <span className="w-8 text-center">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground truncate">{profileOf(b.member_profile_id)?.full_name || "Member"}{b.member_profile_id === myMembership?.member_profile_id ? " (You)" : ""}</p>
+                  <p className="text-sm text-foreground truncate flex items-center gap-1.5">
+                    {profileOf(b.member_profile_id)?.full_name || "Member"}{b.member_profile_id === myMembership?.member_profile_id ? " (You)" : ""}
+                    {i === 0 && <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">Leading</span>}
+                  </p>
                   <p className="text-xs text-muted-foreground">{new Date(b.created_at).toLocaleTimeString()}</p>
                 </div>
                 <p className="font-semibold tabular-nums text-foreground">{formatMoney(b.amount, plan.currency)}</p>
@@ -487,8 +570,16 @@ export default function LiveAuction() {
         memberProfileId={myMembership?.member_profile_id}
         senderName={myName}
         onJoin={(name) => pushToast(`${name} joined`, "join")}
-        onPresenceChange={setWatchingCount}
       />
+    </div>
+  );
+}
+
+function MoneyRow({ label, value, emphasize }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`tabular-nums ${emphasize ? "text-lg font-semibold text-primary" : "text-sm font-medium text-foreground"}`}>{value}</p>
     </div>
   );
 }
