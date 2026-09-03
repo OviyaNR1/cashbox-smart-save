@@ -10,15 +10,7 @@ import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
 import { playCallBell, playGavel, playBidPlaced, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
 import { speakSmart } from "@/lib/tts";
-import {
-  announceAuctionStart,
-  announceOneMinuteWarning,
-  announceThirtySeconds,
-  announceTenSeconds,
-  announceCountdownDigit,
-  announceAuctionClosed,
-  announceWinner,
-} from "@/lib/auctionAnnouncements";
+import { announceAuctionStart, announceAuctionClosed, announceWinner } from "@/lib/auctionAnnouncements";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown } from "@/lib/useCountdown";
@@ -189,34 +181,6 @@ export default function AdminLiveAuction() {
     leadingBidIdRef.current = leadingId;
   }, [validBids[0]?.id, auction?.status]);
 
-  // Escalating countdown urgency — 30s / 10s spoken warnings, then a
-  // casual last-10 count, once each per call stage.
-  const warnedRef = useRef({ key: null, thirty: false, ten: false, digits: new Set() });
-  useEffect(() => {
-    const stageKey = auction?.call_stage_started_at;
-    if (warnedRef.current.key !== stageKey) {
-      warnedRef.current = { key: stageKey, thirty: false, ten: false, digits: new Set() };
-    }
-    if (countdown === null) return;
-    const w = warnedRef.current;
-    if (countdown <= 30 && countdown > 10 && !w.thirty) {
-      w.thirty = true;
-      const { spoken, visual } = announceThirtySeconds();
-      pushToast(visual, "default");
-      speakSmart(spoken);
-    } else if (countdown <= 10 && countdown > 0 && !w.ten) {
-      w.ten = true;
-      const { spoken, visual } = announceTenSeconds();
-      pushToast(visual, "default");
-      speakSmart(spoken);
-    }
-    if (countdown >= 1 && countdown <= 10 && !w.digits.has(countdown)) {
-      w.digits.add(countdown);
-      const digit = announceCountdownDigit(countdown);
-      if (digit) speakSmart(digit.spoken);
-    }
-  }, [countdown, auction?.call_stage_started_at]);
-
   const recordCompanyMonth = async () => {
     setBusy(true);
     const me = await base44.auth.me().catch(() => ({}));
@@ -261,13 +225,6 @@ export default function AdminLiveAuction() {
     logAudit({ module: "Live Auction", action: nextStatus, record_id: auction.id, details: `${CALL_LABELS[nextStatus]} (${CALL_TERMS[nextStatus]}) started for group ${group.group_code} at ${formatMoney(calledAmount, plan.currency)}` });
     playCallBell();
     speakCallAnnouncement(nextStatus, formatMoney(calledAmount, plan.currency));
-    // call_1/call_2 run a full 60s -- final_call only runs 30, so "one
-    // minute left" only makes sense for the first two.
-    if (nextStatus === "call_1" || nextStatus === "call_2") {
-      const oneMin = announceOneMinuteWarning();
-      pushToast(oneMin.visual, "default");
-      speakSmart(oneMin.spoken);
-    }
     setBusy(false);
     loadAuction();
   };

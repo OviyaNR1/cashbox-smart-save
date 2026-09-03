@@ -9,18 +9,8 @@ import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { logAudit } from "@/lib/audit";
 import { speakSmart } from "@/lib/tts";
-import {
-  announceOneMinuteWarning,
-  announceThirtySeconds,
-  announceTenSeconds,
-  announceCountdownDigit,
-  announceAuctionClosed,
-  announceWinner,
-  announceNewLowestBid,
-  shouldAnnounceBid,
-} from "@/lib/auctionAnnouncements";
-import { Crown, Gavel, Building2, Trophy, Radio, Users, Calendar } from "lucide-react";
-import { collectionDateUTC } from "@/lib/dates";
+import { announceAuctionClosed, announceWinner } from "@/lib/auctionAnnouncements";
+import { Crown, Gavel, Building2, Trophy, Radio } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
@@ -69,7 +59,6 @@ export default function LiveAuction() {
   const prevStatusRef = useRef(null);
   const joinLoggedRef = useRef(new Set());
   const [bidFlash, setBidFlash] = useState(0);
-  const [showRules, setShowRules] = useState(false);
   const { toasts, pushToast } = useLiveToasts();
 
   const load = useCallback(async () => {
@@ -167,12 +156,6 @@ export default function LiveAuction() {
             ? state.myName
             : state.profiles?.find((p) => p.id === payload.new.member_profile_id)?.full_name;
           pushToast(`${bidderName || "A member"} sent the lowest bid`, "bid");
-          // A member repeatedly re-bidding shouldn't spam a voice line every
-          // time — at most one spoken "new lowest bid" every few seconds.
-          if (shouldAnnounceBid()) {
-            const { spoken } = announceNewLowestBid(formatMoney(payload.new.amount, state.plan?.currency));
-            speakSmart(spoken);
-          }
         }
         load();
       })
@@ -211,13 +194,6 @@ export default function LiveAuction() {
         const validBidsNow = (state.bids || []).filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
         const calledAmount = validBidsNow[0]?.amount ?? auction.starting_amount;
         speakCallAnnouncement(auction.status, formatMoney(calledAmount, state.plan?.currency));
-        // call_1/call_2 run a full 60s -- final_call only runs 30, so the
-        // "one minute left" line only makes sense for the first two.
-        if (auction.status === "call_1" || auction.status === "call_2") {
-          const { spoken, visual } = announceOneMinuteWarning();
-          pushToast(visual, "default");
-          speakSmart(spoken);
-        }
       } else if (auction.status === "closed") {
         const iWon = state.myMembership && auction.winner_member_profile_id === state.myMembership.member_profile_id;
         const winnerName = state.profiles?.find((p) => p.id === auction.winner_member_profile_id)?.full_name || "Member";
@@ -244,35 +220,6 @@ export default function LiveAuction() {
     }
     prevStatusRef.current = auction.status;
   }, [state.auction, state.myMembership]);
-
-  // Escalating countdown urgency — the same tick already plays a sound
-  // (see useCountdown), this just adds the spoken 1-minute / 30s / 10s
-  // warnings and a casual last-10 countdown, once each per call stage.
-  const warnedRef = useRef({ key: null, thirty: false, ten: false, digits: new Set() });
-  useEffect(() => {
-    const stageKey = state.auction?.call_stage_started_at;
-    if (warnedRef.current.key !== stageKey) {
-      warnedRef.current = { key: stageKey, thirty: false, ten: false, digits: new Set() };
-    }
-    if (countdown === null) return;
-    const w = warnedRef.current;
-    if (countdown <= 30 && countdown > 10 && !w.thirty) {
-      w.thirty = true;
-      const { spoken, visual } = announceThirtySeconds();
-      pushToast(visual, "default");
-      speakSmart(spoken);
-    } else if (countdown <= 10 && countdown > 0 && !w.ten) {
-      w.ten = true;
-      const { spoken, visual } = announceTenSeconds();
-      pushToast(visual, "default");
-      speakSmart(spoken);
-    }
-    if (countdown >= 1 && countdown <= 10 && !w.digits.has(countdown)) {
-      w.digits.add(countdown);
-      const digit = announceCountdownDigit(countdown);
-      if (digit) speakSmart(digit.spoken);
-    }
-  }, [countdown, state.auction?.call_stage_started_at]);
 
   // A mistyped digit under the countdown pressure locks in a real bid with
   // no undo — the first click asks for confirmation instead of submitting
@@ -414,15 +361,6 @@ export default function LiveAuction() {
   // number exists at all.
   const previewAmount = bidAmount ? Number(bidAmount) : lowest?.amount;
   const previewOutcome = previewAmount ? calcAuctionOutcome({ plan, winningBid: previewAmount }) : null;
-  const collectionDate = group.start_date
-    ? collectionDateUTC(group.start_date, auction.month_number, group.monthly_collection_date)
-    : null;
-  const collectionDateLabel = collectionDate
-    ? (() => {
-        const [y, m, d] = collectionDate.split("-").map(Number);
-        return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
-      })()
-    : null;
 
   return (
     <div className="space-y-6">
@@ -432,6 +370,7 @@ export default function LiveAuction() {
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-primary">Live Auction</p>
           <h1 className="text-3xl font-semibold text-foreground mt-1">{group.group_name || group.group_code} — Month {auction.month_number}</h1>
+          <p className="text-xs text-muted-foreground mt-1">{plan.member_count || "—"} members · {validBids.length} bids so far</p>
         </div>
         <div className="flex items-center gap-2">
           {/* A constant, honest "this has been live for X" signal — like a
@@ -443,32 +382,6 @@ export default function LiveAuction() {
           <SoundToggle />
         </div>
       </div>
-
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" /> {formatMoney(plan.chit_amount, plan.currency)} plan</span>
-        {collectionDateLabel && (
-          <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {collectionDateLabel}</span>
-        )}
-        <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {plan.member_count || "—"} members</span>
-        <span>{validBids.length} bids so far</span>
-        <span>Ends when admin closes</span>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setShowRules((v) => !v)}
-        className="text-xs text-primary hover:underline flex items-center gap-1 -mt-1"
-      >
-        ⓘ How does this auction work?
-      </button>
-      {showRules && (
-        <div className="bg-card rounded-xl border border-border p-4 text-xs text-muted-foreground space-y-2 -mt-2">
-          <p><b className="text-foreground">1. Enter your bid.</b> It must be lower than the current lowest bid shown below.</p>
-          <p><b className="text-foreground">2. Lowest bid wins.</b> Whoever has the lowest valid bid when the admin closes the auction wins this month.</p>
-          <p><b className="text-foreground">3. The dividend is shared.</b> The gap between the chit value and the winning bid is split evenly across all members and reduces everyone's next installment.</p>
-          <p><b className="text-foreground">4. The admin closes the auction.</b> Nothing is final until then — you can keep bidding while it's open.</p>
-        </div>
-      )}
 
       {/* Hero: the one thing a member should see in the first second. */}
       <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-2 border-primary/30 rounded-2xl p-6 text-center">
@@ -484,12 +397,7 @@ export default function LiveAuction() {
             "No bids yet — this is the starting amount"
           )}
         </p>
-        <p className="text-xs text-muted-foreground mt-2">Lowest bid wins when the admin closes the auction.</p>
-      </div>
-
-      <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-sm text-amber-300 flex items-start gap-2">
-        <span>🔔</span>
-        <span><b>Important:</b> The lowest bid does not win until the admin officially closes the auction. You can keep bidding while it's open.</span>
+        <p className="text-xs text-muted-foreground mt-2">Lowest bid wins when the admin closes — bids aren't final till then.</p>
       </div>
 
       {myBestBid && !myMembership?.has_won && (
@@ -597,13 +505,6 @@ export default function LiveAuction() {
           {feedback && (
             <p className={`text-xs mt-2 ${feedback.ok ? "text-emerald-400" : "text-rose-400"}`}>{feedback.message}</p>
           )}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-3 pt-3 border-t border-border/60">
-            <span>Starting bid: <b className="text-foreground">{formatMoney(auction.starting_amount, plan.currency)}</b></span>
-            {plan.auction_min_bid > 0 && (
-              <span>Minimum allowed bid: <b className="text-foreground">{formatMoney(plan.auction_min_bid, plan.currency)}</b></span>
-            )}
-            <span>Lower bid wins</span>
-          </div>
         </div>
       )}
 
