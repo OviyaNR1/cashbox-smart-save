@@ -50,6 +50,7 @@ const TABLES = {
   Auction: 'auctions',
   AuctionBid: 'auction_bids',
   AuctionMessage: 'auction_messages',
+  WhatsAppInboundMessage: 'whatsapp_inbound_messages',
 };
 
 // Base44 tolerated "" for unset optional fields of any type (dates, numbers, uuids);
