@@ -62,15 +62,15 @@ export default function MyPayments() {
           const pct = total ? Math.round(((m.paid_installments || 0) / total) * 100) : 0;
           return (
             <div key={m.id} className="bg-card rounded-2xl border border-border overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                <div>
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
                   <p className="font-medium text-foreground">{plan?.plan_name || "Chit plan"}</p>
                   <p className="text-xs text-muted-foreground">
                     {group?.group_name || group?.group_code} · Chit #{m.chit_number || m.ticket_number || "—"} · {m.paid_installments}/{total} installments
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setPayMembership(m)} className="px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1">
+                <div className="flex items-center gap-3 shrink-0">
+                  <button onClick={() => setPayMembership(m)} className="px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1 whitespace-nowrap">
                     <CreditCard className="w-3.5 h-3.5" /> Pay Installment
                   </button>
                   <div className="w-24 h-2 rounded-full bg-muted overflow-hidden">
