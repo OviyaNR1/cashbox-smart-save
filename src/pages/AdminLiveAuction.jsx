@@ -9,7 +9,7 @@ import { formatMoney } from "@/lib/currency";
 import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
 import { playCallBell, playGavel, playBidPlaced, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
-import { speakSmart } from "@/lib/tts";
+import { speakAnnouncement } from "@/lib/tts";
 import { announceAuctionStart, announceAuctionClosed, announceWinner } from "@/lib/auctionAnnouncements";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
@@ -211,9 +211,9 @@ export default function AdminLiveAuction() {
       min_decrement: plan.auction_min_decrement || 25,
     });
     logAudit({ module: "Live Auction", action: "start", record_id: created.id, details: `Started Month ${targetMonth} auction for group ${group.group_code} (starting ${startingAmount})` });
-    const { spoken, visual } = announceAuctionStart(group.group_name || group.group_code);
+    const { parts, visual } = announceAuctionStart();
     pushToast(visual, "default");
-    speakSmart(spoken);
+    speakAnnouncement(parts);
     setBusy(false);
     loadAuction();
   };
@@ -284,11 +284,11 @@ export default function AdminLiveAuction() {
     fireConfetti();
     const closedLine = announceAuctionClosed();
     pushToast(closedLine.visual, "default");
-    speakSmart(closedLine.spoken);
+    speakAnnouncement(closedLine.parts);
     setTimeout(() => {
       const winnerLine = announceWinner(winnerProf?.full_name || "Member", formatMoney(winningAmount, plan.currency));
       pushToast(winnerLine.visual, "bid");
-      speakSmart(winnerLine.spoken);
+      speakAnnouncement(winnerLine.parts);
     }, 1800);
     setBusy(false);
     setCloseConfirmOpen(false);

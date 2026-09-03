@@ -3,27 +3,59 @@ import { isSoundEnabled } from "./soundPrefs";
 
 // Tries the secure server-side voice (supabase/functions/tts-speak) first —
 // once a provider key (ElevenLabs / Google / Azure) is configured there,
-// this gets a real human-sounding Tamil clip back. If no provider is
-// configured yet, or the call fails for any reason (offline, cold start,
-// rate limit), falls back to the browser's own speechSynthesis so the
-// auction is never silently silent while waiting on a paid service.
+// this gets a real human-sounding clip back. If no provider is configured
+// yet, or the call fails for any reason (offline, cold start, rate limit),
+// falls back to the browser's own speechSynthesis so the auction is never
+// silently silent while waiting on a paid service.
 //
 // Every call goes through one shared queue so two announcements can never
 // play over each other — each one fully finishes (or times out) before the
-// next starts, instead of the earlier version where a `cancel()` inside a
-// second call could cut the first one off mid-sentence.
+// next starts, instead of a `cancel()` inside a second call cutting the
+// first one off mid-sentence.
 let queue = Promise.resolve();
 const MAX_WAIT_MS = 8000;
 
-// `force` bypasses the sound-off preference — for an explicit "Test Voice"
-// button, where the admin clicking it IS the request to hear it, not an
-// ambient sound that should stay muted by default.
-export function speakSmart(text, { voiceId, lang = "ta-IN", force = false } = {}) {
-  if ((!force && !isSoundEnabled()) || !text) return Promise.resolve();
+export function speakSmart(text, { voiceId, lang = "en-IN" } = {}) {
+  if (!isSoundEnabled() || !text) return Promise.resolve();
   const next = queue.then(() => speakOnce(text, voiceId, lang));
   // Never let one bad/stuck clip jam the queue for everything after it.
   queue = next.catch(() => {});
   return next;
+}
+
+// Plays a mixed sequence of pre-recorded clips and live-spoken text, in
+// order, through the same shared queue — e.g. the real auctioneer clip
+// "Call one!" followed by the live-spoken current amount, which changes
+// every bid and can't be pre-recorded. Each part is either
+// { clip: "/audio/x.wav" } or { text: "..." }.
+export function speakAnnouncement(parts) {
+  if (!isSoundEnabled() || !parts?.length) return Promise.resolve();
+  const next = queue.then(() => playParts(parts));
+  queue = next.catch(() => {});
+  return next;
+}
+
+async function playParts(parts) {
+  for (const part of parts) {
+    if (part.clip) {
+      await withTimeout(playClip(part.clip), MAX_WAIT_MS);
+    } else if (part.text) {
+      await withTimeout(speakOnce(part.text, part.voiceId, part.lang || "en-IN"), MAX_WAIT_MS);
+    }
+  }
+}
+
+function playClip(src) {
+  return new Promise((resolve) => {
+    try {
+      const audio = new Audio(src);
+      audio.onended = resolve;
+      audio.onerror = resolve;
+      audio.play().catch(resolve);
+    } catch {
+      resolve();
+    }
+  });
 }
 
 async function speakOnce(text, voiceId, lang) {
@@ -57,12 +89,7 @@ function fallbackSpeak(text, lang) {
       utter.rate = 1.0;
       utter.pitch = 1.0;
       const voices = window.speechSynthesis.getVoices();
-      // A real Tamil-language voice if this device happens to have one
-      // installed; otherwise fall back further to any English voice rather
-      // than an unpredictable random default.
-      const preferred =
-        voices.find((v) => v.lang?.toLowerCase().startsWith("ta")) ||
-        voices.find((v) => /en/i.test(v.lang));
+      const preferred = voices.find((v) => /en/i.test(v.lang));
       if (preferred) utter.voice = preferred;
       utter.onend = resolve;
       utter.onerror = resolve;

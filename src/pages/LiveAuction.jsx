@@ -8,7 +8,7 @@ import { useCountdown } from "@/lib/useCountdown";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { logAudit } from "@/lib/audit";
-import { speakSmart } from "@/lib/tts";
+import { speakAnnouncement } from "@/lib/tts";
 import { announceAuctionClosed, announceWinner } from "@/lib/auctionAnnouncements";
 import { Crown, Gavel, Building2, Trophy, Radio } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -201,14 +201,12 @@ export default function LiveAuction() {
         const amountLabel = formatMoney(auction.winning_bid_amount, state.plan?.currency);
         const closedLine = announceAuctionClosed();
         pushToast(closedLine.visual, "default");
-        speakSmart(closedLine.spoken);
-        // A brief pause before the reveal, same beat as a real auctioneer —
-        // not waiting on the clip to finish (speakSmart resolves once
-        // playback starts, not once it ends), just a fixed dramatic gap.
+        speakAnnouncement(closedLine.parts);
+        // A brief pause before the reveal, same beat as a real auctioneer.
         setTimeout(() => {
-          const winnerLine = announceWinner(iWon ? "நீங்க" : winnerName, amountLabel);
+          const winnerLine = announceWinner(iWon ? "You" : winnerName, amountLabel);
           pushToast(winnerLine.visual, iWon ? "bid" : "default");
-          speakSmart(winnerLine.spoken);
+          speakAnnouncement(winnerLine.parts);
         }, 1800);
         if (iWon) {
           playFanfare();

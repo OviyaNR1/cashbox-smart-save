@@ -1,4 +1,5 @@
 import { isSoundEnabled } from "./soundPrefs";
+import { speakAnnouncement } from "./tts";
 
 let ctx;
 
@@ -197,100 +198,37 @@ export function playUrgentTick() {
   }
 }
 
-// The traditional South Indian chit-auction call count — "oru tharam" (once),
-// "rendu tharam" (twice), "moonu tharam" (thrice) — called out against the
-// current lowest bid before it's sold, instead of a generic "any lower
-// bids?". Shared between the admin's calling screen and members' live view
-// so both sides announce and display the identical wording. Written in
-// actual Tamil script, not romanized letters — an English voice reading
-// "Oru Tharam" as English letters is exactly what made it sound like a
-// generic, mispronounced "AI voice" instead of the real phrase.
-export const CALL_TERMS = { call_1: "ஒரு தரம்", call_2: "ரெண்டு தரம்", final_call: "மூணு தரம்" };
+// The call-stage label — called out against the current lowest bid before
+// it's sold, instead of a generic "any lower bids?". Shared between the
+// admin's calling screen and members' live view so both sides announce and
+// display the identical wording.
+export const CALL_TERMS = { call_1: "Call 1", call_2: "Call 2", final_call: "Final Call" };
 
-// Builds the on-screen call-out text for a stage — e.g. "₹90,000. ஒரு
-// தரம்". amountLabel is a pre-formatted currency string (formatMoney's
-// output); pass none for a plan/currency-less fallback that's just the bare
-// term. Display-only — see speakCallAnnouncement for the spoken version.
+// Builds the on-screen call-out text for a stage — e.g. "₹90,000. Call 1".
+// amountLabel is a pre-formatted currency string (formatMoney's output);
+// pass none for a plan/currency-less fallback that's just the bare term.
+// Display-only — see speakCallAnnouncement for the spoken version.
 export function callAnnouncement(status, amountLabel) {
   const term = CALL_TERMS[status];
   if (!term) return "";
   return amountLabel ? `${amountLabel}. ${term}` : term;
 }
 
-// Spoken call-outs via the browser's built-in text-to-speech — no external
-// service or API key required, and it works offline.
-export function speak(text) {
-  if (!isSoundEnabled()) return;
-  try {
-    if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 1.05;
-    utter.pitch = 0.9;
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find((v) => /en/i.test(v.lang));
-    if (preferred) utter.voice = preferred;
-    window.speechSynthesis.speak(utter);
-  } catch {
-    // Speech synthesis unavailable — fail silently.
-  }
-}
-
-// Real recorded clips of the Oru/Rendu/Moonu Tharam call terms — no browser
-// voice, on any device, actually speaks intelligible Tamil for this (tried
-// three different fixes; every device-installed Tamil voice either mangled
-// the words or dropped them outright when mixed with the Latin-script
-// amount in one utterance). The amount itself is still spoken live via
-// speak() below, since it changes with every bid and can't be pre-recorded
-// — only these three fixed phrases needed a real voice.
+// Real recorded clips of the fixed call-stage phrases ("Call one!", "Call
+// two!", "Final call!") — a live browser voice reading the same fixed line
+// every time is exactly what sounds robotic. The amount changes with every
+// bid and can't be pre-recorded, so it's spoken live right after the clip.
 const CALL_AUDIO = {
-  call_1: "/audio/call-oru-tharam.mp3",
-  call_2: "/audio/call-rendu-tharam.mp3",
-  final_call: "/audio/call-moonu-tharam.mp3",
+  call_1: "/audio/call-1.wav",
+  call_2: "/audio/call-2.wav",
+  final_call: "/audio/call-final.wav",
 };
 
-// The actual spoken version of a call stage: the amount, spoken live, then
-// the recorded Tamil term clip plays right after it finishes.
 export function speakCallAnnouncement(status, amountLabel) {
   if (!isSoundEnabled()) return;
-  const term = CALL_TERMS[status];
-  if (!term) return;
   const audioSrc = CALL_AUDIO[status];
-  const playTerm = () => {
-    if (!audioSrc) return;
-    try {
-      const clip = new Audio(audioSrc);
-      // Slightly faster than the recorded pace — the browser keeps pitch
-      // steady at this small a bump, so it just sounds a bit snappier
-      // rather than higher-pitched or rushed.
-      clip.playbackRate = 1.15;
-      clip.play().catch(() => {});
-    } catch {
-      // Audio playback unavailable — fail silently, same as speak() does.
-    }
-  };
-  if (!amountLabel) {
-    playTerm();
-    return;
-  }
-  try {
-    if (typeof window === "undefined" || !window.speechSynthesis) {
-      playTerm();
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(amountLabel);
-    utter.rate = 1.15; // matches the term clip's slightly-faster pace below
-    utter.pitch = 0.9;
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find((v) => /en/i.test(v.lang));
-    if (preferred) utter.voice = preferred;
-    // Play the term once the amount finishes — onerror too, so a browser
-    // that can't speak the amount at all still gets the term.
-    utter.onend = playTerm;
-    utter.onerror = playTerm;
-    window.speechSynthesis.speak(utter);
-  } catch {
-    playTerm();
-  }
+  if (!audioSrc) return;
+  const parts = [{ clip: audioSrc }];
+  if (amountLabel) parts.push({ text: amountLabel });
+  speakAnnouncement(parts);
 }

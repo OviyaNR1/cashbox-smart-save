@@ -1,55 +1,66 @@
-// Reusable auction-announcement script — casual, conversational Tamil mixed
-// naturally with English (the way a real person hosts an auction in a
-// WhatsApp group), not formal/literary Tamil. Each builder returns both the
-// spoken text (for speakSmart, see @/lib/tts) and a short visual label —
-// every announcement must be readable on-screen too, since a member with
-// sound off must get the same information (accessibility — never rely on
-// sound alone).
+// Reusable auction-announcement script. Fixed phrases (call terms, warnings,
+// open/close, "Congratulations!") are real recorded clips (public/audio/*)
+// — a live browser TTS voice reading the same fixed line every time is
+// exactly what sounds robotic; a real recorded clip doesn't. Only the parts
+// that actually change from event to event (the amount, the winner's name)
+// are spoken live via speakSmart, sandwiched between clips.
+//
+// Each builder returns { parts, visual } — `parts` for speakAnnouncement
+// (see @/lib/tts), and a short `visual` label. Every announcement must be
+// readable on-screen too, since a member with sound off must get the same
+// information (accessibility — never rely on sound alone).
 
-export function announceAuctionStart(groupLabel) {
+export function announceAuctionStart() {
   return {
-    spoken:
-      `Okay guys, ${groupLabel ? groupLabel + " " : ""}auction start ஆகுது! Everyone ready ah? ` +
-      `உங்க bid amount போட்டு submit பண்ணுங்க. Remember guys... lowest bid தான் win பண்ணும்!`,
-    visual: "🔔 Auction start ஆகுது — Auction started",
+    parts: [{ clip: "/audio/auction-start.wav" }],
+    visual: "🔔 Auction started",
   };
 }
 
 export function announceOneMinuteWarning() {
   return {
-    spoken: "Guys, இன்னும் one minute தான் இருக்கு! உங்க bid check பண்ணிக்கோங்க. இன்னும் chance இருக்கு... lowest bid தான் win பண்ணும்!",
-    visual: "⏰ One minute தான் இருக்கு — 1 minute left",
+    parts: [{ clip: "/audio/warn-1min.wav" }],
+    visual: "⏰ One minute left",
   };
 }
 
 export function announceThirtySeconds() {
   return {
-    spoken: "Guys, last 30 seconds!",
-    visual: "⚠️ Last 30 seconds guys!",
+    parts: [{ clip: "/audio/warn-30s.wav" }],
+    visual: "⚠️ Last 30 seconds!",
   };
 }
 
 export function announceTenSeconds() {
   return {
-    spoken: "Okay... 10 seconds guys!",
-    visual: "🔥 10 seconds guys!",
+    parts: [{ clip: "/audio/warn-10s.wav" }],
+    visual: "🔥 10 seconds left!",
   };
 }
 
-// Casual code-switched countdown counts in English, the way it's actually
-// spoken out loud in this context — not formal Tamil numerals.
-const COUNTDOWN_WORDS = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+const DIGIT_CLIPS = {
+  10: "/audio/digit-10.wav",
+  9: "/audio/digit-9.wav",
+  8: "/audio/digit-8.wav",
+  7: "/audio/digit-7.wav",
+  6: "/audio/digit-6.wav",
+  5: "/audio/digit-5.wav",
+  4: "/audio/digit-4.wav",
+  3: "/audio/digit-3.wav",
+  2: "/audio/digit-2.wav",
+  1: "/audio/digit-1.wav",
+};
 
 // n from 10 down to 1.
 export function announceCountdownDigit(n) {
-  const word = COUNTDOWN_WORDS[n];
-  if (!word) return null;
-  return { spoken: `${word}...`, visual: String(n) };
+  const clip = DIGIT_CLIPS[n];
+  if (!clip) return null;
+  return { parts: [{ clip }], visual: String(n) };
 }
 
 export function announceAuctionClosed() {
   return {
-    spoken: "Okay guys, auction closed! Let's see who is the winner...",
+    parts: [{ clip: "/audio/auction-closed.wav" }],
     visual: "🏁 Auction closed! Let's see the winner...",
   };
 }
@@ -58,14 +69,19 @@ export function announceAuctionClosed() {
 // spoken/shown — no other personal detail passes through this function.
 export function announceWinner(memberName, amountLabel) {
   return {
-    spoken: `இந்த month winner... ${memberName}! Winning amount ${amountLabel}. Congrats ${memberName}!`,
+    parts: [
+      { clip: "/audio/winner-prefix.wav" },
+      { text: memberName },
+      { text: `Winning bid: ${amountLabel}.` },
+      { clip: "/audio/winner-congrats.wav" },
+    ],
     visual: `🏆 Winner: ${memberName} — ${amountLabel}. Congrats!`,
   };
 }
 
 export function announceNewLowestBid(amountLabel) {
   return {
-    spoken: `New lowest bid guys, ${amountLabel}!`,
+    parts: [{ text: `New lowest bid, everyone: ${amountLabel}!` }],
     visual: `📉 New lowest bid: ${amountLabel}`,
   };
 }
