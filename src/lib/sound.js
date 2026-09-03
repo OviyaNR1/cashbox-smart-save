@@ -1,3 +1,5 @@
+import { isSoundEnabled } from "./soundPrefs";
+
 let ctx;
 
 function getCtx() {
@@ -70,6 +72,7 @@ function noiseBurst(start, duration, gainPeak = 0.3) {
 
 // Ding — signals a new call stage (Call 1 / Call 2 / Final Call).
 export function playCallBell() {
+  if (!isSoundEnabled()) return;
   try {
     tone(1046.5, 0, 0.25, "sine", 0.25);
     tone(1567.98, 0.05, 0.3, "sine", 0.15);
@@ -80,6 +83,7 @@ export function playCallBell() {
 
 // Two sharp knocks — the auction has closed.
 export function playGavel() {
+  if (!isSoundEnabled()) return;
   try {
     noiseBurst(0, 0.1, 0.45);
     noiseBurst(0.2, 0.12, 0.45);
@@ -90,6 +94,7 @@ export function playGavel() {
 
 // Short ascending chime — the winner's celebration moment.
 export function playFanfare() {
+  if (!isSoundEnabled()) return;
   try {
     [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => tone(freq, i * 0.12, 0.3, "triangle", 0.25));
   } catch {
@@ -101,6 +106,7 @@ export function playFanfare() {
 // from playCallBell (call-stage change) and playNewMessage (chat) so it
 // reads unmistakably as "someone bid," not just generic activity.
 export function playBidPlaced() {
+  if (!isSoundEnabled()) return;
   try {
     tone(1318.51, 0, 0.09, "square", 0.18);
     tone(1567.98, 0.07, 0.09, "square", 0.18);
@@ -112,6 +118,7 @@ export function playBidPlaced() {
 
 // Two rising notes — someone joined the live auction room.
 export function playMemberJoin() {
+  if (!isSoundEnabled()) return;
   try {
     tone(659.25, 0, 0.12, "sine", 0.15);
     tone(880, 0.08, 0.16, "sine", 0.15);
@@ -122,6 +129,7 @@ export function playMemberJoin() {
 
 // Two falling notes, lower and softer than the join chime — someone left.
 export function playMemberLeave() {
+  if (!isSoundEnabled()) return;
   try {
     tone(587.33, 0, 0.12, "sine", 0.12);
     tone(440, 0.08, 0.16, "sine", 0.12);
@@ -132,6 +140,7 @@ export function playMemberLeave() {
 
 // A brighter double-tone — you were @mentioned in the chat.
 export function playMention() {
+  if (!isSoundEnabled()) return;
   try {
     tone(987.77, 0, 0.1, "triangle", 0.2);
     tone(1318.51, 0.1, 0.18, "triangle", 0.2);
@@ -143,6 +152,7 @@ export function playMention() {
 // A single soft pop — someone sent a regular chat or voice message (not a
 // mention, not a join/leave). Distinct from all three of those.
 export function playNewMessage() {
+  if (!isSoundEnabled()) return;
   try {
     tone(740, 0, 0.09, "sine", 0.16);
   } catch {
@@ -152,6 +162,7 @@ export function playNewMessage() {
 
 // Soft per-second tick while a call-stage countdown is running.
 export function playTick() {
+  if (!isSoundEnabled()) return;
   try {
     tone(880, 0, 0.05, "square", 0.08);
   } catch {
@@ -161,6 +172,7 @@ export function playTick() {
 
 // Sharper, louder tick for the last few seconds of a countdown.
 export function playUrgentTick() {
+  if (!isSoundEnabled()) return;
   try {
     tone(1200, 0, 0.07, "square", 0.2);
   } catch {
@@ -191,6 +203,7 @@ export function callAnnouncement(status, amountLabel) {
 // Spoken call-outs via the browser's built-in text-to-speech — no external
 // service or API key required, and it works offline.
 export function speak(text) {
+  if (!isSoundEnabled()) return;
   try {
     if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
     window.speechSynthesis.cancel();
@@ -222,6 +235,7 @@ const CALL_AUDIO = {
 // The actual spoken version of a call stage: the amount, spoken live, then
 // the recorded Tamil term clip plays right after it finishes.
 export function speakCallAnnouncement(status, amountLabel) {
+  if (!isSoundEnabled()) return;
   const term = CALL_TERMS[status];
   if (!term) return;
   const audioSrc = CALL_AUDIO[status];

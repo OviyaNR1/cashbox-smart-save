@@ -8,16 +8,27 @@ import {
 import { formatMoney } from "@/lib/currency";
 import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
-import { playCallBell, playGavel, playBidPlaced, speak, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
+import { playCallBell, playGavel, playBidPlaced, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
+import { speakSmart } from "@/lib/tts";
+import {
+  announceAuctionStart,
+  announceOneMinuteWarning,
+  announceThirtySeconds,
+  announceTenSeconds,
+  announceCountdownDigit,
+  announceAuctionClosed,
+  announceWinner,
+} from "@/lib/auctionAnnouncements";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown } from "@/lib/useCountdown";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
-import { Gavel, Crown, Trophy, Building2, Phone, Radio, Eye } from "lucide-react";
+import { Gavel, Crown, Trophy, Building2, Phone, Radio, Eye, Volume2 } from "lucide-react";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
 import LiveActivityToasts from "@/components/auction/LiveActivityToasts";
+import SoundToggle from "@/components/auction/SoundToggle";
 
 const CALL_LABELS = { call_1: "Call 1", call_2: "Call 2", final_call: "Final Call" };
 
@@ -178,6 +189,34 @@ export default function AdminLiveAuction() {
     leadingBidIdRef.current = leadingId;
   }, [validBids[0]?.id, auction?.status]);
 
+  // Escalating countdown urgency — 30s / 10s spoken warnings, then a
+  // casual last-10 count, once each per call stage.
+  const warnedRef = useRef({ key: null, thirty: false, ten: false, digits: new Set() });
+  useEffect(() => {
+    const stageKey = auction?.call_stage_started_at;
+    if (warnedRef.current.key !== stageKey) {
+      warnedRef.current = { key: stageKey, thirty: false, ten: false, digits: new Set() };
+    }
+    if (countdown === null) return;
+    const w = warnedRef.current;
+    if (countdown <= 30 && countdown > 10 && !w.thirty) {
+      w.thirty = true;
+      const { spoken, visual } = announceThirtySeconds();
+      pushToast(visual, "default");
+      speakSmart(spoken);
+    } else if (countdown <= 10 && countdown > 0 && !w.ten) {
+      w.ten = true;
+      const { spoken, visual } = announceTenSeconds();
+      pushToast(visual, "default");
+      speakSmart(spoken);
+    }
+    if (countdown >= 1 && countdown <= 10 && !w.digits.has(countdown)) {
+      w.digits.add(countdown);
+      const digit = announceCountdownDigit(countdown);
+      if (digit) speakSmart(digit.spoken);
+    }
+  }, [countdown, auction?.call_stage_started_at]);
+
   const recordCompanyMonth = async () => {
     setBusy(true);
     const me = await base44.auth.me().catch(() => ({}));
@@ -209,6 +248,9 @@ export default function AdminLiveAuction() {
       min_decrement: plan.auction_min_decrement || 25,
     });
     logAudit({ module: "Live Auction", action: "start", record_id: created.id, details: `Started Month ${targetMonth} auction for group ${group.group_code} (starting ${startingAmount})` });
+    const { spoken, visual } = announceAuctionStart(group.group_name || group.group_code);
+    pushToast(visual, "default");
+    speakSmart(spoken);
     setBusy(false);
     loadAuction();
   };
@@ -219,82 +261,58 @@ export default function AdminLiveAuction() {
     logAudit({ module: "Live Auction", action: nextStatus, record_id: auction.id, details: `${CALL_LABELS[nextStatus]} (${CALL_TERMS[nextStatus]}) started for group ${group.group_code} at ${formatMoney(calledAmount, plan.currency)}` });
     playCallBell();
     speakCallAnnouncement(nextStatus, formatMoney(calledAmount, plan.currency));
+    // call_1/call_2 run a full 60s -- final_call only runs 30, so "one
+    // minute left" only makes sense for the first two.
+    if (nextStatus === "call_1" || nextStatus === "call_2") {
+      const oneMin = announceOneMinuteWarning();
+      pushToast(oneMin.visual, "default");
+      speakSmart(oneMin.spoken);
+    }
     setBusy(false);
     loadAuction();
   };
 
+  const testVoice = () => {
+    const { spoken } = announceAuctionStart(group?.group_name || group?.group_code || "this group");
+    speakSmart(spoken, { force: true });
+  };
+
   const closeAuction = async () => {
     setBusy(true);
-    const winningBid = validBids[0];
-    const outcome = calcAuctionOutcome({ plan, winningBid: winningBid.amount });
-    const me = await base44.auth.me().catch(() => ({}));
-    const winnerProf = profileOf(winningBid.member_profile_id);
-
-    const winner = await base44.entities.Winner.create({
-      group_id: group.id,
-      month_number: auction.month_number,
-      member_profile_id: winningBid.member_profile_id,
-      membership_id: winningBid.membership_id,
-      member_name: winnerProf?.full_name || "Member",
-      prize_amount: winningBid.amount,
-      announcement_date: new Date().toISOString().slice(0, 10),
-      approved_by: me.email || "admin",
-      status: "announced",
-      selection_method: "live_auction",
-    });
+    // Winner determination happens entirely server-side in this RPC — it
+    // re-reads auction_bids itself under a row lock rather than trusting
+    // this page's local `validBids` (which could theoretically be stale),
+    // and writes the winner/dividend/auction/group rows in one transaction.
+    // See close_live_auction() in the DB.
+    const { data, error } = await supabase.rpc("close_live_auction", { p_auction_id: auction.id });
+    if (error) {
+      alert(`Couldn't close the auction: ${error.message}`);
+      setBusy(false);
+      return;
+    }
+    const result = data?.[0] || {};
+    const winningAmount = result.out_winning_bid_amount;
+    const winnerProfileId = result.out_winner_member_profile_id;
+    const dividendPerMember = result.out_dividend_per_member;
+    const nextInstallment = result.out_next_installment;
+    const winnerProf = profileOf(winnerProfileId) || (await base44.entities.MemberProfile.get(winnerProfileId).catch(() => null));
 
     const memberships = await base44.entities.GroupMembership.filter({ group_id: group.id });
-    // The winning bid already carries the exact ticket it was placed with
-    // (place_bid() resolves this) — a person can hold multiple tickets in
-    // the same group, so matching on member_profile_id alone would mark
-    // an arbitrary one of their tickets as won instead of the one that
-    // actually bid. Fall back to the old member-profile match only for
-    // legacy bids recorded before membership_id existed.
-    const winningMembership = winningBid.membership_id
-      ? memberships.find((m) => m.id === winningBid.membership_id)
-      : memberships.find((m) => m.member_profile_id === winningBid.member_profile_id);
-    if (winningMembership) {
-      await base44.entities.GroupMembership.update(winningMembership.id, { has_won: true });
-    }
-
     const allActive = memberships.filter((m) => m.status === "active");
-    if (allActive.length) {
-      await base44.entities.Dividend.bulkCreate(
-        allActive.map((m) => ({
-          member_profile_id: m.member_profile_id,
-          user_id: m.user_id,
-          group_id: group.id,
-          month_number: auction.month_number,
-          amount: outcome.dividendPerMember,
-          status: "credited",
-        }))
-      );
-    }
-
-    await base44.entities.Auction.update(auction.id, {
-      status: "closed",
-      winning_bid_amount: winningBid.amount,
-      winner_member_profile_id: winningBid.member_profile_id,
-      closed_at: new Date().toISOString(),
-      closed_by: me.id,
-    });
     const newCurrentMonth = Math.min(auction.month_number, plan.duration_months);
-    await base44.entities.ChitGroup.update(group.id, { current_month: newCurrentMonth });
-
-    logAudit({ module: "Live Auction", action: "close", record_id: winner.id, details: `Closed Month ${auction.month_number} auction for group ${group.group_code} — winner ${winnerProf?.full_name || "member"} at ${winningBid.amount}` });
 
     // Send winner announcement messages automatically
     const monthLabel = `Month ${auction.month_number}`;
-    const prizeAmountStr = `${plan?.currency || "INR"} ${winningBid.amount}`;
+    const prizeAmountStr = `${plan?.currency || "INR"} ${winningAmount}`;
     const winnerName = winnerProf?.full_name || "Member";
-    const dividendStr = formatMoney(outcome.dividendPerMember, plan.currency);
-    const nextInstallmentStr = formatMoney(outcome.nextInstallment, plan.currency);
+    const dividendStr = formatMoney(dividendPerMember, plan.currency);
+    const nextInstallmentStr = formatMoney(nextInstallment, plan.currency);
 
     const groupLabel = group.group_name || group.group_code;
     const memberProfiles = await Promise.all(allActive.map(m => base44.entities.MemberProfile.get(m.member_profile_id)));
     for (const prof of memberProfiles) {
       if (prof?.mobile) {
-        const isWinner = prof.id === winningBid.member_profile_id;
+        const isWinner = prof.id === winnerProfileId;
         const template = isWinner ? "winner_announcement_winner_v5" : "winner_announcement_all_v5";
         const parameters = isWinner
           ? [winnerName, monthLabel, prizeAmountStr, dividendStr, nextInstallmentStr, groupLabel]
@@ -312,8 +330,15 @@ export default function AdminLiveAuction() {
     }
 
     playGavel();
-    speak(`Sold! Month ${auction.month_number} goes to ${winnerProf?.full_name || "the member"}, at ${formatMoney(winningBid.amount, plan.currency)}!`);
     fireConfetti();
+    const closedLine = announceAuctionClosed();
+    pushToast(closedLine.visual, "default");
+    speakSmart(closedLine.spoken);
+    setTimeout(() => {
+      const winnerLine = announceWinner(winnerProf?.full_name || "Member", formatMoney(winningAmount, plan.currency));
+      pushToast(winnerLine.visual, "bid");
+      speakSmart(winnerLine.spoken);
+    }, 1800);
     setBusy(false);
     setCloseConfirmOpen(false);
     setGroups((gs) => gs.map((g) => (g.id === group.id ? { ...g, current_month: newCurrentMonth } : g)));
@@ -323,9 +348,21 @@ export default function AdminLiveAuction() {
   return (
     <div className="space-y-6">
       <LiveActivityToasts toasts={toasts} />
-      <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-primary">Admin</p>
-        <h1 className="text-3xl font-semibold text-foreground mt-1">Live Auction</h1>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-primary">Admin</p>
+          <h1 className="text-3xl font-semibold text-foreground mt-1">Live Auction</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <SoundToggle />
+          <button
+            type="button"
+            onClick={testVoice}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-muted text-foreground hover:bg-muted/70"
+          >
+            <Volume2 className="w-3.5 h-3.5" /> Test Voice
+          </button>
+        </div>
       </div>
 
       <div className="bg-card rounded-2xl border border-border p-4 flex items-center gap-3 flex-wrap">
@@ -417,14 +454,25 @@ export default function AdminLiveAuction() {
             <StatCard label="Total Bids" value={bids.length} />
           </div>
 
-          {countdown !== null && (
-            <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6 text-center animate-pulse">
-              <p className="text-sm font-semibold text-rose-400 mb-1 tracking-wide">
-                {formatMoney(calledAmount, plan.currency)} — {CALL_TERMS[auction.status]}
-              </p>
-              <p className="text-5xl font-bold text-foreground tabular-nums">{countdown}</p>
-            </div>
-          )}
+          {countdown !== null && (() => {
+            const tier = countdown <= 10 ? "dramatic" : countdown <= 30 ? "elevated" : "normal";
+            return (
+              <div
+                className={`rounded-2xl p-6 text-center border transition-colors motion-reduce:animate-none ${
+                  tier === "dramatic"
+                    ? "bg-rose-500/20 border-rose-500/40 animate-pulse"
+                    : tier === "elevated"
+                    ? "bg-rose-500/10 border-rose-500/25"
+                    : "bg-amber-500/10 border-amber-500/20"
+                }`}
+              >
+                <p className={`text-sm font-semibold mb-1 tracking-wide ${tier === "normal" ? "text-amber-400" : "text-rose-400"}`}>
+                  {formatMoney(calledAmount, plan.currency)} — {CALL_TERMS[auction.status]}
+                </p>
+                <p className={`font-bold text-foreground tabular-nums transition-all ${tier === "dramatic" ? "text-7xl" : "text-5xl"}`}>{countdown}</p>
+              </div>
+            );
+          })()}
 
           <div className="bg-card rounded-2xl border border-border p-5">
             <p className="text-sm font-medium text-foreground flex items-center gap-2 mb-4"><Crown className="w-4 h-4 text-primary" /> Leaderboard</p>

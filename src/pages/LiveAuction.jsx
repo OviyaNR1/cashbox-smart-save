@@ -2,18 +2,30 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { base44, supabase } from "@/api/base44Client";
 import { formatMoney } from "@/lib/currency";
 import { calcAuctionOutcome } from "@/lib/liveAuctionEngine";
-import { playCallBell, playFanfare, playGavel, playBidPlaced, speak, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
+import { playCallBell, playFanfare, playGavel, playBidPlaced, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
 import { fireConfetti, fireWinnerConfetti } from "@/lib/confetti";
 import { useCountdown } from "@/lib/useCountdown";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { logAudit } from "@/lib/audit";
+import { speakSmart } from "@/lib/tts";
+import {
+  announceOneMinuteWarning,
+  announceThirtySeconds,
+  announceTenSeconds,
+  announceCountdownDigit,
+  announceAuctionClosed,
+  announceWinner,
+  announceNewLowestBid,
+  shouldAnnounceBid,
+} from "@/lib/auctionAnnouncements";
 import { Crown, Gavel, Building2, Trophy, Radio, Users, Calendar } from "lucide-react";
 import { collectionDateUTC } from "@/lib/dates";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
 import LiveActivityToasts from "@/components/auction/LiveActivityToasts";
+import SoundToggle from "@/components/auction/SoundToggle";
 
 // place_bid()'s rejection_reason is written for the audit log, not for a
 // member reading it mid-auction — translate the handful of fixed strings it
@@ -155,6 +167,12 @@ export default function LiveAuction() {
             ? state.myName
             : state.profiles?.find((p) => p.id === payload.new.member_profile_id)?.full_name;
           pushToast(`${bidderName || "A member"} sent the lowest bid`, "bid");
+          // A member repeatedly re-bidding shouldn't spam a voice line every
+          // time — at most one spoken "new lowest bid" every few seconds.
+          if (shouldAnnounceBid()) {
+            const { spoken } = announceNewLowestBid(formatMoney(payload.new.amount, state.plan?.currency));
+            speakSmart(spoken);
+          }
         }
         load();
       })
@@ -193,22 +211,68 @@ export default function LiveAuction() {
         const validBidsNow = (state.bids || []).filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
         const calledAmount = validBidsNow[0]?.amount ?? auction.starting_amount;
         speakCallAnnouncement(auction.status, formatMoney(calledAmount, state.plan?.currency));
+        // call_1/call_2 run a full 60s -- final_call only runs 30, so the
+        // "one minute left" line only makes sense for the first two.
+        if (auction.status === "call_1" || auction.status === "call_2") {
+          const { spoken, visual } = announceOneMinuteWarning();
+          pushToast(visual, "default");
+          speakSmart(spoken);
+        }
       } else if (auction.status === "closed") {
         const iWon = state.myMembership && auction.winner_member_profile_id === state.myMembership.member_profile_id;
+        const winnerName = state.profiles?.find((p) => p.id === auction.winner_member_profile_id)?.full_name || "Member";
+        const amountLabel = formatMoney(auction.winning_bid_amount, state.plan?.currency);
+        const closedLine = announceAuctionClosed();
+        pushToast(closedLine.visual, "default");
+        speakSmart(closedLine.spoken);
+        // A brief pause before the reveal, same beat as a real auctioneer —
+        // not waiting on the clip to finish (speakSmart resolves once
+        // playback starts, not once it ends), just a fixed dramatic gap.
+        setTimeout(() => {
+          const winnerLine = announceWinner(iWon ? "நீங்க" : winnerName, amountLabel);
+          pushToast(winnerLine.visual, iWon ? "bid" : "default");
+          speakSmart(winnerLine.spoken);
+        }, 1800);
         if (iWon) {
           playFanfare();
-          speak(`Sold! You won Month ${auction.month_number}.`);
           fireWinnerConfetti();
         } else {
           playGavel();
-          const winnerName = state.profiles?.find((p) => p.id === auction.winner_member_profile_id)?.full_name;
-          speak(winnerName ? `Sold! Month ${auction.month_number} goes to ${winnerName}!` : `Sold! Month ${auction.month_number} has closed.`);
           fireConfetti();
         }
       }
     }
     prevStatusRef.current = auction.status;
   }, [state.auction, state.myMembership]);
+
+  // Escalating countdown urgency — the same tick already plays a sound
+  // (see useCountdown), this just adds the spoken 1-minute / 30s / 10s
+  // warnings and a casual last-10 countdown, once each per call stage.
+  const warnedRef = useRef({ key: null, thirty: false, ten: false, digits: new Set() });
+  useEffect(() => {
+    const stageKey = state.auction?.call_stage_started_at;
+    if (warnedRef.current.key !== stageKey) {
+      warnedRef.current = { key: stageKey, thirty: false, ten: false, digits: new Set() };
+    }
+    if (countdown === null) return;
+    const w = warnedRef.current;
+    if (countdown <= 30 && countdown > 10 && !w.thirty) {
+      w.thirty = true;
+      const { spoken, visual } = announceThirtySeconds();
+      pushToast(visual, "default");
+      speakSmart(spoken);
+    } else if (countdown <= 10 && countdown > 0 && !w.ten) {
+      w.ten = true;
+      const { spoken, visual } = announceTenSeconds();
+      pushToast(visual, "default");
+      speakSmart(spoken);
+    }
+    if (countdown >= 1 && countdown <= 10 && !w.digits.has(countdown)) {
+      w.digits.add(countdown);
+      const digit = announceCountdownDigit(countdown);
+      if (digit) speakSmart(digit.spoken);
+    }
+  }, [countdown, state.auction?.call_stage_started_at]);
 
   // A mistyped digit under the countdown pressure locks in a real bid with
   // no undo — the first click asks for confirmation instead of submitting
@@ -369,12 +433,15 @@ export default function LiveAuction() {
           <p className="text-xs uppercase tracking-[0.2em] text-primary">Live Auction</p>
           <h1 className="text-3xl font-semibold text-foreground mt-1">{group.group_name || group.group_code} — Month {auction.month_number}</h1>
         </div>
-        {/* A constant, honest "this has been live for X" signal — like a
-            phone call's recording timer — distinct from the per-call-stage
-            countdown below, which only runs during an active call. */}
-        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 font-medium tabular-nums text-xs">
-          <Radio className="w-3 h-3 animate-pulse" /> LIVE {elapsed}
-        </span>
+        <div className="flex items-center gap-2">
+          {/* A constant, honest "this has been live for X" signal — like a
+              phone call's recording timer — distinct from the per-call-stage
+              countdown below, which only runs during an active call. */}
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 font-medium tabular-nums text-xs">
+            <Radio className="w-3 h-3 animate-pulse" /> LIVE {elapsed}
+          </span>
+          <SoundToggle />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
@@ -437,14 +504,28 @@ export default function LiveAuction() {
         </div>
       )}
 
-      {countdown !== null && (
-        <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6 text-center animate-pulse">
-          <p className="text-sm font-semibold text-rose-400 mb-1 tracking-wide">
-            ⚠️ {CALL_TERMS[auction.status]} — {formatMoney(lowest ? lowest.amount : auction.starting_amount, plan.currency)}
-          </p>
-          <p className="text-5xl font-bold text-foreground tabular-nums">{countdown}</p>
-        </div>
-      )}
+      {countdown !== null && (() => {
+        // Escalating urgency as the call stage runs down — calm at first,
+        // then increasingly dramatic in the final seconds.
+        const tier = countdown <= 10 ? "dramatic" : countdown <= 30 ? "elevated" : "normal";
+        return (
+          <div
+            className={`rounded-2xl p-6 text-center border transition-colors motion-reduce:animate-none ${
+              tier === "dramatic"
+                ? "bg-rose-500/20 border-rose-500/40 animate-pulse"
+                : tier === "elevated"
+                ? "bg-rose-500/10 border-rose-500/25"
+                : "bg-amber-500/10 border-amber-500/20"
+            }`}
+          >
+            <p className={`text-sm font-semibold mb-1 tracking-wide ${tier === "normal" ? "text-amber-400" : "text-rose-400"}`}>
+              {tier === "dramatic" ? "🔥" : "⚠️"} {CALL_TERMS[auction.status]} — {formatMoney(lowest ? lowest.amount : auction.starting_amount, plan.currency)}
+            </p>
+            <p className={`font-bold text-foreground tabular-nums transition-all ${tier === "dramatic" ? "text-7xl" : "text-5xl"}`}>{countdown}</p>
+            {tier === "dramatic" && <p className="text-xs text-rose-300 mt-1">Closing soon!</p>}
+          </div>
+        );
+      })()}
 
       {previewOutcome && (
         <div className="bg-card rounded-2xl border border-border p-5">
@@ -468,9 +549,12 @@ export default function LiveAuction() {
         <div className="bg-primary/5 rounded-2xl border-2 border-primary/40 p-5">
           <p className="text-sm font-medium text-foreground mb-1 flex items-center gap-2"><Gavel className="w-4 h-4 text-primary" /> Enter Your Bid</p>
           <p className="text-xs text-muted-foreground mb-3">
-            {lowest
-              ? <>Your bid must be lower than <b className="text-foreground">{formatMoney(lowest.amount, plan.currency)}</b></>
-              : <>Your bid must be <b className="text-foreground">{formatMoney(auction.starting_amount, plan.currency)}</b> or lower</>}
+            Enter an amount between{" "}
+            <b className="text-foreground tabular-nums">{formatMoney(plan.auction_min_bid > 0 ? plan.auction_min_bid : 1, plan.currency)}</b>{" "}
+            and next valid bid{" "}
+            <b className="text-foreground tabular-nums">
+              {formatMoney(lowest ? lowest.amount - (auction.min_decrement || 0) : auction.starting_amount, plan.currency)}
+            </b>
           </p>
           <div className="flex gap-2">
             <div className="relative flex-1">
