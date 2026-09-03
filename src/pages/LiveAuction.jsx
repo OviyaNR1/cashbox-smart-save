@@ -194,17 +194,16 @@ export default function LiveAuction() {
         playCallBell();
         const validBidsNow = (state.bids || []).filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
         const calledAmount = validBidsNow[0]?.amount ?? auction.starting_amount;
-        speakCallAnnouncement(auction.status, formatMoney(calledAmount, state.plan?.currency));
+        speakCallAnnouncement(auction.status, calledAmount, state.plan?.currency);
       } else if (auction.status === "closed") {
         const iWon = state.myMembership && auction.winner_member_profile_id === state.myMembership.member_profile_id;
         const winnerName = state.profiles?.find((p) => p.id === auction.winner_member_profile_id)?.full_name || "Member";
-        const amountLabel = formatMoney(auction.winning_bid_amount, state.plan?.currency);
         const closedLine = announceAuctionClosed();
         pushToast(closedLine.visual, "default");
         speakAnnouncement(closedLine.parts);
         // A brief pause before the reveal, same beat as a real auctioneer.
         setTimeout(() => {
-          const winnerLine = announceWinner(iWon ? "You" : winnerName, amountLabel);
+          const winnerLine = announceWinner(iWon ? "You" : winnerName, auction.winning_bid_amount, state.plan?.currency);
           pushToast(winnerLine.visual, iWon ? "bid" : "default");
           speakAnnouncement(winnerLine.parts);
         }, 1800);

@@ -1,5 +1,6 @@
 import { isSoundEnabled } from "./soundPrefs";
 import { speakAnnouncement } from "./tts";
+import { amountToClipParts } from "./numberSpeech";
 
 let ctx;
 
@@ -214,21 +215,25 @@ export function callAnnouncement(status, amountLabel) {
   return amountLabel ? `${amountLabel}. ${term}` : term;
 }
 
-// Real recorded clips of the fixed call-stage phrases ("Call one!", "Call
-// two!", "Final call!") — a live browser voice reading the same fixed line
-// every time is exactly what sounds robotic. The amount changes with every
-// bid and can't be pre-recorded, so it's spoken live right after the clip.
+// Real recorded clips of the fixed call-stage phrases, split around where
+// the amount goes — e.g. call_1 is "Okay guys... current lowest" [amount]
+// "Yaaravadhu lower pogareenga? Come on guys!". A live browser voice
+// reading a fixed line every time is exactly what sounds robotic; a real
+// recorded clip doesn't. The amount changes with every bid and can't be
+// pre-recorded whole, so it's built from real number-tile clips (see
+// numberSpeech.js) and sandwiched between the two halves.
 const CALL_AUDIO = {
-  call_1: "/audio/call-1.wav",
-  call_2: "/audio/call-2.wav",
-  final_call: "/audio/call-final.wav",
+  call_1: { a: "/audio/call-1-a.mp3", b: "/audio/call-1-b.mp3" },
+  call_2: { a: "/audio/call-2-a.mp3", b: "/audio/call-2-b.mp3" },
+  final_call: { a: "/audio/call-final-a.mp3", b: "/audio/call-final-b.mp3" },
 };
 
-export function speakCallAnnouncement(status, amountLabel) {
+export function speakCallAnnouncement(status, amount, currency) {
   if (!isSoundEnabled()) return;
-  const audioSrc = CALL_AUDIO[status];
-  if (!audioSrc) return;
-  const parts = [{ clip: audioSrc }];
-  if (amountLabel) parts.push({ text: amountLabel });
+  const clips = CALL_AUDIO[status];
+  if (!clips) return;
+  const parts = [{ clip: clips.a }];
+  if (amount != null) parts.push(...amountToClipParts(amount, currency));
+  parts.push({ clip: clips.b });
   speakAnnouncement(parts);
 }

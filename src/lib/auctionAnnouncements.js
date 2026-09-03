@@ -1,19 +1,28 @@
 // Reusable auction-announcement script. Fixed phrases (call terms, warnings,
 // open/close, "Congratulations!") are real recorded clips (public/audio/*)
 // — a live browser TTS voice reading the same fixed line every time is
-// exactly what sounds robotic; a real recorded clip doesn't. Only the parts
-// that actually change from event to event (the amount, the winner's name)
-// are spoken live via speakSmart, sandwiched between clips.
+// exactly what sounds robotic; a real recorded clip doesn't. Amounts change
+// every bid and can't be pre-recorded whole, but they're still built from
+// real recorded number-tile clips (see @/lib/numberSpeech) rather than
+// falling back to a live robotic voice — only a name (which can't be
+// tiled) is ever spoken live.
 //
 // Each builder returns { parts, visual } — `parts` for speakAnnouncement
 // (see @/lib/tts), and a short `visual` label. Every announcement must be
 // readable on-screen too, since a member with sound off must get the same
 // information (accessibility — never rely on sound alone).
 
-export function announceAuctionStart() {
+import { formatMoney } from "@/lib/currency";
+import { amountToClipParts } from "./numberSpeech";
+
+export function announceAuctionStart(startingAmount, currency) {
   return {
-    parts: [{ clip: "/audio/auction-start.wav" }],
-    visual: "🔔 Auction started",
+    parts: [
+      { clip: "/audio/auction-start-a.mp3" },
+      ...amountToClipParts(startingAmount, currency),
+      { clip: "/audio/auction-start-b.mp3" },
+    ],
+    visual: `🔔 Auction started — starting bid ${formatMoney(startingAmount, currency)}`,
   };
 }
 
@@ -60,29 +69,31 @@ export function announceCountdownDigit(n) {
 
 export function announceAuctionClosed() {
   return {
-    parts: [{ clip: "/audio/auction-closed.wav" }],
+    parts: [{ clip: "/audio/auction-closed.mp3" }],
     visual: "🏁 Auction closed! Let's see the winner...",
   };
 }
 
 // Only the member's approved display name and the winning amount are ever
 // spoken/shown — no other personal detail passes through this function.
-export function announceWinner(memberName, amountLabel) {
+// The name can't be pre-recorded (it's different every month), so it's the
+// one part still spoken live, sandwiched between the real recorded clips.
+export function announceWinner(memberName, amount, currency) {
   return {
     parts: [
-      { clip: "/audio/winner-prefix.wav" },
+      { clip: "/audio/winner-prefix.mp3" },
       { text: memberName },
-      { text: `Winning bid: ${amountLabel}.` },
-      { clip: "/audio/winner-congrats.wav" },
+      ...amountToClipParts(amount, currency),
+      { clip: "/audio/winner-congrats.mp3" },
     ],
-    visual: `🏆 Winner: ${memberName} — ${amountLabel}. Congrats!`,
+    visual: `🏆 Winner: ${memberName} — ${formatMoney(amount, currency)}. Congrats!`,
   };
 }
 
-export function announceNewLowestBid(amountLabel) {
+export function announceNewLowestBid(amount, currency) {
   return {
-    parts: [{ text: `New lowest bid, everyone: ${amountLabel}!` }],
-    visual: `📉 New lowest bid: ${amountLabel}`,
+    parts: amountToClipParts(amount, currency),
+    visual: `📉 New lowest bid: ${formatMoney(amount, currency)}`,
   };
 }
 

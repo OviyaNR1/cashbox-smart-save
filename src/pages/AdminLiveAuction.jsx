@@ -211,7 +211,7 @@ export default function AdminLiveAuction() {
       min_decrement: plan.auction_min_decrement || 25,
     });
     logAudit({ module: "Live Auction", action: "start", record_id: created.id, details: `Started Month ${targetMonth} auction for group ${group.group_code} (starting ${startingAmount})` });
-    const { parts, visual } = announceAuctionStart();
+    const { parts, visual } = announceAuctionStart(startingAmount, plan.currency);
     pushToast(visual, "default");
     speakAnnouncement(parts);
     setBusy(false);
@@ -223,7 +223,7 @@ export default function AdminLiveAuction() {
     await base44.entities.Auction.update(auction.id, { status: nextStatus, call_stage_started_at: new Date().toISOString() });
     logAudit({ module: "Live Auction", action: nextStatus, record_id: auction.id, details: `${CALL_LABELS[nextStatus]} (${CALL_TERMS[nextStatus]}) started for group ${group.group_code} at ${formatMoney(calledAmount, plan.currency)}` });
     playCallBell();
-    speakCallAnnouncement(nextStatus, formatMoney(calledAmount, plan.currency));
+    speakCallAnnouncement(nextStatus, calledAmount, plan.currency);
     setBusy(false);
     loadAuction();
   };
@@ -286,7 +286,7 @@ export default function AdminLiveAuction() {
     pushToast(closedLine.visual, "default");
     speakAnnouncement(closedLine.parts);
     setTimeout(() => {
-      const winnerLine = announceWinner(winnerProf?.full_name || "Member", formatMoney(winningAmount, plan.currency));
+      const winnerLine = announceWinner(winnerProf?.full_name || "Member", winningAmount, plan.currency);
       pushToast(winnerLine.visual, "bid");
       speakAnnouncement(winnerLine.parts);
     }, 1800);
