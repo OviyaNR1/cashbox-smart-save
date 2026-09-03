@@ -8,7 +8,7 @@ import {
 import { formatMoney } from "@/lib/currency";
 import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
-import { playCallBell, playGavel, speak, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
+import { playCallBell, playGavel, playBidPlaced, speak, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown } from "@/lib/useCountdown";
@@ -104,7 +104,13 @@ export default function AdminLiveAuction() {
     if (!auction) return;
     const channel = supabase
       .channel(`admin-auction-${auction.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "auction_bids", filter: `auction_id=eq.${auction.id}` }, () => loadAuction())
+      .on("postgres_changes", { event: "*", schema: "public", table: "auction_bids", filter: `auction_id=eq.${auction.id}` }, (payload) => {
+        // Only a genuinely new, accepted bid gets the notification tone —
+        // not a rejected attempt, and not the same row changing for some
+        // other reason.
+        if (payload.eventType === "INSERT" && payload.new?.status === "valid") playBidPlaced();
+        loadAuction();
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "auctions", filter: `id=eq.${auction.id}` }, () => loadAuction())
       .subscribe();
     return () => { supabase.removeChannel(channel); };

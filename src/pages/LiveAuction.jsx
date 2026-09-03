@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { base44, supabase } from "@/api/base44Client";
 import { formatMoney } from "@/lib/currency";
 import { calcAuctionOutcome } from "@/lib/liveAuctionEngine";
-import { playCallBell, playFanfare, playGavel, speak, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
+import { playCallBell, playFanfare, playGavel, playBidPlaced, speak, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
 import { fireConfetti, fireWinnerConfetti } from "@/lib/confetti";
 import { useCountdown } from "@/lib/useCountdown";
 import { logAudit } from "@/lib/audit";
@@ -140,7 +140,10 @@ export default function LiveAuction() {
     if (!state.auction) return;
     const channel = supabase
       .channel(`member-auction-${state.auction.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "auction_bids", filter: `auction_id=eq.${state.auction.id}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "auction_bids", filter: `auction_id=eq.${state.auction.id}` }, (payload) => {
+        if (payload.eventType === "INSERT" && payload.new?.status === "valid") playBidPlaced();
+        load();
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "auctions", filter: `id=eq.${state.auction.id}` }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -379,7 +382,10 @@ export default function LiveAuction() {
                 // Hides the native up/down spinner — a tiny, easy-to-mis-tap
                 // touch target that serves no purpose on a currency field
                 // where you're typing a specific amount, not incrementing.
-                className="h-14 pl-9 text-2xl font-semibold border-2 border-primary/50 focus-visible:border-primary rounded-xl [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                // The glow only runs while empty — once someone's typed an
+                // amount it's obviously found, and a pulsing focused input
+                // would just be distracting rather than helpful.
+                className={`h-14 pl-9 text-2xl font-semibold border-2 border-primary/50 focus-visible:border-primary rounded-xl [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${!bidAmount ? "bid-input-glow" : ""}`}
               />
             </div>
             <Button

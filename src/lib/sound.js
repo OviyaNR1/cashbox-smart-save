@@ -97,6 +97,19 @@ export function playFanfare() {
   }
 }
 
+// A bright, quick three-note "coin drop" — a new bid was placed. Distinct
+// from playCallBell (call-stage change) and playNewMessage (chat) so it
+// reads unmistakably as "someone bid," not just generic activity.
+export function playBidPlaced() {
+  try {
+    tone(1318.51, 0, 0.09, "square", 0.18);
+    tone(1567.98, 0.07, 0.09, "square", 0.18);
+    tone(2093.0, 0.14, 0.14, "square", 0.2);
+  } catch {
+    // ignore
+  }
+}
+
 // Two rising notes — someone joined the live auction room.
 export function playMemberJoin() {
   try {

@@ -80,6 +80,16 @@
   }
 }
 
+/* Draws attention to "type your bid here" — a pulsing glow, not a flicker,
+   so it reads as "focus me" rather than "loading" or "disabled". */
+@keyframes bid-input-glow {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.45); }
+  50% { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+}
+.bid-input-glow {
+  animation: bid-input-glow 1.8s ease-in-out infinite;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
