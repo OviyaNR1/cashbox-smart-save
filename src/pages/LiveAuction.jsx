@@ -5,11 +5,14 @@ import { calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { playCallBell, playFanfare, playGavel, playBidPlaced, speak, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
 import { fireConfetti, fireWinnerConfetti } from "@/lib/confetti";
 import { useCountdown } from "@/lib/useCountdown";
+import { useElapsedTime } from "@/lib/useElapsedTime";
+import { useLiveToasts } from "@/lib/useLiveToasts";
 import { logAudit } from "@/lib/audit";
-import { Crown, Gavel, Building2, Trophy } from "lucide-react";
+import { Crown, Gavel, Building2, Trophy, Radio, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
+import LiveActivityToasts from "@/components/auction/LiveActivityToasts";
 
 // place_bid()'s rejection_reason is written for the audit log, not for a
 // member reading it mid-auction — translate the handful of fixed strings it
@@ -52,6 +55,9 @@ export default function LiveAuction() {
   const [confirmingBid, setConfirmingBid] = useState(false);
   const prevStatusRef = useRef(null);
   const joinLoggedRef = useRef(new Set());
+  const [watchingCount, setWatchingCount] = useState(0);
+  const [bidFlash, setBidFlash] = useState(0);
+  const { toasts, pushToast } = useLiveToasts();
 
   const load = useCallback(async () => {
     try {
@@ -141,7 +147,14 @@ export default function LiveAuction() {
     const channel = supabase
       .channel(`member-auction-${state.auction.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "auction_bids", filter: `auction_id=eq.${state.auction.id}` }, (payload) => {
-        if (payload.eventType === "INSERT" && payload.new?.status === "valid") playBidPlaced();
+        if (payload.eventType === "INSERT" && payload.new?.status === "valid") {
+          playBidPlaced();
+          setBidFlash((n) => n + 1);
+          const bidderName = payload.new.member_profile_id === state.myMembership?.member_profile_id
+            ? state.myName
+            : state.profiles?.find((p) => p.id === payload.new.member_profile_id)?.full_name;
+          pushToast(`${bidderName || "A member"} sent the lowest bid`, "bid");
+        }
         load();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "auctions", filter: `id=eq.${state.auction.id}` }, () => load())
@@ -150,6 +163,7 @@ export default function LiveAuction() {
   }, [state.auction?.id, load]);
 
   const countdown = useCountdown(state.auction?.call_stage_started_at, state.auction?.status);
+  const elapsed = useElapsedTime(state.auction?.status !== "closed" ? state.auction?.created_at : null);
 
   useEffect(() => {
     const { auction, group, myMembership } = state;
@@ -328,10 +342,26 @@ export default function LiveAuction() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-primary">Live Auction</p>
-        <h1 className="text-3xl font-semibold text-foreground mt-1">{group.group_name || group.group_code} — Month {auction.month_number}</h1>
-        <p className="text-sm text-muted-foreground mt-1 capitalize">Status: {auction.status.replace("_", " ")}</p>
+      <LiveActivityToasts toasts={toasts} />
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-primary">Live Auction</p>
+          <h1 className="text-3xl font-semibold text-foreground mt-1">{group.group_name || group.group_code} — Month {auction.month_number}</h1>
+          <p className="text-sm text-muted-foreground mt-1 capitalize">Status: {auction.status.replace("_", " ")}</p>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          {/* A constant, honest "this has been live for X" signal — like a
+              phone call's recording timer — distinct from the per-call-stage
+              countdown below, which only runs during an active call. */}
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 font-medium tabular-nums">
+            <Radio className="w-3 h-3 animate-pulse" /> LIVE {elapsed}
+          </span>
+          {watchingCount > 0 && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-foreground font-medium">
+              <Eye className="w-3 h-3" /> {watchingCount} watching
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-sm text-amber-300">
@@ -419,8 +449,12 @@ export default function LiveAuction() {
           <p className="text-sm text-muted-foreground text-center py-6">No bids yet — be the first!</p>
         ) : (
           <div className="space-y-2">
+            {/* Top row's key includes bidFlash so the flash animation
+                replays every time the #1 spot changes, not just once. */}
             {validBids.map((b, i) => (
-              <div key={b.id} className={`flex items-center gap-3 p-3 rounded-xl border ${b.member_profile_id === myMembership?.member_profile_id ? "border-primary/50 bg-primary/5" : "border-border"}`}>
+              <div
+                key={i === 0 ? `${b.id}-${bidFlash}` : b.id}
+                className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${b.member_profile_id === myMembership?.member_profile_id ? "border-primary/50 bg-primary/5" : "border-border"} ${i === 0 ? "animate-in fade-in zoom-in-95 duration-500" : ""}`}>
                 <span className="w-8 text-center">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-foreground truncate">{profileOf(b.member_profile_id)?.full_name || "Member"}{b.member_profile_id === myMembership?.member_profile_id ? " (You)" : ""}</p>
@@ -452,6 +486,8 @@ export default function LiveAuction() {
         userId={state.me?.id}
         memberProfileId={myMembership?.member_profile_id}
         senderName={myName}
+        onJoin={(name) => pushToast(`${name} joined`, "join")}
+        onPresenceChange={setWatchingCount}
       />
     </div>
   );

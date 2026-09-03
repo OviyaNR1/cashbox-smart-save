@@ -12,9 +12,12 @@ import { playCallBell, playGavel, playBidPlaced, speak, CALL_TERMS, callAnnounce
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown } from "@/lib/useCountdown";
-import { Gavel, Crown, Trophy, Building2, Phone } from "lucide-react";
+import { useElapsedTime } from "@/lib/useElapsedTime";
+import { useLiveToasts } from "@/lib/useLiveToasts";
+import { Gavel, Crown, Trophy, Building2, Phone, Radio, Eye } from "lucide-react";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
+import LiveActivityToasts from "@/components/auction/LiveActivityToasts";
 
 const CALL_LABELS = { call_1: "Call 1", call_2: "Call 2", final_call: "Final Call" };
 
@@ -33,6 +36,9 @@ export default function AdminLiveAuction() {
   const [busy, setBusy] = useState(false);
   const [companyMonthRecorded, setCompanyMonthRecorded] = useState(false);
   const [me, setMe] = useState(null);
+  const [watchingCount, setWatchingCount] = useState(0);
+  const [bidFlash, setBidFlash] = useState(0);
+  const { toasts, pushToast } = useLiveToasts();
 
   useEffect(() => {
     base44.entities.ChitPlan.list("-created_date", 200).then(setPlans);
@@ -108,7 +114,17 @@ export default function AdminLiveAuction() {
         // Only a genuinely new, accepted bid gets the notification tone —
         // not a rejected attempt, and not the same row changing for some
         // other reason.
-        if (payload.eventType === "INSERT" && payload.new?.status === "valid") playBidPlaced();
+        if (payload.eventType === "INSERT" && payload.new?.status === "valid") {
+          playBidPlaced();
+          setBidFlash((n) => n + 1);
+          // Fetched fresh rather than from local `profiles` state — a
+          // first-time bidder in this auction wouldn't be in that list yet,
+          // since it's only populated from bids loadAuction already knows
+          // about, and this event can arrive before that re-fetch finishes.
+          base44.entities.MemberProfile.get(payload.new.member_profile_id)
+            .then((p) => pushToast(`${p?.full_name || "A member"} sent the lowest bid`, "bid"))
+            .catch(() => pushToast("A member sent the lowest bid", "bid"));
+        }
         loadAuction();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "auctions", filter: `id=eq.${auction.id}` }, () => loadAuction())
@@ -120,6 +136,7 @@ export default function AdminLiveAuction() {
   const validBids = bids.filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
   const rejectedBids = bids.filter((b) => b.status === "rejected");
   const countdown = useCountdown(auction?.call_stage_started_at, auction?.status);
+  const elapsed = useElapsedTime(auction?.status !== "closed" ? auction?.created_at : null);
 
   const startingAmount = plan ? getStartingAmount(plan) : 0;
   // What's actually being "called" right now — the current lowest bid, or
@@ -305,15 +322,16 @@ export default function AdminLiveAuction() {
 
   return (
     <div className="space-y-6">
+      <LiveActivityToasts toasts={toasts} />
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-primary">Admin</p>
         <h1 className="text-3xl font-semibold text-foreground mt-1">Live Auction</h1>
       </div>
 
-      <div className="bg-card rounded-2xl border border-border p-4 flex items-center gap-3">
+      <div className="bg-card rounded-2xl border border-border p-4 flex items-center gap-3 flex-wrap">
         <span className="text-sm font-medium text-muted-foreground">Group:</span>
         <Select value={groupId} onValueChange={setGroupId}>
-          <SelectTrigger className="w-96"><SelectValue placeholder="Choose a live auction group" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-96"><SelectValue placeholder="Choose a live auction group" /></SelectTrigger>
           <SelectContent>
             {liveAuctionGroups.map((g) => (
               <SelectItem key={g.id} value={g.id}>{g.group_name || g.group_code} — {plans.find((p) => p.id === g.plan_id)?.plan_name}</SelectItem>
@@ -374,11 +392,24 @@ export default function AdminLiveAuction() {
           // every member in the "Live now" panel. Admins have no stored
           // display name, so show a fixed generic label instead of leaking it.
           senderName="Admin"
+          onJoin={(name) => pushToast(`${name} joined`, "join")}
+          onPresenceChange={setWatchingCount}
         />
       )}
 
       {groupId && plan && !isCompanyMonth && auction && auction.status !== "closed" && (
         <>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 text-xs font-medium tabular-nums">
+              <Radio className="w-3 h-3 animate-pulse" /> LIVE {elapsed}
+            </span>
+            {watchingCount > 0 && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-foreground text-xs font-medium">
+                <Eye className="w-3 h-3" /> {watchingCount} watching
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Auction Month" value={`${auction.month_number}/${plan.duration_months}`} />
             <StatCard label="Auction Status" value={auction.status.replace("_", " ")} />
@@ -401,8 +432,12 @@ export default function AdminLiveAuction() {
               <p className="text-sm text-muted-foreground text-center py-6">No bids yet.</p>
             ) : (
               <div className="space-y-2">
+                {/* Top row's key includes bidFlash so the flash animation
+                    replays every time the #1 spot changes, not just once. */}
                 {validBids.map((b, i) => (
-                  <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl border border-border">
+                  <div
+                    key={i === 0 ? `${b.id}-${bidFlash}` : b.id}
+                    className={`flex items-center gap-3 p-3 rounded-xl border border-border ${i === 0 ? "animate-in fade-in zoom-in-95 duration-500" : ""}`}>
                     <span className="w-8 text-center">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground truncate">{profileOf(b.member_profile_id)?.full_name || "Member"}</p>

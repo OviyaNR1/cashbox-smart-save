@@ -33,7 +33,7 @@ const formatTime = (iso) => {
 // Supabase Realtime's Presence API; join/leave/chat/voice entries are also
 // written to auction_messages so anyone opening the panel mid-auction sees
 // the full history, not just what happens after they open it.
-export default function AuctionPresenceChat({ auctionId, groupId, userId, memberProfileId, senderName }) {
+export default function AuctionPresenceChat({ auctionId, groupId, userId, memberProfileId, senderName, onJoin, onPresenceChange }) {
   const [open, setOpen] = useState(false);
   const [present, setPresent] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -49,7 +49,11 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
   const inputRef = useRef(null);
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const onJoinRef = useRef(onJoin);
+  const onPresenceChangeRef = useRef(onPresenceChange);
   openRef.current = open;
+  onJoinRef.current = onJoin;
+  onPresenceChangeRef.current = onPresenceChange;
 
   // Unlock audio playback from whatever the first real interaction with the
   // page turns out to be — a nav click, opening the panel, anything —
@@ -108,14 +112,19 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
 
     channel.on("presence", { event: "sync" }, () => {
       const state = channel.presenceState();
-      setPresent(Object.values(state).map((entries) => entries[0]));
+      const list = Object.values(state).map((entries) => entries[0]);
+      setPresent(list);
+      onPresenceChangeRef.current?.(list.length);
     });
 
     // Separate from "sync" — these fire only for the delta, which is what a
     // per-arrival/departure sound needs. Filtered to skip your own join
     // (Presence echoes your own track() back to you too).
-    channel.on("presence", { event: "join" }, ({ key }) => {
-      if (key !== userId) playMemberJoin();
+    channel.on("presence", { event: "join" }, ({ key, newPresences }) => {
+      if (key === userId) return;
+      playMemberJoin();
+      const joinedName = newPresences?.[0]?.name;
+      if (joinedName) onJoinRef.current?.(joinedName);
     });
     channel.on("presence", { event: "leave" }, ({ key }) => {
       if (key !== userId) playMemberLeave();
