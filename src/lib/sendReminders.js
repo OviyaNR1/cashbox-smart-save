@@ -67,9 +67,17 @@ export const sendPaymentReminders = async (groupId) => {
         .join("\n");
       const template = daysLate <= 7 ? "payment_reminder_overdue_v4" : "payment_reminder_urgent_v4";
 
+      // late_interest_percent is the plan's own configured monthly rate
+      // (e.g. 2%) — was previously ignored entirely in favor of a flat,
+      // unrelated ₹10/day. Prorated by how many days late against the
+      // actual outstanding amount, same as a simple monthly interest
+      // calculation. A plan with no rate configured (0, e.g. live_auction/
+      // lakhbox) correctly charges no late fee rather than a fabricated one.
+      const lateFee = Math.round(outstandingAmount * ((plan?.late_interest_percent || 0) / 100) * (daysLate / 30));
+
       try {
         const parameters = template === "payment_reminder_urgent_v4"
-          ? [profile.full_name, daysLateStr, breakdown, `${currency} ${Math.floor(daysLate * 10)}`, amountStr]
+          ? [profile.full_name, daysLateStr, breakdown, `${currency} ${lateFee}`, amountStr]
           : [profile.full_name, daysLateStr, breakdown, amountStr];
 
         await sendWhatsAppMessage({
