@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -10,6 +10,7 @@ import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 
 export default function Receipt() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [sending, setSending] = useState("");
@@ -40,9 +41,9 @@ export default function Receipt() {
 
   if (error) return (
     <div className="max-w-2xl mx-auto">
-      <Link to="/payments" className="text-sm text-muted-foreground flex items-center gap-1 hover:text-foreground">
+      <button type="button" onClick={() => navigate(-1)} className="text-sm text-muted-foreground flex items-center gap-1 hover:text-foreground">
         <ArrowLeft className="w-4 h-4" /> Back to Payments
-      </Link>
+      </button>
       <div className="mt-8 bg-card rounded-2xl border border-border p-8 text-center">
         <p className="text-sm text-destructive">{error}</p>
         <p className="text-xs text-muted-foreground mt-2">The receipt may have been removed or is no longer accessible.</p>
@@ -78,6 +79,9 @@ export default function Receipt() {
         templateName: "receipt_ready_v3",
         parameters: [prof?.full_name || "Member", String(p.installment_number || "—"), formatMoney(p.amount, cur), receiptUrl],
       });
+      const sentAt = new Date().toISOString();
+      await base44.entities.Payment.update(p.id, { receipt_sent_at: sentAt });
+      setData((d) => ({ ...d, payment: { ...d.payment, receipt_sent_at: sentAt } }));
       toast({ title: "Sent via WhatsApp" });
     } catch (e) {
       toast({ title: "Could not send", description: e.message, variant: "destructive" });
@@ -87,22 +91,27 @@ export default function Receipt() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-        <Link to="/payments" className="text-sm text-muted-foreground flex items-center gap-1 hover:text-foreground">
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <button type="button" onClick={() => navigate(-1)} className="text-sm text-muted-foreground flex items-center gap-1 hover:text-foreground">
           <ArrowLeft className="w-4 h-4" /> Back to Payments
-        </Link>
+        </button>
         <div className="flex items-center gap-2">
           <Button onClick={downloadPdf} disabled={!!sending} className="rounded-full bg-primary hover:bg-primary/90">
             <Download className="w-4 h-4 mr-1" /> {sending === "pdf" ? "Generating…" : "Download PDF"}
           </Button>
           <Button onClick={sendViaWhatsApp} disabled={!!sending} variant="outline" className="rounded-full">
-            <MessageCircle className="w-4 h-4 mr-1" /> WhatsApp
+            <MessageCircle className="w-4 h-4 mr-1" /> {sending === "whatsapp" ? "Sending…" : p.receipt_sent_at ? "Resend" : "WhatsApp"}
           </Button>
           <Button onClick={() => window.print()} variant="outline" className="rounded-full">
             <Printer className="w-4 h-4" />
           </Button>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground text-right mb-4">
+        {p.receipt_sent_at
+          ? `Sent via WhatsApp on ${new Date(p.receipt_sent_at).toLocaleString()}`
+          : "Not sent via WhatsApp yet"}
+      </p>
 
       <div className="bg-card rounded-2xl border border-border p-8 print:shadow-none print:border-0">
         <div className="flex items-start justify-between pb-6 border-b border-border">

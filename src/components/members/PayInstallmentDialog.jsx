@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { getNextPaymentPreview } from "@/lib/paymentPreview";
 import {
@@ -54,6 +54,13 @@ export default function PayInstallmentDialog({
   const { toast } = useToast();
 
   const [pendingNumbers, setPendingNumbers] = useState(new Set());
+  // setSubmitting(true) only takes effect on the next render, so it can't
+  // block a second click/tap that lands in the same tick (double-tap on
+  // mobile, or a duplicate click/touchend some browsers still emit) --
+  // this ref is checked-and-set synchronously as the very first thing in
+  // handleSubmit, closing that gap. It's what actually stopped the same
+  // installment being bulkCreate'd twice.
+  const submitLockRef = useRef(false);
 
   useEffect(() => {
     if (!open) {
@@ -131,8 +138,11 @@ export default function PayInstallmentDialog({
   const totalDue = items.reduce((s, i) => s + i.amount, 0);
   const remaining = totalDue - amount;
 
+  const screenshotMissing = method === "upi" && !screenshotPath;
+
   const handleSubmit = async () => {
-    if (!installmentsToPay.length) return;
+    if (!installmentsToPay.length || screenshotMissing || submitLockRef.current) return;
+    submitLockRef.current = true;
     setSubmitting(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -163,6 +173,7 @@ export default function PayInstallmentDialog({
     } catch (e) {
       toast({ title: e.message || "Payment failed", variant: "destructive" });
     }
+    submitLockRef.current = false;
     setSubmitting(false);
   };
 
@@ -308,11 +319,14 @@ export default function PayInstallmentDialog({
                 />
               </div>
               <FileUpload
-                label="Payment screenshot (optional)"
+                label={method === "upi" ? "Payment screenshot (required)" : "Payment screenshot (optional)"}
                 value={screenshotPath}
                 onChange={setScreenshotPath}
                 bucket="payment-proofs"
               />
+              {method === "upi" && (
+                <p className="text-xs text-muted-foreground -mt-2">A screenshot is required for UPI payments.</p>
+              )}
             </>
           )}
         </div>
@@ -327,13 +341,15 @@ export default function PayInstallmentDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={submitting || !installmentsToPay.length}
+            disabled={submitting || !installmentsToPay.length || screenshotMissing}
             className="rounded-full bg-primary hover:bg-primary/90"
           >
             {submitting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
               </>
+            ) : screenshotMissing ? (
+              "Attach a screenshot to submit"
             ) : installmentsToPay.length > 1 ? (
               `Submit ${installmentsToPay.length} Payments`
             ) : (

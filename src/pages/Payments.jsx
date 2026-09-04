@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Plus, Check, X, FileText, Search, Image } from "lucide-react";
+import { Plus, Check, X, FileText, Search, Image, MessageCircle, MessageCircleOff } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatMoney } from "@/lib/currency";
 import { logAudit } from "@/lib/audit";
@@ -255,6 +255,17 @@ export default function Payments() {
                         <Link to={`/receipt/${p.id}`} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground" title="Receipt">
                           <FileText className="w-4 h-4" />
                         </Link>
+                        {p.receipt_sent_at ? (
+                          <MessageCircle
+                            className="w-4 h-4 text-emerald-400"
+                            title={`Receipt sent ${new Date(p.receipt_sent_at).toLocaleString()}`}
+                          />
+                        ) : (
+                          <MessageCircleOff
+                            className="w-4 h-4 text-muted-foreground/40"
+                            title="Receipt not sent via WhatsApp yet"
+                          />
+                        )}
                       </div>
                     </td>
                   </tr>

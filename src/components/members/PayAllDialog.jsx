@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import {
   Dialog,
@@ -43,6 +43,10 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
   const [submitting, setSubmitting] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const { toast } = useToast();
+  // See PayInstallmentDialog.jsx for why this ref (not the submitting
+  // state, which only updates on the next render) is what actually stops a
+  // double-tap from bulkCreate-ing the same payments twice.
+  const submitLockRef = useRef(false);
 
   // Every item defaults to selected whenever the dialog opens with a new
   // item set — matches PayInstallmentDialog's own default-all-selected
@@ -90,8 +94,11 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
       .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_ID, variant: "destructive" }));
   };
 
+  const screenshotMissing = method === "upi" && !screenshotPath;
+
   const handleSubmit = async () => {
-    if (!chosen.length) return;
+    if (!chosen.length || screenshotMissing || submitLockRef.current) return;
+    submitLockRef.current = true;
     setSubmitting(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -120,6 +127,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
     } catch (e) {
       toast({ title: e.message || "Payment failed", variant: "destructive" });
     }
+    submitLockRef.current = false;
     setSubmitting(false);
   };
 
@@ -248,11 +256,14 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
                     />
                   </div>
                   <FileUpload
-                    label="Payment screenshot (optional)"
+                    label={method === "upi" ? "Payment screenshot (required)" : "Payment screenshot (optional)"}
                     value={screenshotPath}
                     onChange={setScreenshotPath}
                     bucket="payment-proofs"
                   />
+                  {method === "upi" && (
+                    <p className="text-xs text-muted-foreground -mt-2">A screenshot is required for UPI payments.</p>
+                  )}
                 </>
               )}
             </>
@@ -265,13 +276,15 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={submitting || !chosen.length}
+            disabled={submitting || !chosen.length || screenshotMissing}
             className="rounded-full bg-primary hover:bg-primary/90"
           >
             {submitting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
               </>
+            ) : screenshotMissing ? (
+              "Attach a screenshot to submit"
             ) : chosen.length > 1 ? (
               `Submit ${chosen.length} Payments`
             ) : (
