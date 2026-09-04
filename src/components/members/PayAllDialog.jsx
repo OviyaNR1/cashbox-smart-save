@@ -333,7 +333,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
         </div>
 
         {screenshotMissing && (
-          <p className="text-xs text-amber-400 text-right">
+          <p className="text-xs text-amber-400">
             Attach a payment screenshot above to enable Submit.
           </p>
         )}
