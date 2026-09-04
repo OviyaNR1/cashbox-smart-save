@@ -16,7 +16,6 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { formatMoney } from "@/lib/currency";
@@ -39,9 +38,9 @@ const METHODS_WITH_PROOF = ["upi", "bank_transfer"];
 const DRAFT_KEY = "cashbox_payall_draft_v1";
 const DRAFT_MAX_AGE_MS = 30 * 60 * 1000;
 
-function saveDraft({ method, reference, selectedKeys }) {
+function saveDraft({ method, selectedKeys }) {
   try {
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ method, reference, selectedKeys, ts: Date.now() }));
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ method, selectedKeys, ts: Date.now() }));
   } catch { /* storage unavailable — degrades to today's behavior */ }
 }
 
@@ -68,7 +67,6 @@ function clearDraft() {
 // consolidated "Total Due" summary.
 export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }) {
   const [method, setMethod] = useState("upi");
-  const [reference, setReference] = useState("");
   const [screenshotPath, setScreenshotPath] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selected, setSelected] = useState(new Set());
@@ -86,7 +84,6 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
   // restore a specific selection instead (see below).
   useEffect(() => {
     if (!open) {
-      setReference("");
       setScreenshotPath("");
       return;
     }
@@ -109,7 +106,6 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
     const restoredSelection = (draft.selectedKeys || []).filter((k) => validKeys.has(k));
     setSelected(new Set(restoredSelection.length ? restoredSelection : allItems.map((i) => i.key)));
     if (draft.method) setMethod(draft.method);
-    if (draft.reference) setReference(draft.reference);
     onOpenChange(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allItems.length]);
@@ -140,7 +136,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
   };
 
   const copyUpiId = () => {
-    saveDraft({ method, reference, selectedKeys: [...selected] });
+    saveDraft({ method, selectedKeys: [...selected] });
     navigator.clipboard?.writeText(BUSINESS_UPI_ID)
       .then(() => toast({ title: "UPI ID copied", description: "Paste it in your UPI app to pay." }))
       .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_ID, variant: "destructive" }));
@@ -181,7 +177,6 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
           method,
           currency: i.currency,
           status: "pending",
-          confirmation_number: method !== "cash" ? (reference || undefined) : undefined,
           etransfer_screenshot_url: METHODS_WITH_PROOF.includes(method) ? (screenshotPath || undefined) : undefined,
         }))
       );
@@ -279,7 +274,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
                     amount: totalsByCurrency.INR,
                     note: `CashBox Installments x${chosen.length}`,
                   })}
-                  onClick={() => saveDraft({ method, reference, selectedKeys: [...selected] })}
+                  onClick={() => saveDraft({ method, selectedKeys: [...selected] })}
                   className="flex items-center justify-center gap-2 w-full h-10 rounded-lg border border-primary/30 bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/15 transition-colors"
                 >
                   <Smartphone className="w-4 h-4" /> Pay {totalDisplay} via UPI App
@@ -325,15 +320,6 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
 
               {method !== "cash" && (
                 <>
-                  <div>
-                    <Label className="text-xs">Reference / Confirmation #</Label>
-                    <Input
-                      className="mt-1"
-                      value={reference}
-                      onChange={(e) => setReference(e.target.value)}
-                      placeholder="Enter reference number"
-                    />
-                  </div>
                   <FileUpload
                     label={method === "upi" ? "Payment screenshot (required)" : "Payment screenshot (optional)"}
                     value={screenshotPath}

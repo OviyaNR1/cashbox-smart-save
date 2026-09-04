@@ -17,7 +17,6 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { formatMoney } from "@/lib/currency";
@@ -47,9 +46,9 @@ const METHODS_WITH_PROOF = ["upi", "bank_transfer"];
 const DRAFT_KEY = "cashbox_pay_draft_v1";
 const DRAFT_MAX_AGE_MS = 30 * 60 * 1000;
 
-function saveDraft(membershipId, { method, reference }) {
+function saveDraft(membershipId, { method }) {
   try {
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ membershipId, method, reference, ts: Date.now() }));
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ membershipId, method, ts: Date.now() }));
   } catch { /* storage unavailable — degrades to today's behavior */ }
 }
 
@@ -80,7 +79,6 @@ export default function PayInstallmentDialog({
   onPaid,
 }) {
   const [method, setMethod] = useState("upi");
-  const [reference, setReference] = useState("");
   const [screenshotPath, setScreenshotPath] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -99,7 +97,6 @@ export default function PayInstallmentDialog({
 
   useEffect(() => {
     if (!open) {
-      setReference("");
       setScreenshotPath("");
       return;
     }
@@ -156,7 +153,6 @@ export default function PayInstallmentDialog({
     if (!draft) return;
     draftRestoredRef.current = true;
     if (draft.method) setMethod(draft.method);
-    if (draft.reference) setReference(draft.reference);
     onOpenChange(true);
   }, [membership?.id, items.length, onOpenChange]);
 
@@ -186,7 +182,7 @@ export default function PayInstallmentDialog({
   // inside WhatsApp/Instagram's own in-app browser, which frequently
   // swallows custom-scheme navigations instead of launching the UPI app.
   const copyUpiId = () => {
-    saveDraft(membership.id, { method, reference });
+    saveDraft(membership.id, { method });
     navigator.clipboard?.writeText(BUSINESS_UPI_ID)
       .then(() => toast({ title: "UPI ID copied", description: "Paste it in your UPI app to pay." }))
       .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_ID, variant: "destructive" }));
@@ -212,7 +208,6 @@ export default function PayInstallmentDialog({
           method,
           currency,
           status: "pending",
-          confirmation_number: method !== "cash" ? (reference || undefined) : undefined,
           etransfer_screenshot_url: METHODS_WITH_PROOF.includes(method) ? (screenshotPath || undefined) : undefined,
         }))
       );
@@ -222,7 +217,6 @@ export default function PayInstallmentDialog({
       });
       clearDraft();
       onOpenChange(false);
-      setReference("");
       setScreenshotPath("");
       if (onPaid) onPaid();
     } catch (e) {
@@ -309,7 +303,7 @@ export default function PayInstallmentDialog({
                 // (plan.plan_name has a rupee symbol and commas).
                 note: `CashBox Installment ${installmentsToPay.map((i) => i.number).join(",")}`,
               })}
-              onClick={() => saveDraft(membership.id, { method, reference })}
+              onClick={() => saveDraft(membership.id, { method })}
               className="flex items-center justify-center gap-2 w-full h-10 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
             >
               <Smartphone className="w-4 h-4" /> Pay {formatMoney(amount, currency)} via UPI App
@@ -358,15 +352,6 @@ export default function PayInstallmentDialog({
 
           {method !== "cash" && (
             <>
-              <div>
-                <Label className="text-xs">Reference / Confirmation #</Label>
-                <Input
-                  className="mt-1"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder="Enter reference number"
-                />
-              </div>
               <FileUpload
                 label={method === "upi" ? "Payment screenshot (required)" : "Payment screenshot (optional)"}
                 value={screenshotPath}
