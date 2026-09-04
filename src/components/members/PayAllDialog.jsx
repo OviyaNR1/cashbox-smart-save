@@ -31,6 +31,36 @@ const PAYMENT_METHODS = [
 ];
 const METHODS_WITH_PROOF = ["upi", "bank_transfer"];
 
+// See PayInstallmentDialog.jsx's DRAFT_KEY comment — same reload-survival
+// fix, applied here too since this dialog has the identical UPI deep-link
+// hand-off. Keyed globally (not per-membership) since this dialog already
+// spans every membership a member has; a member only has one of these
+// carts in flight at a time.
+const DRAFT_KEY = "cashbox_payall_draft_v1";
+const DRAFT_MAX_AGE_MS = 30 * 60 * 1000;
+
+function saveDraft({ method, reference, selectedKeys }) {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ method, reference, selectedKeys, ts: Date.now() }));
+  } catch { /* storage unavailable — degrades to today's behavior */ }
+}
+
+function readDraft() {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw);
+    if (Date.now() - (draft.ts || 0) > DRAFT_MAX_AGE_MS) return null;
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* nothing to clear */ }
+}
+
 // Cart-style checkout across every unpaid installment a member has, across
 // all of their tickets and groups at once — instead of paying one ticket's
 // installments at a time (PayInstallmentDialog), this is the "select what
@@ -47,22 +77,42 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
   // state, which only updates on the next render) is what actually stops a
   // double-tap from bulkCreate-ing the same payments twice.
   const submitLockRef = useRef(false);
+  const draftRestoredRef = useRef(false);
   const [qrDataUrl, setQrDataUrl] = useState("");
 
   // Every item defaults to selected whenever the dialog opens with a new
   // item set — matches PayInstallmentDialog's own default-all-selected
-  // behavior for a single ticket.
+  // behavior for a single ticket. Skipped when a saved draft is about to
+  // restore a specific selection instead (see below).
   useEffect(() => {
     if (!open) {
       setReference("");
       setScreenshotPath("");
       return;
     }
+    if (readDraft()) return;
     setSelected(new Set((items || []).map((i) => i.key)));
   }, [open, items]);
 
   const allItems = items || [];
   const chosen = allItems.filter((i) => selected.has(i.key));
+
+  // Runs once real items are available. Restores the in-progress
+  // method/reference/selection and reopens the dialog after a round trip
+  // to the UPI app reloaded the page (see DRAFT_KEY comment above).
+  useEffect(() => {
+    if (draftRestoredRef.current || !allItems.length) return;
+    const draft = readDraft();
+    if (!draft) return;
+    draftRestoredRef.current = true;
+    const validKeys = new Set(allItems.map((i) => i.key));
+    const restoredSelection = (draft.selectedKeys || []).filter((k) => validKeys.has(k));
+    setSelected(new Set(restoredSelection.length ? restoredSelection : allItems.map((i) => i.key)));
+    if (draft.method) setMethod(draft.method);
+    if (draft.reference) setReference(draft.reference);
+    onOpenChange(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allItems.length]);
 
   // Almost every member only ever holds INR tickets (Canada is launched but
   // hidden), but nothing stops one person holding tickets in both — total
@@ -90,6 +140,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
   };
 
   const copyUpiId = () => {
+    saveDraft({ method, reference, selectedKeys: [...selected] });
     navigator.clipboard?.writeText(BUSINESS_UPI_ID)
       .then(() => toast({ title: "UPI ID copied", description: "Paste it in your UPI app to pay." }))
       .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_ID, variant: "destructive" }));
@@ -138,6 +189,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
         title: chosen.length > 1 ? `${chosen.length} payments submitted!` : "Payment submitted!",
         description: "An admin will confirm receipt shortly.",
       });
+      clearDraft();
       onOpenChange(false);
       if (onPaid) onPaid();
     } catch (e) {
@@ -227,6 +279,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
                     amount: totalsByCurrency.INR,
                     note: `CashBox Installments x${chosen.length}`,
                   })}
+                  onClick={() => saveDraft({ method, reference, selectedKeys: [...selected] })}
                   className="flex items-center justify-center gap-2 w-full h-10 rounded-lg border border-primary/30 bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/15 transition-colors"
                 >
                   <Smartphone className="w-4 h-4" /> Pay {totalDisplay} via UPI App
@@ -297,7 +350,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-full">
+          <Button variant="outline" onClick={() => { clearDraft(); onOpenChange(false); }} className="rounded-full">
             Cancel
           </Button>
           <Button

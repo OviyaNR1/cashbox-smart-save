@@ -23,7 +23,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { formatMoney } from "@/lib/currency";
 import FileUpload from "@/components/members/FileUpload";
 import { buildUpiPaymentLink, BUSINESS_UPI_ID } from "@/lib/upi";
-import { Loader2, CreditCard, Check, Smartphone, Copy } from "lucide-react";
+import { Loader2, CreditCard, Smartphone, Copy } from "lucide-react";
 import QRCode from "qrcode";
 
 const PAYMENT_METHODS = [
@@ -35,6 +35,40 @@ const PAYMENT_METHODS = [
 // no reference field or screenshot — nothing to attach. UPI/Bank Transfer
 // get both, since those are the methods that actually produce a receipt.
 const METHODS_WITH_PROOF = ["upi", "bank_transfer"];
+
+// Tapping the UPI deep link hands off to another app for however long the
+// member takes to pay and screenshot the confirmation — mobile browsers
+// frequently reclaim/reload a backgrounded tab during that gap, which wipes
+// all in-memory React state (including this dialog being open at all). A
+// member returning from paying to find the dialog just gone, with no way to
+// attach the proof they already have, is exactly the "flow isn't working"
+// complaint this fixes. Saving a tiny draft right before navigating and
+// restoring it on the next mount makes the round trip survive a reload.
+const DRAFT_KEY = "cashbox_pay_draft_v1";
+const DRAFT_MAX_AGE_MS = 30 * 60 * 1000;
+
+function saveDraft(membershipId, { method, reference }) {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ membershipId, method, reference, ts: Date.now() }));
+  } catch { /* storage unavailable — degrades to today's behavior */ }
+}
+
+function readDraft(membershipId) {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw);
+    if (draft.membershipId !== membershipId) return null;
+    if (Date.now() - (draft.ts || 0) > DRAFT_MAX_AGE_MS) return null;
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* nothing to clear */ }
+}
 
 export default function PayInstallmentDialog({
   open,
@@ -50,7 +84,6 @@ export default function PayInstallmentDialog({
   const [screenshotPath, setScreenshotPath] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [preview, setPreview] = useState(null);
-  const [selected, setSelected] = useState(new Set());
   const { toast } = useToast();
 
   const [pendingNumbers, setPendingNumbers] = useState(new Set());
@@ -62,6 +95,7 @@ export default function PayInstallmentDialog({
   // handleSubmit, closing that gap. It's what actually stopped the same
   // installment being bulkCreate'd twice.
   const submitLockRef = useRef(false);
+  const draftRestoredRef = useRef(false);
 
   useEffect(() => {
     if (!open) {
@@ -106,17 +140,25 @@ export default function PayInstallmentDialog({
     : [{ number: (membership?.paid_installments || 0) + 1, amount: plan?.monthly_contribution || 0, dueDate: null }];
   const items = allItems.filter((i) => !pendingNumbers.has(i.number));
 
-  // Default every item to selected whenever the set of items changes (new
-  // preview, pending-payment info, or dialog reopened).
-  useEffect(() => {
-    setSelected(new Set(items.map((i) => i.number)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preview, pendingNumbers, membership?.id]);
-
-  const installmentsToPay = items.filter((i) => selected.has(i.number));
+  // A single ticket's overdue installments are always paid together as one
+  // total, not picked individually — partial catch-up isn't a thing here
+  // (unlike PayAllDialog's cart, which genuinely needs per-ticket selection
+  // across a member's several groups).
+  const installmentsToPay = items;
   const amount = installmentsToPay.reduce((s, i) => s + i.amount, 0);
-  const totalDue = items.reduce((s, i) => s + i.amount, 0);
-  const remaining = totalDue - amount;
+
+  // Runs once real data is available for this membership. Restores the
+  // in-progress method/reference and reopens the dialog after a round trip
+  // to the UPI app reloaded the page (see DRAFT_KEY comment above).
+  useEffect(() => {
+    if (draftRestoredRef.current || !membership?.id || !items.length) return;
+    const draft = readDraft(membership.id);
+    if (!draft) return;
+    draftRestoredRef.current = true;
+    if (draft.method) setMethod(draft.method);
+    if (draft.reference) setReference(draft.reference);
+    onOpenChange(true);
+  }, [membership?.id, items.length, onOpenChange]);
 
   // Scanning a QR code sidesteps both of the reliability issues the deep
   // link and manual copy-paste have: it doesn't depend on the browser
@@ -139,20 +181,12 @@ export default function PayInstallmentDialog({
 
   if (!membership || !plan) return null;
 
-  const toggle = (number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(number)) next.delete(number);
-      else next.add(number);
-      return next;
-    });
-  };
-
   // Fallback for when the upi:// deep link can't hand off to an external
   // app — most commonly because the member tapped a CashBox link from
   // inside WhatsApp/Instagram's own in-app browser, which frequently
   // swallows custom-scheme navigations instead of launching the UPI app.
   const copyUpiId = () => {
+    saveDraft(membership.id, { method, reference });
     navigator.clipboard?.writeText(BUSINESS_UPI_ID)
       .then(() => toast({ title: "UPI ID copied", description: "Paste it in your UPI app to pay." }))
       .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_ID, variant: "destructive" }));
@@ -186,6 +220,7 @@ export default function PayInstallmentDialog({
         title: installmentsToPay.length > 1 ? `${installmentsToPay.length} payments submitted!` : "Payment submitted!",
         description: "An admin will confirm receipt shortly.",
       });
+      clearDraft();
       onOpenChange(false);
       setReference("");
       setScreenshotPath("");
@@ -219,18 +254,9 @@ export default function PayInstallmentDialog({
           ) : items.length > 1 ? (
             <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
               {items.map((item) => (
-                <label
-                  key={item.number}
-                  className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(item.number)}
-                    onChange={() => toggle(item.number)}
-                    className="w-4 h-4 accent-[#ffb833] shrink-0"
-                  />
+                <div key={item.number} className="flex items-center gap-3 px-4 py-3">
                   <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold grid place-items-center shrink-0">
-                    {selected.has(item.number) ? <Check className="w-3.5 h-3.5" /> : item.number}
+                    {item.number}
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground">Installment #{item.number}</p>
@@ -239,19 +265,11 @@ export default function PayInstallmentDialog({
                   <p className="text-sm font-semibold tabular-nums text-foreground shrink-0">
                     {formatMoney(item.amount, currency)}
                   </p>
-                </label>
-              ))}
-              <div className="px-4 py-3 bg-muted/30 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-foreground">Total Amount</span>
-                  <span className="text-xl font-bold text-primary tabular-nums">{formatMoney(amount, currency)}</span>
                 </div>
-                {remaining > 0 && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Remaining after this payment</span>
-                    <span className="text-xs font-medium text-destructive tabular-nums">{formatMoney(remaining, currency)}</span>
-                  </div>
-                )}
+              ))}
+              <div className="px-4 py-3 bg-muted/30 flex items-center justify-between">
+                <span className="text-sm font-semibold text-foreground">Total Amount ({items.length} installments)</span>
+                <span className="text-xl font-bold text-primary tabular-nums">{formatMoney(amount, currency)}</span>
               </div>
             </div>
           ) : (
@@ -291,6 +309,7 @@ export default function PayInstallmentDialog({
                 // (plan.plan_name has a rupee symbol and commas).
                 note: `CashBox Installment ${installmentsToPay.map((i) => i.number).join(",")}`,
               })}
+              onClick={() => saveDraft(membership.id, { method, reference })}
               className="flex items-center justify-center gap-2 w-full h-10 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
             >
               <Smartphone className="w-4 h-4" /> Pay {formatMoney(amount, currency)} via UPI App
@@ -364,7 +383,7 @@ export default function PayInstallmentDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={() => { clearDraft(); onOpenChange(false); }}
             className="rounded-full"
           >
             Cancel
