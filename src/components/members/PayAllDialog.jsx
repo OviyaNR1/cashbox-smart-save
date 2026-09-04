@@ -326,15 +326,17 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
                     onChange={setScreenshotPath}
                     bucket="payment-proofs"
                   />
-                  {method === "upi" && (
-                    <p className="text-xs text-muted-foreground -mt-2">A screenshot is required for UPI payments.</p>
-                  )}
                 </>
               )}
             </>
           )}
         </div>
 
+        {screenshotMissing && (
+          <p className="text-xs text-amber-400 text-right">
+            Attach a payment screenshot above to enable Submit.
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => { clearDraft(); onOpenChange(false); }} className="rounded-full">
             Cancel
@@ -348,8 +350,6 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
               <>
                 <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
               </>
-            ) : screenshotMissing ? (
-              "Attach a screenshot to submit"
             ) : chosen.length > 1 ? (
               `Submit ${chosen.length} Payments`
             ) : (

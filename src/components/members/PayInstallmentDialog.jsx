@@ -358,13 +358,15 @@ export default function PayInstallmentDialog({
                 onChange={setScreenshotPath}
                 bucket="payment-proofs"
               />
-              {method === "upi" && (
-                <p className="text-xs text-muted-foreground -mt-2">A screenshot is required for UPI payments.</p>
-              )}
             </>
           )}
         </div>
 
+        {screenshotMissing && (
+          <p className="text-xs text-amber-400 text-right">
+            Attach a payment screenshot above to enable Submit.
+          </p>
+        )}
         <DialogFooter>
           <Button
             variant="outline"
@@ -382,8 +384,6 @@ export default function PayInstallmentDialog({
               <>
                 <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
               </>
-            ) : screenshotMissing ? (
-              "Attach a screenshot to submit"
             ) : installmentsToPay.length > 1 ? (
               `Submit ${installmentsToPay.length} Payments`
             ) : (
