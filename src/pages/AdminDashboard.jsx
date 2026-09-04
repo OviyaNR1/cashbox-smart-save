@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import StatCard from "@/components/StatCard";
 import CollectionChart from "@/components/CollectionChart";
-import { Users, Layers, IndianRupee, Clock, Trophy, CheckCircle2 } from "lucide-react";
+import { Users, Layers, IndianRupee, Clock, Trophy, CheckCircle2, Image } from "lucide-react";
 import { formatMoney } from "@/lib/currency";
+import { getSignedUrl } from "@/lib/storage";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
 
@@ -71,6 +72,15 @@ export default function AdminDashboard() {
   const pendingTotalDisplay = sumByCurrency(pending, "amount", filterCurrency);
   const winnerGroup = (w) => groups.find((g) => g.id === w.group_id);
   const winnerCurrency = (w) => plans.find((p) => p.id === winnerGroup(w)?.plan_id)?.currency || "INR";
+
+  const viewProof = async (p) => {
+    try {
+      const url = await getSignedUrl("payment-proofs", p.etransfer_screenshot_url);
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      /* proof unavailable */
+    }
+  };
 
   const byMonth = {};
   success.forEach((p) => {
@@ -168,6 +178,7 @@ export default function AdminDashboard() {
                 <th className="text-left px-5 py-3">Method</th>
                 <th className="text-right px-5 py-3">Amount</th>
                 <th className="text-right px-5 py-3">Status</th>
+                <th className="text-right px-5 py-3">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -185,10 +196,17 @@ export default function AdminDashboard() {
                       p.status === "success" ? "bg-emerald-500/15 text-emerald-400" : p.status === "pending" ? "bg-amber-500/15 text-amber-400" : "bg-rose-500/15 text-rose-400"
                     }`}>{p.status}</span>
                   </td>
+                  <td className="px-5 py-3 text-right">
+                    {p.etransfer_screenshot_url && (
+                      <button onClick={() => viewProof(p)} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary" title="View payment screenshot">
+                        <Image className="w-4 h-4 inline" />
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
               {payments.length === 0 && (
-                <tr><td colSpan={6} className="px-5 py-8 text-center text-muted-foreground">No payments recorded yet.</td></tr>
+                <tr><td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">No payments recorded yet.</td></tr>
               )}
             </tbody>
           </table>
