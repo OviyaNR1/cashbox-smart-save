@@ -4,7 +4,7 @@ import { supabase, base44 } from '@/api/base44Client';
 const AuthContext = createContext();
 
 // Auto-logout after this long with no mouse/keyboard/touch activity.
-const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
+const INACTIVITY_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll'];
 
 export const AuthProvider = ({ children }) => {
