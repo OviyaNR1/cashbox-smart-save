@@ -185,7 +185,13 @@ export default function AdminDashboard() {
               {payments.slice(0, 8).map((p) => (
                 <tr key={p.id}>
                   <td className="px-5 py-3 text-foreground">
-                    {profiles.find((m) => m.id === p.member_profile_id)?.full_name || "—"}
+                    {/* allProfiles, not the country-filtered `profiles` — a
+                        member's own `country` field (where they live) can
+                        legitimately differ from which currency/country
+                        group they've joined (e.g. an NRI member in an INR
+                        group), so filtering by it here dropped real
+                        members' names to blank. */}
+                    {allProfiles.find((m) => m.id === p.member_profile_id)?.full_name || "—"}
                   </td>
                   <td className="px-5 py-3 text-foreground">{p.transaction_id || p.id.slice(0, 8)}</td>
                   <td className="px-5 py-3 text-muted-foreground">{p.payment_date || "—"}</td>
