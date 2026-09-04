@@ -294,6 +294,12 @@ export default function PayInstallmentDialog({
             </Select>
           </div>
 
+          {method === "upi" && (
+            <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+              Viewing this from a WhatsApp message? Tap <span className="font-semibold">⋮ (top-right) → Open in browser</span> first — WhatsApp's built-in browser blocks the button below from opening your UPI app.
+            </p>
+          )}
+
           {method === "upi" && amount > 0 && (
             <a
               href={buildUpiPaymentLink({
@@ -323,10 +329,7 @@ export default function PayInstallmentDialog({
           {method === "upi" && (
             <div className="rounded-lg border border-border p-3 space-y-2">
               <p className="text-xs font-medium text-foreground">
-                Button and QR above not working?
-              </p>
-              <p className="text-xs text-muted-foreground">
-                If you got here from a WhatsApp message, tap <span className="text-foreground font-medium">⋮ (top-right) → Open in browser</span>, then try again. Or pay manually:
+                Still stuck? Pay manually instead:
               </p>
               <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
                 <li>Open your UPI app (PhonePe, Google Pay, Paytm, etc.)</li>
