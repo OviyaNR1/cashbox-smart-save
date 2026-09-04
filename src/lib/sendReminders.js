@@ -222,12 +222,17 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
   const daysUntilDue = Math.round((dueDate - today) / (1000 * 60 * 60 * 24));
   if (daysUntilDue !== daysBefore) return [];
 
-  // timeZone: "UTC" is required here — dueDate is a UTC-midnight instant
-  // (from collectionDateUTC), and without pinning the zone,
-  // toLocaleDateString renders it in the *viewer's* local timezone, which
-  // silently shows the day before for anyone west of UTC (same class of
-  // bug dates.js's own header comment warns about).
-  const dueDateStr = dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", timeZone: "UTC" });
+  // An India group's due date is always shown in IST -- explicit
+  // Asia/Kolkata, not the viewer's own browser timezone (which, left
+  // unset, silently shows the day before for anyone west of UTC; see
+  // dates.js's header comment for the same class of bug). CAD groups have
+  // no equivalent "home" zone in this app, so they stay pinned to UTC —
+  // still correct (no local-timezone drift), just not IST-specific.
+  const dueDateStr = dueDate.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "long",
+    timeZone: currency === "CAD" ? "UTC" : "Asia/Kolkata",
+  });
   const targets = [];
 
   for (const membership of memberships) {
