@@ -29,7 +29,6 @@ import QRCode from "qrcode";
 const PAYMENT_METHODS = [
   { value: "upi", label: "UPI" },
   { value: "cash", label: "Cash" },
-  { value: "bank_transfer", label: "Bank Transfer" },
 ];
 
 // Cash is handled in person with no digital trail, so it deliberately gets

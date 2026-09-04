@@ -28,7 +28,6 @@ import QRCode from "qrcode";
 const PAYMENT_METHODS = [
   { value: "upi", label: "UPI" },
   { value: "cash", label: "Cash" },
-  { value: "bank_transfer", label: "Bank Transfer" },
 ];
 const METHODS_WITH_PROOF = ["upi", "bank_transfer"];
 

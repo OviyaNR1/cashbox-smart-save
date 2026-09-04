@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
 import { getNextPaymentPreview } from "@/lib/paymentPreview";
 
-const methods = ["upi", "cash", "bank_transfer"];
+const methods = ["upi", "cash"];
 
 const statusTone = (s) => s === "success" ? "bg-emerald-500/15 text-emerald-400" : s === "pending" ? "bg-amber-500/15 text-amber-400" : s === "failed" ? "bg-rose-500/15 text-rose-400" : "bg-muted text-muted-foreground";
 
