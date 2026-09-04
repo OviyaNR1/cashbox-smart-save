@@ -24,6 +24,7 @@ import { formatMoney } from "@/lib/currency";
 import FileUpload from "@/components/members/FileUpload";
 import { buildUpiPaymentLink, BUSINESS_UPI_ID } from "@/lib/upi";
 import { Loader2, CreditCard, Check, Smartphone, Copy } from "lucide-react";
+import QRCode from "qrcode";
 
 const PAYMENT_METHODS = [
   { value: "upi", label: "UPI" },
@@ -54,6 +55,7 @@ export default function PayInstallmentDialog({
   const { toast } = useToast();
 
   const [pendingNumbers, setPendingNumbers] = useState(new Set());
+  const [qrDataUrl, setQrDataUrl] = useState("");
   // setSubmitting(true) only takes effect on the next render, so it can't
   // block a second click/tap that lands in the same tick (double-tap on
   // mobile, or a duplicate click/touchend some browsers still emit) --
@@ -112,6 +114,30 @@ export default function PayInstallmentDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, pendingNumbers, membership?.id]);
 
+  const installmentsToPay = items.filter((i) => selected.has(i.number));
+  const amount = installmentsToPay.reduce((s, i) => s + i.amount, 0);
+  const totalDue = items.reduce((s, i) => s + i.amount, 0);
+  const remaining = totalDue - amount;
+
+  // Scanning a QR code sidesteps both of the reliability issues the deep
+  // link and manual copy-paste have: it doesn't depend on the browser
+  // handing off to an app (the in-app-browser problem), and it doesn't go
+  // through a UPI app's own "search by ID" resolution (the reason
+  // 8344551836@ybl showed as "can't find" in Google Pay's search despite
+  // being a valid, active VPA).
+  useEffect(() => {
+    if (method !== "upi" || !amount) { setQrDataUrl(""); return; }
+    let active = true;
+    QRCode.toDataURL(
+      buildUpiPaymentLink({ amount, note: `CashBox Installment ${installmentsToPay.map((i) => i.number).join(",")}` }),
+      { margin: 1, width: 220 }
+    )
+      .then((url) => { if (active) setQrDataUrl(url); })
+      .catch(() => { if (active) setQrDataUrl(""); });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [method, amount]);
+
   if (!membership || !plan) return null;
 
   const toggle = (number) => {
@@ -132,11 +158,6 @@ export default function PayInstallmentDialog({
       .then(() => toast({ title: "UPI ID copied", description: "Paste it in your UPI app to pay." }))
       .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_ID, variant: "destructive" }));
   };
-
-  const installmentsToPay = items.filter((i) => selected.has(i.number));
-  const amount = installmentsToPay.reduce((s, i) => s + i.amount, 0);
-  const totalDue = items.reduce((s, i) => s + i.amount, 0);
-  const remaining = totalDue - amount;
 
   const screenshotMissing = method === "upi" && !screenshotPath;
 
@@ -277,13 +298,23 @@ export default function PayInstallmentDialog({
             </a>
           )}
 
+          {method === "upi" && qrDataUrl && (
+            <div className="rounded-lg border border-border p-4 flex flex-col items-center gap-2">
+              <p className="text-xs font-medium text-foreground">Or scan to pay directly</p>
+              <img src={qrDataUrl} alt="Scan to pay via UPI" className="w-40 h-40 rounded-md" />
+              <p className="text-xs text-muted-foreground text-center">
+                Open your UPI app's scanner (or your phone's camera) and point it here.
+              </p>
+            </div>
+          )}
+
           {method === "upi" && (
             <div className="rounded-lg border border-border p-3 space-y-2">
               <p className="text-xs font-medium text-foreground">
-                Button above not opening your UPI app?
+                Button and QR above not working?
               </p>
               <p className="text-xs text-muted-foreground">
-                If you got here from a WhatsApp message, tap <span className="text-foreground font-medium">⋮ (top-right) → Open in browser</span>, then try the button again. Or pay manually:
+                If you got here from a WhatsApp message, tap <span className="text-foreground font-medium">⋮ (top-right) → Open in browser</span>, then try again. Or pay manually:
               </p>
               <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
                 <li>Open your UPI app (PhonePe, Google Pay, Paytm, etc.)</li>

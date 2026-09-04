@@ -23,6 +23,7 @@ import { formatMoney } from "@/lib/currency";
 import FileUpload from "@/components/members/FileUpload";
 import { buildUpiPaymentLink, BUSINESS_UPI_ID } from "@/lib/upi";
 import { Loader2, CreditCard, Smartphone, Copy } from "lucide-react";
+import QRCode from "qrcode";
 
 const PAYMENT_METHODS = [
   { value: "upi", label: "UPI" },
@@ -47,6 +48,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
   // state, which only updates on the next render) is what actually stops a
   // double-tap from bulkCreate-ing the same payments twice.
   const submitLockRef = useRef(false);
+  const [qrDataUrl, setQrDataUrl] = useState("");
 
   // Every item defaults to selected whenever the dialog opens with a new
   // item set — matches PayInstallmentDialog's own default-all-selected
@@ -93,6 +95,21 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
       .then(() => toast({ title: "UPI ID copied", description: "Paste it in your UPI app to pay." }))
       .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_ID, variant: "destructive" }));
   };
+
+  // See PayInstallmentDialog.jsx for why scanning is more reliable than
+  // either the deep-link button or manual copy-paste.
+  useEffect(() => {
+    if (method !== "upi" || singleCurrency !== "INR" || !totalsByCurrency.INR) { setQrDataUrl(""); return; }
+    let active = true;
+    QRCode.toDataURL(
+      buildUpiPaymentLink({ amount: totalsByCurrency.INR, note: `CashBox Installments x${chosen.length}` }),
+      { margin: 1, width: 220 }
+    )
+      .then((url) => { if (active) setQrDataUrl(url); })
+      .catch(() => { if (active) setQrDataUrl(""); });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [method, singleCurrency, totalsByCurrency.INR]);
 
   const screenshotMissing = method === "upi" && !screenshotPath;
 
@@ -217,10 +234,20 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
                 </a>
               )}
 
+              {method === "upi" && qrDataUrl && (
+                <div className="rounded-lg border border-border p-4 flex flex-col items-center gap-2">
+                  <p className="text-xs font-medium text-foreground">Or scan to pay directly</p>
+                  <img src={qrDataUrl} alt="Scan to pay via UPI" className="w-40 h-40 rounded-md" />
+                  <p className="text-xs text-muted-foreground text-center">
+                    Open your UPI app's scanner (or your phone's camera) and point it here.
+                  </p>
+                </div>
+              )}
+
               {method === "upi" && (
                 <div className="rounded-lg border border-border p-3 space-y-2">
                   <p className="text-xs font-medium text-foreground">
-                    Button above not opening your UPI app? Pay manually instead:
+                    Button and QR above not working? Pay manually instead:
                   </p>
                   <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
                     <li>Open your UPI app (PhonePe, Google Pay, Paytm, etc.)</li>
