@@ -241,7 +241,7 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
       mobile: profile.mobile,
       dueDateStr,
       amountStr,
-      template: "payment_upcoming_reminder_v1",
+      template: "payment_upcoming_reminder_v2",
       parameters: [profile.full_name, String(group.current_month), amountStr, dueDateStr],
     });
   }

@@ -215,18 +215,24 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
                     Button above not opening your UPI app? Pay manually instead:
                   </p>
                   <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                    <li>Tap <span className="text-foreground font-medium">Copy UPI ID</span> below</li>
                     <li>Open your UPI app (PhonePe, Google Pay, Paytm, etc.)</li>
-                    <li>Choose "Pay to UPI ID" or "Send money" and paste it</li>
+                    <li>Choose "Pay to UPI ID" or "Send money" and enter the ID below</li>
                     <li>Enter {totalDisplay} and complete the payment</li>
                   </ol>
-                  <button
-                    type="button"
-                    onClick={copyUpiId}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs font-medium text-foreground hover:bg-muted"
-                  >
-                    <Copy className="w-3 h-3" /> Copy UPI ID
-                  </button>
+                  {/* The copy button alone isn't enough — clipboard access can
+                      silently fail (older browsers, missing permission, no
+                      HTTPS), and even when it works, a member can't visually
+                      verify or manually type an ID they never actually saw. */}
+                  <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-2">
+                    <code className="flex-1 min-w-0 text-xs font-medium text-foreground truncate select-all">{BUSINESS_UPI_ID}</code>
+                    <button
+                      type="button"
+                      onClick={copyUpiId}
+                      className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border text-xs font-medium text-foreground hover:bg-muted"
+                    >
+                      <Copy className="w-3 h-3" /> Copy
+                    </button>
+                  </div>
                 </div>
               )}
 
