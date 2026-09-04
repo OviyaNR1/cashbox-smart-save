@@ -58,9 +58,21 @@ export default function AdminReminders() {
   // both to keep the list scannable and because editing several at once
   // with no per-row "saved" indicator would be easy to lose track of.
   const [expandedId, setExpandedId] = useState(null);
+  // Every send already writes a permanent audit_logs entry (see
+  // sendReminders.js) — the only thing missing was surfacing it here, since
+  // the toast confirming a send vanishes the moment you navigate away and
+  // there was nothing on this page to check back against.
+  const [recentSends, setRecentSends] = useState(null);
+
+  const loadRecentSends = () => {
+    base44.entities.AuditLog.list("-created_date", 500).then((logs) => {
+      setRecentSends((logs || []).filter((l) => l.module === "Reminders").slice(0, 10));
+    });
+  };
 
   useEffect(() => {
     base44.entities.ChitGroup.list("-created_date", 100).then(setGroups);
+    loadRecentSends();
   }, []);
 
   const resetPreview = () => { setPreview(null); setExpandedId(null); };
@@ -114,6 +126,7 @@ export default function AdminReminders() {
         description: result.failed ? `${result.failed} failed` : "All sent successfully",
       });
       resetPreview();
+      loadRecentSends();
     } catch (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
@@ -250,6 +263,28 @@ export default function AdminReminders() {
               <Send className="w-4 h-4 mr-2" />
               {sending ? "Sending..." : `Confirm & Send ${preview.targets.length} Reminder${preview.targets.length === 1 ? "" : "s"}`}
             </Button>
+          )}
+        </div>
+      )}
+
+      {recentSends !== null && (
+        <div className="bg-card rounded-2xl border border-border p-6 space-y-3">
+          <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <MessageCircle className="w-4 h-4 text-primary" /> Recent sends
+          </p>
+          {recentSends.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No reminders have been sent yet — this fills in the moment you send one, and stays here even after you leave and come back.</p>
+          ) : (
+            <div className="space-y-2">
+              {recentSends.map((l) => (
+                <div key={l.id} className="text-xs border-b border-border/60 last:border-0 pb-2 last:pb-0">
+                  <p className="text-muted-foreground">
+                    {l.created_at ? new Date(l.created_at).toLocaleString() : "—"}
+                  </p>
+                  <p className="text-foreground mt-0.5">{l.details || l.action}</p>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
