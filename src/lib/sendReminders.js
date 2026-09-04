@@ -222,7 +222,12 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
   const daysUntilDue = Math.round((dueDate - today) / (1000 * 60 * 60 * 24));
   if (daysUntilDue !== daysBefore) return [];
 
-  const dueDateStr = dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "long" });
+  // timeZone: "UTC" is required here — dueDate is a UTC-midnight instant
+  // (from collectionDateUTC), and without pinning the zone,
+  // toLocaleDateString renders it in the *viewer's* local timezone, which
+  // silently shows the day before for anyone west of UTC (same class of
+  // bug dates.js's own header comment warns about).
+  const dueDateStr = dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", timeZone: "UTC" });
   const targets = [];
 
   for (const membership of memberships) {
