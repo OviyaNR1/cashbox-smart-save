@@ -1,5 +1,5 @@
 import { base44 } from "@/api/base44Client";
-import { collectionDateUTC } from "./dates";
+import { collectionDateUTC, todayUTC } from "./dates";
 import { sendWhatsAppMessage } from "./sendWhatsAppMessage";
 import { logAudit } from "./audit";
 
@@ -31,7 +31,7 @@ export const computePaymentReminderTargets = async (groupId) => {
 
   const currency = plan?.currency || "INR";
   const monthlyAmount = plan?.monthly_contribution || 0;
-  const today = new Date();
+  const today = todayUTC(currency);
 
   const targets = [];
 
@@ -52,7 +52,11 @@ export const computePaymentReminderTargets = async (groupId) => {
     if (unpaidInstallments.length === 0) continue;
 
     const oldestUnpaid = Math.min(...unpaidInstallments);
-    const collDate = new Date(collectionDateUTC(group.start_date, oldestUnpaid, group.monthly_collection_date));
+    // Installment N is due N-1 months after start_date (installment 1 is
+    // due in the start month itself) — same convention as
+    // auctionEngine.js/paymentPreview.js. Passing the installment number
+    // directly here (no -1) made every due date compute a full month late.
+    const collDate = new Date(collectionDateUTC(group.start_date, oldestUnpaid - 1, group.monthly_collection_date));
     const daysLate = Math.floor((today - collDate) / (1000 * 60 * 60 * 24));
     if (daysLate <= 0) continue; // oldest unpaid installment isn't due yet
 
@@ -207,9 +211,15 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
 
   const currency = plan?.currency || "INR";
   const monthlyAmount = plan?.monthly_contribution || 0;
-  const dueDate = new Date(collectionDateUTC(group.start_date, group.current_month, group.monthly_collection_date));
-  const today = new Date();
-  const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+  // current_month is 1-indexed ("Month 1" is due in the start month itself),
+  // same convention as auctionEngine.js/paymentPreview.js.
+  const dueDate = new Date(collectionDateUTC(group.start_date, group.current_month - 1, group.monthly_collection_date));
+  const today = todayUTC(currency);
+  // Both sides are UTC-midnight now, so this is always a clean whole number
+  // of days — no fractional-day drift from comparing against the real
+  // current instant, which previously made this silently miss its target
+  // day (and so send nothing) depending on what time it was when it ran.
+  const daysUntilDue = Math.round((dueDate - today) / (1000 * 60 * 60 * 24));
   if (daysUntilDue !== daysBefore) return [];
 
   const dueDateStr = dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "long" });

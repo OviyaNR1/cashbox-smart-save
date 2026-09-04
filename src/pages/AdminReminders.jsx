@@ -118,7 +118,7 @@ export default function AdminReminders() {
             <div>
               <p className="text-sm font-semibold text-foreground">{selectedGroup.group_name}</p>
               <p className="text-xs text-muted-foreground">
-                This month's due date: {formatUTCDateStr(collectionDateUTC(selectedGroup.start_date, selectedGroup.current_month, selectedGroup.monthly_collection_date))}
+                This month's due date: {formatUTCDateStr(collectionDateUTC(selectedGroup.start_date, selectedGroup.current_month - 1, selectedGroup.monthly_collection_date))}
               </p>
             </div>
 

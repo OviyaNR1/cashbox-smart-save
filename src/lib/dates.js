@@ -24,3 +24,19 @@ export function collectionDateUTC(startDateStr, months, day) {
   const [y, m] = startDateStr.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1 + months, Math.min(day || 1, 28))).toISOString().slice(0, 10);
 }
+
+// "Today" as a UTC-midnight Date, in a given calendar day — IST (UTC+5:30,
+// no DST, so a fixed offset is always correct) by default, since due dates
+// in this app are India calendar days. Comparing this against a
+// collectionDateUTC() result (also UTC-midnight) always gives a clean
+// whole number of days, with no fractional-day artifact from time-of-day —
+// unlike comparing a bare `new Date()` (real current instant) against a
+// UTC-midnight due date, which drifts by up to a day depending on what
+// time it is when the comparison runs, and near India's early-morning
+// hours specifically, disagrees with what calendar day it actually is in
+// India (UTC's date is still "yesterday" there until 5:30am IST).
+export function todayUTC(currency = "INR") {
+  const offsetMs = currency === "CAD" ? 0 : 5.5 * 60 * 60 * 1000;
+  const local = new Date(Date.now() + offsetMs);
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()));
+}
