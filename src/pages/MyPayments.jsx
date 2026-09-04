@@ -3,29 +3,31 @@ import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
 import { FileText, CreditCard } from "lucide-react";
 import { formatMoney } from "@/lib/currency";
-import PayInstallmentDialog from "@/components/members/PayInstallmentDialog";
+import { getNextPaymentPreview } from "@/lib/paymentPreview";
+import PayAllDialog from "@/components/members/PayAllDialog";
 
 const statusTone = (s) => s === "success" ? "bg-emerald-500/15 text-emerald-400" : s === "pending" ? "bg-amber-500/15 text-amber-400" : "bg-rose-500/15 text-rose-400";
 
 export default function MyPayments() {
   const [data, setData] = useState(null);
-  const [payMembership, setPayMembership] = useState(null);
+  const [payAllOpen, setPayAllOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     const me = await base44.auth.me();
-    const [payments, memberships, groups, plans] = await Promise.all([
+    const [payments, memberships, groups, plans, auctions] = await Promise.all([
       base44.entities.Payment.filter({ user_id: me.id }, "-payment_date", 100),
       base44.entities.GroupMembership.filter({ user_id: me.id }),
       base44.entities.ChitGroup.list("-created_date", 100),
       base44.entities.ChitPlan.list("-created_date", 100),
+      base44.entities.Auction.list("-month_number", 300),
     ]);
-    setData({ me, payments, memberships, groups, plans });
+    setData({ me, payments, memberships, groups, plans, auctions });
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   if (!data) return <div className="h-64 grid place-items-center text-muted-foreground text-sm">Loading…</div>;
-  const { me, payments, memberships, groups, plans } = data;
+  const { me, payments, memberships, groups, plans, auctions } = data;
 
   const planFor = (m) => {
     const g = groups.find((x) => x.id === m?.group_id);
@@ -46,6 +48,38 @@ export default function MyPayments() {
     ? Object.entries(totalsByCur).map(([cur, amt]) => formatMoney(amt, cur)).join(" + ")
     : formatMoney(0, fallbackCur);
 
+  // Same "flatten every unpaid installment across every ticket into one
+  // cart" pattern as MemberDashboard.jsx's Total Due — this page used to
+  // show each ticket's own separate amount due with its own separate "Pay
+  // Installment" button and no combined total anywhere, which read as
+  // "5000 and 5000" instead of "10000" for a multi-ticket member.
+  const pendingNumbersFor = (membershipId) =>
+    new Set(payments.filter((p) => p.membership_id === membershipId && p.status === "pending").map((p) => p.installment_number));
+  const activeMemberships = memberships
+    .filter((m) => m.status === "active")
+    .map((m) => {
+      const { group, plan } = planFor(m);
+      return { membership: m, group, plan, preview: plan ? getNextPaymentPreview({ membership: m, plan, group, auctions, pendingNumbers: pendingNumbersFor(m.id) }) : null };
+    });
+  const allDueItems = activeMemberships.flatMap(({ membership, group, plan, preview }) =>
+    (preview?.unpaidInstallments || []).map((item) => ({
+      key: `${membership.id}-${item.number}`,
+      membership,
+      group,
+      plan,
+      currency: plan.currency || "INR",
+      ...item,
+    }))
+  );
+  const dueTotalsByCurrency = {};
+  allDueItems.forEach((i) => {
+    dueTotalsByCurrency[i.currency] = (dueTotalsByCurrency[i.currency] || 0) + i.amount;
+  });
+  const dueTotalDisplay = Object.keys(dueTotalsByCurrency).length
+    ? Object.entries(dueTotalsByCurrency).map(([c, amt]) => formatMoney(amt, c)).join(" + ")
+    : formatMoney(0, "INR");
+  const dueTicketCount = new Set(allDueItems.map((i) => i.membership.id)).size;
+
   return (
     <div className="space-y-6">
       <div>
@@ -53,6 +87,25 @@ export default function MyPayments() {
         <h1 className="text-3xl font-semibold text-foreground mt-1">Payments & receipts</h1>
         <p className="text-sm text-muted-foreground mt-1">Total paid: <span className="font-medium text-emerald-400">{totalPaidDisplay}</span></p>
       </div>
+
+      {allDueItems.length > 0 && (
+        <div className="bg-primary/10 rounded-2xl border border-primary/20 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-primary/80">Total Due</p>
+            <p className="text-3xl font-bold text-foreground tabular-nums mt-1">{dueTotalDisplay}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {allDueItems.length} installment{allDueItems.length > 1 ? "s" : ""}
+              {dueTicketCount > 1 ? ` across ${dueTicketCount} tickets` : ""}
+            </p>
+          </div>
+          <button
+            onClick={() => setPayAllOpen(true)}
+            className="shrink-0 inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
+          >
+            <CreditCard className="w-4 h-4" /> Pay Now
+          </button>
+        </div>
+      )}
 
       <div className="space-y-4">
         {memberships.map((m) => {
@@ -69,13 +122,8 @@ export default function MyPayments() {
                     {group?.group_name || group?.group_code} · Chit #{m.chit_number || m.ticket_number || "—"} · {m.paid_installments}/{total} installments
                   </p>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <button onClick={() => setPayMembership(m)} className="px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1 whitespace-nowrap">
-                    <CreditCard className="w-3.5 h-3.5" /> Pay Installment
-                  </button>
-                  <div className="w-24 h-2 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
-                  </div>
+                <div className="w-24 h-2 rounded-full bg-muted overflow-hidden shrink-0">
+                  <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
                 </div>
               </div>
               <div className="divide-y divide-border">
@@ -108,12 +156,10 @@ export default function MyPayments() {
         )}
       </div>
 
-      <PayInstallmentDialog
-        open={!!payMembership}
-        onOpenChange={(v) => !v && setPayMembership(null)}
-        membership={payMembership}
-        plan={payMembership ? planFor(payMembership).plan : null}
-        group={payMembership ? planFor(payMembership).group : null}
+      <PayAllDialog
+        open={payAllOpen}
+        onOpenChange={setPayAllOpen}
+        items={allDueItems}
         user={me}
         onPaid={loadData}
       />

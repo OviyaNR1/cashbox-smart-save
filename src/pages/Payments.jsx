@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import { formatMoney } from "@/lib/currency";
 import { logAudit } from "@/lib/audit";
 import { getSignedUrl } from "@/lib/storage";
+import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useToast } from "@/components/ui/use-toast";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
 import { getNextPaymentPreview } from "@/lib/paymentPreview";
@@ -158,6 +159,41 @@ export default function Payments() {
     load();
   };
 
+  // A multi-seat member paying several tickets in one PayAllDialog batch
+  // gets one `payments` row per ticket, each needing its own WhatsApp
+  // receipt — this sends every one of a member's still-unsent successful
+  // payments in one action instead of opening each receipt page in turn.
+  const unsentReceiptsFor = (memberProfileId) =>
+    (payments || []).filter((p) => p.member_profile_id === memberProfileId && p.status === "success" && !p.receipt_sent_at);
+
+  const sendAllReceipts = async (memberProfileId) => {
+    const prof = profileOf(memberProfileId);
+    const targets = unsentReceiptsFor(memberProfileId);
+    if (!prof?.mobile || !targets.length) return;
+    let sent = 0;
+    for (const p of targets) {
+      try {
+        const receiptUrl = `${window.location.origin}/receipt/${p.id}`;
+        await sendWhatsAppMessage({
+          phone: prof.mobile,
+          templateName: "receipt_ready_v3",
+          parameters: [prof.full_name || "Member", String(p.installment_number || "—"), formatMoney(p.amount, currencyOf(p)), receiptUrl],
+        });
+        await base44.entities.Payment.update(p.id, { receipt_sent_at: new Date().toISOString() });
+        sent++;
+      } catch (err) {
+        console.error(`Failed to send receipt for payment ${p.id}:`, err);
+      }
+    }
+    logAudit({ module: "Payments", action: "send-all-receipts", record_id: memberProfileId, details: `Sent ${sent} of ${targets.length} receipts to ${prof.full_name || "member"}` });
+    toast({
+      title: sent === targets.length ? `Sent ${sent} receipt${sent === 1 ? "" : "s"}` : `Sent ${sent} of ${targets.length} receipts`,
+      description: prof.full_name,
+      variant: sent === targets.length ? undefined : "destructive",
+    });
+    load();
+  };
+
   const viewProof = async (p) => {
     try {
       const url = await getSignedUrl("payment-proofs", p.etransfer_screenshot_url);
@@ -260,6 +296,14 @@ export default function Payments() {
                             className="w-4 h-4 text-emerald-400"
                             title={`Receipt sent ${new Date(p.receipt_sent_at).toLocaleString()}`}
                           />
+                        ) : p.status === "success" && unsentReceiptsFor(p.member_profile_id).length > 1 ? (
+                          <button
+                            onClick={() => sendAllReceipts(p.member_profile_id)}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg border border-primary/30 text-primary text-xs font-medium hover:bg-primary/10"
+                            title="Send WhatsApp receipts for all of this member's unsent payments"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" /> Send all ({unsentReceiptsFor(p.member_profile_id).length})
+                          </button>
                         ) : (
                           <MessageCircleOff
                             className="w-4 h-4 text-muted-foreground/40"
