@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, Navigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { LayoutDashboard, Layers, Users, CreditCard, Trophy, BarChart3, ScrollText, MessageSquare, MessageCircle, LogOut, Menu, X, Calendar, Landmark, UsersRound, User, Inbox, Gavel, Search, ChevronsLeft, ChevronsRight, Bell, Trash2 } from "lucide-react";
+import { LayoutDashboard, Layers, Users, CreditCard, Trophy, BarChart3, ScrollText, MessageSquare, MessageCircle, LogOut, Menu, X, Calendar, Landmark, UsersRound, User, Inbox, Gavel, Search, ChevronsLeft, ChevronsRight, Bell, Trash2, ClipboardCheck } from "lucide-react";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { AdminCountryProvider, useAdminCountry } from "@/lib/AdminCountryContext";
@@ -114,6 +114,7 @@ export default function Layout() {
         { to: "/admin/plans", label: "Savings Plans", icon: Landmark },
         { to: "/admin/groups", label: "Groups", icon: UsersRound },
         { to: "/admin/payments", label: "Payments", icon: CreditCard },
+        { to: "/admin/payment-status", label: "Payment Status", icon: ClipboardCheck },
         { to: "/admin/winners", label: "Winners", icon: Trophy },
         { to: "/admin/auction-plan", label: "Auction Plan", icon: Calendar },
         { to: "/admin/live-auction", label: "Live Auction", icon: Gavel },

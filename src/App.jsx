@@ -42,6 +42,7 @@ const Reports = lazy(() => import('@/pages/Reports'));
 const AuditLog = lazy(() => import('@/pages/AuditLog'));
 const Notifications = lazy(() => import('@/pages/Notifications'));
 const AdminReminders = lazy(() => import('@/pages/AdminReminders'));
+const PaymentStatus = lazy(() => import('@/pages/PaymentStatus'));
 const AdminInbox = lazy(() => import('@/pages/AdminInbox'));
 const AdminCleanup = lazy(() => import('@/pages/AdminCleanup'));
 const AuctionPlan = lazy(() => import('@/pages/AuctionPlan'));
@@ -116,6 +117,7 @@ const AuthenticatedApp = () => {
             <Route path="/admin/members" element={<Members />} />
             <Route path="/admin/plan-requests" element={<PlanRequests />} />
             <Route path="/admin/payments" element={<Payments />} />
+            <Route path="/admin/payment-status" element={<PaymentStatus />} />
             <Route path="/admin/winners" element={<Winners />} />
             <Route path="/admin/reports" element={<Reports />} />
             <Route path="/admin/audit" element={<AuditLog />} />
