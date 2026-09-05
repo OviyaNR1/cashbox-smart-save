@@ -10,7 +10,7 @@ import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
 import { playCallBell, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
 import { speakAnnouncement } from "@/lib/tts";
-import { announceAuctionStart, announceAuctionClosed, announceWinner, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
+import { announceAuctionStart, announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown, CALL_DURATIONS } from "@/lib/useCountdown";
@@ -108,6 +108,15 @@ export default function AdminLiveAuction() {
 
   useEffect(() => { loadAuction(); }, [loadAuction]);
 
+  // The postgres_changes callback below is only recreated when the auction
+  // id changes, so it closes over whatever `bids`/`countdown` were at that
+  // point — these refs stay current every render instead, so a bid
+  // reaction can compare against the bid immediately before it rather than
+  // stale data from when the channel first subscribed.
+  const bidsRef = useRef([]);
+  useEffect(() => { bidsRef.current = bids; }, [bids]);
+  const countdownRef = useRef(null);
+
   useEffect(() => {
     if (!auction) return;
     const channel = supabase
@@ -129,7 +138,17 @@ export default function AdminLiveAuction() {
           // Throttled — a burst of bids only gets one excited reaction, not
           // one stacked announcement per bid.
           if (shouldAnnounceBid()) {
-            speakAnnouncement(announceNewLowestBid(payload.new.amount, plan?.currency).parts);
+            const prevValidBids = bidsRef.current.filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
+            const prevLowest = prevValidBids[0];
+            speakAnnouncement(announceNewLowestBid(payload.new.amount, plan?.currency, {
+              previousAmount: prevLowest ? prevLowest.amount : auction?.starting_amount,
+              previousBidAt: prevLowest?.created_at,
+              newBidAt: payload.new.created_at,
+              countdownRemaining: countdownRef.current,
+              minDecrement: auction?.min_decrement,
+              minBid: plan?.auction_min_bid,
+              startingAmount: auction?.starting_amount,
+            }).parts);
           }
         }
         loadAuction();
@@ -143,6 +162,7 @@ export default function AdminLiveAuction() {
   const validBids = bids.filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
   const rejectedBids = bids.filter((b) => b.status === "rejected");
   const countdown = useCountdown(auction?.call_stage_started_at, auction?.status);
+  useEffect(() => { countdownRef.current = countdown; }, [countdown]);
   const elapsed = useElapsedTime(auction?.status !== "closed" ? auction?.created_at : null);
 
   const startingAmount = plan ? getStartingAmount(plan) : 0;
@@ -171,22 +191,28 @@ export default function AdminLiveAuction() {
   }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at]);
 
   // A real auctioneer doesn't stay quiet while nobody bids — nudge the room
-  // once, halfway through Call 1/Call 2, if no new bid has landed since the
-  // stage started. final_call is excluded: its own oru/rendu/moone dharam
-  // sequence already carries that job.
-  const silenceFiredRef = useRef(null);
+  // once at the stage's halfway point, and again (firmer) near the end if
+  // it's STILL silent. final_call is excluded: its own oru/rendu/moone
+  // dharam sequence already carries that job. A bid landing suppresses any
+  // further nudge for that stage.
+  const silenceStageRef = useRef({ key: null, tier: 0 });
   useEffect(() => {
     if (countdown === null || !auction || !["call_1", "call_2"].includes(auction.status)) return;
     const half = Math.floor(CALL_DURATIONS[auction.status] / 2);
-    if (countdown !== half) return;
+    const nearEnd = 8;
     const stageKey = `${auction.id}:${auction.status}:${auction.call_stage_started_at}`;
-    if (silenceFiredRef.current === stageKey) return;
+    if (silenceStageRef.current.key !== stageKey) silenceStageRef.current = { key: stageKey, tier: 0 };
     const hasBidSinceStage = bids.some(
       (b) => b.status === "valid" && new Date(b.created_at) >= new Date(auction.call_stage_started_at)
     );
-    if (hasBidSinceStage) return;
-    silenceFiredRef.current = stageKey;
-    speakAnnouncement(announceSilence().parts);
+    if (hasBidSinceStage) { silenceStageRef.current.tier = 2; return; }
+    if (silenceStageRef.current.tier < 1 && countdown <= half) {
+      silenceStageRef.current.tier = 1;
+      speakAnnouncement(announceSilence("first").parts);
+    } else if (silenceStageRef.current.tier < 2 && countdown <= nearEnd) {
+      silenceStageRef.current.tier = 2;
+      speakAnnouncement(announceSilence("second").parts);
+    }
   }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at, bids]);
 
   // A new, lower bid mid-call means the price just being called is stale —
@@ -313,6 +339,10 @@ export default function AdminLiveAuction() {
       const winnerLine = announceWinner(winnerProf?.full_name || "Member", winningAmount, plan.currency);
       pushToast(winnerLine.visual, "bid");
       speakAnnouncement(winnerLine.parts);
+      // A closing sign-off once the winner's named, so the room doesn't
+      // just go silent — speakAnnouncement's own shared queue means this
+      // naturally waits for the winner line to finish first.
+      speakAnnouncement(announceSignOff().parts);
     }, 1800);
     setBusy(false);
     setCloseConfirmOpen(false);

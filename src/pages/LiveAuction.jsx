@@ -9,7 +9,7 @@ import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { logAudit } from "@/lib/audit";
 import { speakAnnouncement } from "@/lib/tts";
-import { announceAuctionClosed, announceWinner, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
+import { announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { Crown, Gavel, Building2, Trophy, Radio } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -145,6 +145,14 @@ export default function LiveAuction() {
 
   useEffect(() => { load(); }, [load]);
 
+  // The postgres_changes callback below is only recreated when the auction
+  // id changes, so it closes over whatever `state`/`countdown` were at that
+  // point — these refs stay current every render instead, so a bid
+  // reaction can compare against the bid immediately before it rather than
+  // stale data from when the channel first subscribed.
+  const bidsRef = useRef([]);
+  useEffect(() => { bidsRef.current = state.bids || []; }, [state.bids]);
+
   useEffect(() => {
     if (!state.auction) return;
     const channel = supabase
@@ -160,7 +168,17 @@ export default function LiveAuction() {
           // Throttled — a burst of bids only gets one excited reaction, not
           // one stacked announcement per bid.
           if (shouldAnnounceBid()) {
-            speakAnnouncement(announceNewLowestBid(payload.new.amount, state.plan?.currency).parts);
+            const prevValidBids = bidsRef.current.filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
+            const prevLowest = prevValidBids[0];
+            speakAnnouncement(announceNewLowestBid(payload.new.amount, state.plan?.currency, {
+              previousAmount: prevLowest ? prevLowest.amount : state.auction?.starting_amount,
+              previousBidAt: prevLowest?.created_at,
+              newBidAt: payload.new.created_at,
+              countdownRemaining: countdownRef.current,
+              minDecrement: state.auction?.min_decrement,
+              minBid: state.plan?.auction_min_bid,
+              startingAmount: state.auction?.starting_amount,
+            }).parts);
           }
         }
         load();
@@ -171,28 +189,36 @@ export default function LiveAuction() {
   }, [state.auction?.id, load]);
 
   const countdown = useCountdown(state.auction?.call_stage_started_at, state.auction?.status);
+  const countdownRef = useRef(null);
+  useEffect(() => { countdownRef.current = countdown; }, [countdown]);
   const elapsed = useElapsedTime(state.auction?.status !== "closed" ? state.auction?.created_at : null);
 
   // A real auctioneer doesn't stay quiet while nobody bids — nudge the room
-  // once, halfway through Call 1/Call 2, if no new bid has landed since the
-  // stage started. final_call is excluded: its own oru/rendu/moone dharam
-  // sequence already carries that job. Keyed on the stage's own start time
-  // so a genuinely new stage (even the same status re-entered) can nudge
-  // again, but a re-render mid-stage never fires it twice.
-  const silenceFiredRef = useRef(null);
+  // once at the stage's halfway point, and again (firmer) near the end if
+  // it's STILL silent. final_call is excluded: its own oru/rendu/moone
+  // dharam sequence already carries that job. Tracked per stage (keyed on
+  // its own start time) so a genuinely new stage can nudge again, but a
+  // re-render mid-stage never re-fires the same tier, and a bid landing
+  // suppresses any further nudge for that stage.
+  const silenceStageRef = useRef({ key: null, tier: 0 });
   useEffect(() => {
     const auction = state.auction;
     if (!auction || countdown === null || !["call_1", "call_2"].includes(auction.status)) return;
     const half = Math.floor(CALL_DURATIONS[auction.status] / 2);
-    if (countdown !== half) return;
+    const nearEnd = 8;
     const stageKey = `${auction.id}:${auction.status}:${auction.call_stage_started_at}`;
-    if (silenceFiredRef.current === stageKey) return;
+    if (silenceStageRef.current.key !== stageKey) silenceStageRef.current = { key: stageKey, tier: 0 };
     const hasBidSinceStage = (state.bids || []).some(
       (b) => b.status === "valid" && new Date(b.created_at) >= new Date(auction.call_stage_started_at)
     );
-    if (hasBidSinceStage) return;
-    silenceFiredRef.current = stageKey;
-    speakAnnouncement(announceSilence().parts);
+    if (hasBidSinceStage) { silenceStageRef.current.tier = 2; return; }
+    if (silenceStageRef.current.tier < 1 && countdown <= half) {
+      silenceStageRef.current.tier = 1;
+      speakAnnouncement(announceSilence("first").parts);
+    } else if (silenceStageRef.current.tier < 2 && countdown <= nearEnd) {
+      silenceStageRef.current.tier = 2;
+      speakAnnouncement(announceSilence("second").parts);
+    }
   }, [countdown, state.auction, state.bids]);
 
   useEffect(() => {
@@ -233,6 +259,10 @@ export default function LiveAuction() {
           const winnerLine = announceWinner(iWon ? "You" : winnerName, auction.winning_bid_amount, state.plan?.currency);
           pushToast(winnerLine.visual, iWon ? "bid" : "default");
           speakAnnouncement(winnerLine.parts);
+          // A closing sign-off once the winner's named, so the room doesn't
+          // just go silent — speakAnnouncement's own shared queue means
+          // this naturally waits for the winner line to finish first.
+          speakAnnouncement(announceSignOff().parts);
         }, 1800);
         if (iWon) {
           playFanfare();
