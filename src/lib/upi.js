@@ -2,7 +2,7 @@
 // UI exists yet for this — change it here (same pattern as
 // ADMIN_NOTIFY_PHONE in PlanRequestCard.jsx), or ask for a settings field if
 // you want it editable in the app itself.
-export const BUSINESS_UPI_ID = "oviya.raveendran@okaxis";
+export const BUSINESS_UPI_ID = "8344551836@ybl";
 const BUSINESS_UPI_NAME = "CashBox";
 
 // Builds a `upi://pay` deep link that opens the phone's UPI app chooser
