@@ -223,19 +223,22 @@ export function callAnnouncement(status, amountLabel) {
 // be pre-recorded whole, so it's spoken live via amountToSpeechParts and
 // sandwiched between the fixed clips.
 //
-// final_call is a longer suspense sequence with the amount called out three
-// times ("...once... ...twice... ...final call!"), not a single a/b pair —
-// segments is the list of fixed clips, amount is re-inserted between every
-// consecutive pair.
+// final_call is the traditional Tamil auctioneer count — the amount is
+// restated before each of three clips ("...oru tharam", "...rendu tharam",
+// "...moonu tharam!"), building suspense the same way a real chit-fund
+// auctioneer counts down, instead of an English "once/twice/final call".
 const CALL_AUDIO = {
   call_1: { a: "/audio/call-1-a.mp3", b: "/audio/call-1-b.mp3" },
   call_2: { a: "/audio/call-2-a.mp3", b: "/audio/call-2-b.mp3" },
 };
-const FINAL_CALL_SEGMENTS = [
-  "/audio/call-final-once-a.mp3",
-  "/audio/call-final-once-b.mp3",
-  "/audio/call-final-twice-b.mp3",
-  "/audio/call-final-final-b.mp3",
+// Pause after each round — "Pause and wait" / "Longer pause" / "Short
+// dramatic pause" per spec — so oru/rendu/moonu tharam land as three
+// distinct suspenseful calls instead of one continuous read. No pause after
+// the last one; whatever triggers the close announcement provides its own gap.
+const FINAL_CALL_CLIPS = [
+  { clip: "/audio/final-oru-tharam.mp3", pauseAfter: 1500 },
+  { clip: "/audio/final-rendu-tharam.mp3", pauseAfter: 2200 },
+  { clip: "/audio/final-moonu-tharam.mp3", pauseAfter: 0 },
 ];
 
 export function speakCallAnnouncement(status, amount, currency) {
@@ -243,11 +246,9 @@ export function speakCallAnnouncement(status, amount, currency) {
   if (status === "final_call") {
     const amountParts = amount != null ? amountToSpeechParts(amount, currency) : [];
     const parts = [];
-    FINAL_CALL_SEGMENTS.forEach((clip, i) => {
-      parts.push({ clip });
-      // Amount goes between every pair of segments except after the last
-      // one — three insertions for four segments ("once"/"twice"/"final").
-      if (i < FINAL_CALL_SEGMENTS.length - 1) parts.push(...amountParts);
+    FINAL_CALL_CLIPS.forEach(({ clip, pauseAfter }) => {
+      parts.push(...amountParts, { clip });
+      if (pauseAfter) parts.push({ pause: pauseAfter });
     });
     speakAnnouncement(parts);
     return;

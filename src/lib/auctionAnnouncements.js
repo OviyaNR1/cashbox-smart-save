@@ -110,6 +110,16 @@ export function announceNewLowestBid(amount, currency) {
   };
 }
 
+// Nudges the room when a call stage has gone quiet for a while with no new
+// bid — a real auctioneer doesn't just silently wait out the clock. Fires
+// at most once per call stage (see shouldAnnounceSilence).
+export function announceSilence() {
+  return {
+    parts: [{ clip: "/audio/silence-nudge.mp3" }],
+    visual: "🤫 No bids yet — come on, someone bid!",
+  };
+}
+
 // Keeps one member's repeated bidding from spamming voice announcements —
 // at most one spoken "new lowest bid" call per window, shared across the
 // whole auction room (module-level, not per-component) since the throttle

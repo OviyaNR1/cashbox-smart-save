@@ -41,6 +41,11 @@ async function playParts(parts) {
       await withTimeout(playClip(part.clip), MAX_WAIT_MS);
     } else if (part.text) {
       await withTimeout(speakOnce(part.text, part.voiceId, part.lang || "en-IN"), MAX_WAIT_MS);
+    } else if (part.pause) {
+      // A silent gap — e.g. the Final Call's "pause and wait" beats between
+      // oru/rendu/moonu tharam. Without this, back-to-back clips play as one
+      // continuous read instead of three distinct, suspenseful calls.
+      await new Promise((resolve) => setTimeout(resolve, part.pause));
     }
   }
 }

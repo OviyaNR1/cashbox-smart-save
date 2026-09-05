@@ -4,12 +4,12 @@ import { formatMoney } from "@/lib/currency";
 import { calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { playCallBell, playFanfare, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
 import { fireConfetti, fireWinnerConfetti } from "@/lib/confetti";
-import { useCountdown } from "@/lib/useCountdown";
+import { useCountdown, CALL_DURATIONS } from "@/lib/useCountdown";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { logAudit } from "@/lib/audit";
 import { speakAnnouncement } from "@/lib/tts";
-import { announceAuctionClosed, announceWinner, announceNewLowestBid, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
+import { announceAuctionClosed, announceWinner, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { Crown, Gavel, Building2, Trophy, Radio } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -172,6 +172,28 @@ export default function LiveAuction() {
 
   const countdown = useCountdown(state.auction?.call_stage_started_at, state.auction?.status);
   const elapsed = useElapsedTime(state.auction?.status !== "closed" ? state.auction?.created_at : null);
+
+  // A real auctioneer doesn't stay quiet while nobody bids — nudge the room
+  // once, halfway through Call 1/Call 2, if no new bid has landed since the
+  // stage started. final_call is excluded: its own oru/rendu/moone dharam
+  // sequence already carries that job. Keyed on the stage's own start time
+  // so a genuinely new stage (even the same status re-entered) can nudge
+  // again, but a re-render mid-stage never fires it twice.
+  const silenceFiredRef = useRef(null);
+  useEffect(() => {
+    const auction = state.auction;
+    if (!auction || countdown === null || !["call_1", "call_2"].includes(auction.status)) return;
+    const half = Math.floor(CALL_DURATIONS[auction.status] / 2);
+    if (countdown !== half) return;
+    const stageKey = `${auction.id}:${auction.status}:${auction.call_stage_started_at}`;
+    if (silenceFiredRef.current === stageKey) return;
+    const hasBidSinceStage = (state.bids || []).some(
+      (b) => b.status === "valid" && new Date(b.created_at) >= new Date(auction.call_stage_started_at)
+    );
+    if (hasBidSinceStage) return;
+    silenceFiredRef.current = stageKey;
+    speakAnnouncement(announceSilence().parts);
+  }, [countdown, state.auction, state.bids]);
 
   useEffect(() => {
     const { auction, group, myMembership } = state;

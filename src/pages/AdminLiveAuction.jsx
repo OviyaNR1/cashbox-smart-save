@@ -10,10 +10,10 @@ import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
 import { playCallBell, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
 import { speakAnnouncement } from "@/lib/tts";
-import { announceAuctionStart, announceAuctionClosed, announceWinner, announceNewLowestBid, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
+import { announceAuctionStart, announceAuctionClosed, announceWinner, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
-import { useCountdown } from "@/lib/useCountdown";
+import { useCountdown, CALL_DURATIONS } from "@/lib/useCountdown";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { Gavel, Crown, Trophy, Building2, Phone, Radio, Eye } from "lucide-react";
@@ -169,6 +169,25 @@ export default function AdminLiveAuction() {
       advanceCall("final_call");
     }
   }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at]);
+
+  // A real auctioneer doesn't stay quiet while nobody bids — nudge the room
+  // once, halfway through Call 1/Call 2, if no new bid has landed since the
+  // stage started. final_call is excluded: its own oru/rendu/moone dharam
+  // sequence already carries that job.
+  const silenceFiredRef = useRef(null);
+  useEffect(() => {
+    if (countdown === null || !auction || !["call_1", "call_2"].includes(auction.status)) return;
+    const half = Math.floor(CALL_DURATIONS[auction.status] / 2);
+    if (countdown !== half) return;
+    const stageKey = `${auction.id}:${auction.status}:${auction.call_stage_started_at}`;
+    if (silenceFiredRef.current === stageKey) return;
+    const hasBidSinceStage = bids.some(
+      (b) => b.status === "valid" && new Date(b.created_at) >= new Date(auction.call_stage_started_at)
+    );
+    if (hasBidSinceStage) return;
+    silenceFiredRef.current = stageKey;
+    speakAnnouncement(announceSilence().parts);
+  }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at, bids]);
 
   // A new, lower bid mid-call means the price just being called is stale —
   // restart the count at "Oru Tharam" for the new lowest bid rather than
