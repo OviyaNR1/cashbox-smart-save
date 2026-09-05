@@ -7,6 +7,7 @@ import { MessageCircle, Send, Users, Eye, ChevronDown, ChevronUp } from "lucide-
 import {
   computePaymentReminderTargets, sendPaymentReminders,
   computeAuctionReminderTargets, sendAuctionReminders,
+  computeAuctionSaveTheDateTargets, sendAuctionSaveTheDateReminders,
   computeUpcomingDueTargets, sendUpcomingDueReminders,
 } from "@/lib/sendReminders";
 import { collectionDateUTC } from "@/lib/dates";
@@ -64,6 +65,11 @@ export default function AdminReminders() {
   // ahead of that, e.g. "Sunday 10:30am", instead of only being able to
   // send this reminder after bidding is already live.
   const [auctionDateTime, setAuctionDateTime] = useState("");
+  // For the separate advance "save the date" announcement — both the trial
+  // (practice, no money) and real auction's date/time, since neither has an
+  // Auction row yet at announcement time to read a schedule from.
+  const [trialDateTime, setTrialDateTime] = useState("");
+  const [realDateTime, setRealDateTime] = useState("");
   // Every send already writes a permanent audit_logs entry (see
   // sendReminders.js) — the only thing missing was surfacing it here, since
   // the toast confirming a send vanishes the moment you navigate away and
@@ -108,6 +114,7 @@ export default function AdminReminders() {
       let targets;
       if (type === "payment") targets = await computePaymentReminderTargets(selectedGroup.id);
       else if (type === "auction") targets = (await computeAuctionReminderTargets(selectedGroup.id, auctionDateTime || undefined)).targets;
+      else if (type === "savedate") targets = await computeAuctionSaveTheDateTargets(selectedGroup.id, { trialDateTime, realDateTime });
       // "upcoming" (1 day before) and "payment" (strictly past due, daysLate
       // > 0) leave the due date itself with no reminder option at all —
       // "today" fills that gap using the same upcoming-due computation with
@@ -131,6 +138,7 @@ export default function AdminReminders() {
     try {
       const sendFn = preview.type === "payment" ? sendPaymentReminders
         : preview.type === "auction" ? sendAuctionReminders
+        : preview.type === "savedate" ? sendAuctionSaveTheDateReminders
         : sendUpcomingDueReminders;
       const result = await sendFn(selectedGroup.id, preview.targets);
       toast({
@@ -219,6 +227,28 @@ export default function AdminReminders() {
                   : "Leave blank to use the currently open auction's own time instead."}
               </p>
             </div>
+
+            <div className="pt-2 border-t border-border/60 space-y-3">
+              <p className="text-xs font-medium text-foreground">Trial auction save-the-date</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Trial auction (no money)</label>
+                  <Input type="datetime-local" value={trialDateTime} onChange={(e) => setTrialDateTime(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Real auction (real money)</label>
+                  <Input type="datetime-local" value={realDateTime} onChange={(e) => setRealDateTime(e.target.value)} />
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => runPreview("savedate")}
+                disabled={previewing === "savedate" || !trialDateTime || !realDateTime}
+                className="rounded-lg"
+              >
+                <Eye className="w-4 h-4 mr-2" /> {previewing === "savedate" ? "Checking..." : "Preview Trial Announcement"}
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -255,6 +285,7 @@ export default function AdminReminders() {
                           {preview.type === "payment" && `${t.daysLate} day${t.daysLate === 1 ? "" : "s"} late · ${t.amountStr}`}
                           {(preview.type === "upcoming" || preview.type === "today") && `Due ${t.dueDateStr} · ${t.amountStr}`}
                           {preview.type === "auction" && "Auction reminder"}
+                          {preview.type === "savedate" && "Trial save-the-date"}
                         </p>
                         {hasPreview && (isOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />)}
                       </div>
@@ -328,6 +359,7 @@ function previewLabel(type) {
   if (type === "payment") return "overdue payment";
   if (type === "upcoming") return "upcoming-due";
   if (type === "today") return "due-today";
+  if (type === "savedate") return "trial save-the-date";
   return "auction";
 }
 
@@ -335,5 +367,6 @@ function reasonForEmpty(type) {
   if (type === "payment") return "Nobody in this group is currently past their due date.";
   if (type === "upcoming") return "Nobody's payment is due exactly 1 day from now, or everyone due has already paid.";
   if (type === "today") return "Nobody's payment is due exactly today, or everyone due has already paid.";
+  if (type === "savedate") return "This group has no active members with a phone number on file.";
   return "This group has no live auction currently open, or every member has already paid this month's dues.";
 }

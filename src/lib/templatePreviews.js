@@ -25,6 +25,10 @@ export const TEMPLATE_PREVIEWS = {
     body: "🔨 Hi *{{1}}*, the {{2}} auction for *{{3}}* starts soon.\nPlace your bid: {{4}}\n*CashBox Team* 🏦",
     paramLabels: ["Name", "Auction date/time", "Group", "Link"],
   },
+  auction_save_the_date_v1: {
+    body: "📅 Hi *{{1}}*, we're conducting a *trial auction* for *{{3}}* on *{{2}}* — no real money involved, just a practice run to help everyone get comfortable with bidding.\n\nThe *actual auction* (with real money) will follow on *{{4}}*.\n\nJoin the trial to practice!\n\nCashBox Team 🏦",
+    paramLabels: ["Name", "Trial auction date/time", "Group", "Real auction date/time"],
+  },
 };
 
 // Substitutes {{1}}, {{2}}, ... with the given parameter values.

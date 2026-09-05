@@ -177,6 +177,73 @@ export const computeAuctionReminderTargets = async (groupId, manualDateTime) => 
   return { targets, auctionDateStr };
 };
 
+// Advance "save the date" announcement for a trial (practice, zero money)
+// auction that precedes the real one — distinct from
+// computeAuctionReminderTargets above (which announces a single auction
+// that's about to start). Both the trial and real auction's date/time are
+// admin-picked, since neither necessarily has an Auction row yet at
+// announcement time.
+export const computeAuctionSaveTheDateTargets = async (groupId, { trialDateTime, realDateTime }) => {
+  const group = await base44.entities.ChitGroup.get(groupId);
+  if (!group) throw new Error("Group not found");
+
+  const plan = await base44.entities.ChitPlan.get(group.plan_id);
+  if (!plan || plan.model !== "live_auction") throw new Error("Not a live auction group");
+
+  const memberships = await base44.entities.GroupMembership.filter({
+    group_id: groupId,
+    status: "active",
+  });
+  if (memberships.length === 0) return [];
+
+  const trialDate = new Date(trialDateTime);
+  const realDate = new Date(realDateTime);
+  if (Number.isNaN(trialDate.getTime()) || Number.isNaN(realDate.getTime())) {
+    throw new Error("Pick both the trial and real auction date/time first");
+  }
+  const fmt = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const trialDateStr = fmt(trialDate);
+  const realDateStr = fmt(realDate);
+
+  const memberProfiles = await Promise.all(
+    memberships.map((m) => base44.entities.MemberProfile.get(m.member_profile_id))
+  );
+
+  return memberProfiles
+    .filter((p) => p?.mobile)
+    .map((p) => ({
+      memberProfileId: p.id,
+      fullName: p.full_name || "Member",
+      mobile: p.mobile,
+      template: "auction_save_the_date_v1",
+      parameters: [p.full_name, trialDateStr, group.group_name || group.group_code, realDateStr],
+    }));
+};
+
+export const sendAuctionSaveTheDateReminders = async (groupId, targets) => {
+  let sent = 0;
+  let failed = 0;
+
+  for (const t of targets) {
+    try {
+      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters });
+      sent++;
+    } catch (err) {
+      console.error(`Failed to send save-the-date reminder to ${t.fullName}:`, err);
+      failed++;
+    }
+  }
+
+  logAudit({
+    module: "Reminders",
+    action: "send-auction-savedate",
+    record_id: groupId,
+    details: `Sent ${sent} trial-auction save-the-date${sent === 1 ? "" : "s"}${failed ? ` (${failed} failed)` : ""} — ${targets.map((t) => t.fullName).join(", ") || "none"}`,
+  });
+
+  return { sent, failed };
+};
+
 export const sendAuctionReminders = async (groupId, targets) => {
   const list = targets || (await computeAuctionReminderTargets(groupId)).targets;
   let sent = 0;
