@@ -1,6 +1,6 @@
 import { isSoundEnabled } from "./soundPrefs";
 import { speakAnnouncement } from "./tts";
-import { amountToClipParts } from "./numberSpeech";
+import { amountToSpeechParts } from "./numberSpeech";
 
 let ctx;
 
@@ -233,7 +233,7 @@ export function speakCallAnnouncement(status, amount, currency) {
   const clips = CALL_AUDIO[status];
   if (!clips) return;
   const parts = [{ clip: clips.a }];
-  if (amount != null) parts.push(...amountToClipParts(amount, currency));
+  if (amount != null) parts.push(...amountToSpeechParts(amount, currency));
   parts.push({ clip: clips.b });
   speakAnnouncement(parts);
 }

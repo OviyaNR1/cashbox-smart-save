@@ -13,13 +13,13 @@
 // information (accessibility — never rely on sound alone).
 
 import { formatMoney } from "@/lib/currency";
-import { amountToClipParts } from "./numberSpeech";
+import { amountToSpeechParts } from "./numberSpeech";
 
 export function announceAuctionStart(startingAmount, currency) {
   return {
     parts: [
       { clip: "/audio/auction-start-a.mp3" },
-      ...amountToClipParts(startingAmount, currency),
+      ...amountToSpeechParts(startingAmount, currency),
       { clip: "/audio/auction-start-b.mp3" },
     ],
     visual: `🔔 Auction started — starting bid ${formatMoney(startingAmount, currency)}`,
@@ -83,7 +83,7 @@ export function announceWinner(memberName, amount, currency) {
     parts: [
       { clip: "/audio/winner-prefix.mp3" },
       { text: memberName },
-      ...amountToClipParts(amount, currency),
+      ...amountToSpeechParts(amount, currency),
       { clip: "/audio/winner-congrats.mp3" },
     ],
     visual: `🏆 Winner: ${memberName} — ${formatMoney(amount, currency)}. Congrats!`,
@@ -92,7 +92,7 @@ export function announceWinner(memberName, amount, currency) {
 
 export function announceNewLowestBid(amount, currency) {
   return {
-    parts: amountToClipParts(amount, currency),
+    parts: amountToSpeechParts(amount, currency),
     visual: `📉 New lowest bid: ${formatMoney(amount, currency)}`,
   };
 }

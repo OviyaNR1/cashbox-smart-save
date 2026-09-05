@@ -1,10 +1,12 @@
-// Turns a rupee amount into a sequence of real recorded number-tile clips
-// (public/audio/num-*.wav) instead of live browser TTS — e.g. 9700 becomes
-// the clips for "nine", "thousand", "seven", "hundred", "rupees", all in
-// the same real voice as the rest of the announcement script. Amounts
-// change every bid and can't be pre-recorded whole, but the individual
-// number words can be, and concatenating them still sounds like one
-// consistent voice rather than switching to a robotic fallback.
+// Turns a rupee amount into a single natural spoken phrase via a real TTS
+// provider (Google Cloud TTS, see supabase/functions/tts-speak) instead of
+// concatenating individually pre-recorded number-tile clips — e.g. 9700
+// becomes one continuous "nine thousand seven hundred rupees" utterance.
+// Stitching separate word-clips (the previous approach) left an audible gap
+// at every seam, since each clip's own silence padding stacks up — a single
+// generated phrase has none of that. Amounts change every bid and can't be
+// pre-recorded whole, so this is the one part of the announcement script
+// that's genuinely spoken live rather than played from a fixed clip.
 
 const ONES = [
   "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
@@ -46,48 +48,14 @@ export function amountToWords(amount) {
   return words;
 }
 
-const CLIP_MAP = {
-  zero: "/audio/num-0.wav",
-  one: "/audio/num-1.wav",
-  two: "/audio/num-2.wav",
-  three: "/audio/num-3.wav",
-  four: "/audio/num-4.wav",
-  five: "/audio/num-5.wav",
-  six: "/audio/num-6.wav",
-  seven: "/audio/num-7.wav",
-  eight: "/audio/num-8.wav",
-  nine: "/audio/num-9.wav",
-  ten: "/audio/num-10.wav",
-  eleven: "/audio/num-11.wav",
-  twelve: "/audio/num-12.wav",
-  thirteen: "/audio/num-13.wav",
-  fourteen: "/audio/num-14.wav",
-  fifteen: "/audio/num-15.wav",
-  sixteen: "/audio/num-16.wav",
-  seventeen: "/audio/num-17.wav",
-  eighteen: "/audio/num-18.wav",
-  nineteen: "/audio/num-19.wav",
-  twenty: "/audio/num-20.wav",
-  thirty: "/audio/num-21.wav",
-  forty: "/audio/num-22.wav",
-  fifty: "/audio/num-23.wav",
-  sixty: "/audio/num-24.wav",
-  seventy: "/audio/num-25.wav",
-  eighty: "/audio/num-26.wav",
-  ninety: "/audio/num-27.wav",
-  hundred: "/audio/num-hundred.wav",
-  thousand: "/audio/num-thousand.wav",
-  lakh: "/audio/num-lakh.wav",
-  rupees: "/audio/num-rupees.wav",
-};
-
-// Builds speakAnnouncement parts (see @/lib/tts) for a rupee amount. Only
-// covers INR — a non-INR amount falls back to a live-spoken part, since the
-// tile set is Indian-numbering-system specific.
-export function amountToClipParts(amount, currency) {
+// Builds speakAnnouncement parts (see @/lib/tts) for a rupee amount — one
+// { text, lang } part that goes through the live TTS pipeline as a single
+// utterance. Non-INR amounts get the same live-text treatment (currency
+// code read out) since there's no separate tile set to fall back to.
+export function amountToSpeechParts(amount, currency) {
   if (currency && currency !== "INR") {
-    return [{ text: `${amount} ${currency}` }];
+    return [{ text: `${amount} ${currency}`, lang: "en-IN" }];
   }
-  const words = [...amountToWords(amount), "rupees"];
-  return words.map((w) => ({ clip: CLIP_MAP[w] })).filter((p) => p.clip);
+  const phrase = [...amountToWords(amount), "rupees"].join(" ");
+  return [{ text: phrase, lang: "en-IN" }];
 }
