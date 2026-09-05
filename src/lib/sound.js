@@ -216,20 +216,42 @@ export function callAnnouncement(status, amountLabel) {
 }
 
 // Real recorded clips of the fixed call-stage phrases, split around where
-// the amount goes — e.g. call_1 is "Okay guys... current lowest" [amount]
-// "Yaaravadhu lower pogareenga? Come on guys!". A live browser voice
-// reading a fixed line every time is exactly what sounds robotic; a real
-// recorded clip doesn't. The amount changes with every bid and can't be
-// pre-recorded whole, so it's built from real number-tile clips (see
-// numberSpeech.js) and sandwiched between the two halves.
+// the amount goes — e.g. call_1 is "Okay Members... current lowest" [amount]
+// "Yaaravadhu kammi ah start panna pogareengala? Come on!". A live browser
+// voice reading a fixed line every time is exactly what sounds robotic; a
+// real recorded clip doesn't. The amount changes with every bid and can't
+// be pre-recorded whole, so it's spoken live via amountToSpeechParts and
+// sandwiched between the fixed clips.
+//
+// final_call is a longer suspense sequence with the amount called out three
+// times ("...once... ...twice... ...final call!"), not a single a/b pair —
+// segments is the list of fixed clips, amount is re-inserted between every
+// consecutive pair.
 const CALL_AUDIO = {
   call_1: { a: "/audio/call-1-a.mp3", b: "/audio/call-1-b.mp3" },
   call_2: { a: "/audio/call-2-a.mp3", b: "/audio/call-2-b.mp3" },
-  final_call: { a: "/audio/call-final-a.mp3", b: "/audio/call-final-b.mp3" },
 };
+const FINAL_CALL_SEGMENTS = [
+  "/audio/call-final-once-a.mp3",
+  "/audio/call-final-once-b.mp3",
+  "/audio/call-final-twice-b.mp3",
+  "/audio/call-final-final-b.mp3",
+];
 
 export function speakCallAnnouncement(status, amount, currency) {
   if (!isSoundEnabled()) return;
+  if (status === "final_call") {
+    const amountParts = amount != null ? amountToSpeechParts(amount, currency) : [];
+    const parts = [];
+    FINAL_CALL_SEGMENTS.forEach((clip, i) => {
+      parts.push({ clip });
+      // Amount goes between every pair of segments except after the last
+      // one — three insertions for four segments ("once"/"twice"/"final").
+      if (i < FINAL_CALL_SEGMENTS.length - 1) parts.push(...amountParts);
+    });
+    speakAnnouncement(parts);
+    return;
+  }
   const clips = CALL_AUDIO[status];
   if (!clips) return;
   const parts = [{ clip: clips.a }];

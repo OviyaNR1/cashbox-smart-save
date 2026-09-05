@@ -154,9 +154,19 @@ export default function MyChits() {
                   </span>
                 )}
                 {m.status === "active" && (
-                  <button onClick={() => setPayMembership(m)} className="px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1">
-                    <CreditCard className="w-3.5 h-3.5" /> Pay Installment
-                  </button>
+                  preview.unpaidInstallments?.length > 0 ? (
+                    <button onClick={() => setPayMembership(m)} className="px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1">
+                      <CreditCard className="w-3.5 h-3.5" /> Pay Installment
+                    </button>
+                  ) : (
+                    // Previously this button showed unconditionally, even on a
+                    // ticket with nothing due — which read as "this will let
+                    // me pay installment #1 again" to a member who'd already
+                    // paid it, since the button gave no hint it was a no-op.
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400">
+                      Paid up
+                    </span>
+                  )
                 )}
               </div>
             </div>
