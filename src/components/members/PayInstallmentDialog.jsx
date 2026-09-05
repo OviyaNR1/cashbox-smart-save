@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { formatMoney } from "@/lib/currency";
 import FileUpload from "@/components/members/FileUpload";
-import { buildUpiPaymentLink, BUSINESS_UPI_ID } from "@/lib/upi";
+import { buildUpiPaymentLink, BUSINESS_UPI_ID, BUSINESS_UPI_NUMBER } from "@/lib/upi";
 import { Loader2, CreditCard, Smartphone, Copy } from "lucide-react";
 import QRCode from "qrcode";
 
@@ -188,6 +188,16 @@ export default function PayInstallmentDialog({
       .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_ID, variant: "destructive" }));
   };
 
+  // Alternative to the VPA above — not every UPI app resolves this newer
+  // "UPI Number" format yet, so it's offered as a second option rather
+  // than a replacement.
+  const copyUpiNumber = () => {
+    saveDraft(membership.id, { method });
+    navigator.clipboard?.writeText(BUSINESS_UPI_NUMBER)
+      .then(() => toast({ title: "UPI Number copied", description: "Paste it in your UPI app to pay." }))
+      .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_NUMBER, variant: "destructive" }));
+  };
+
   const screenshotMissing = method === "upi" && !screenshotPath;
 
   const handleSubmit = async () => {
@@ -333,18 +343,33 @@ export default function PayInstallmentDialog({
               </p>
               <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
                 <li>Open your UPI app (PhonePe, Google Pay, Paytm, etc.)</li>
-                <li>Choose "Pay to UPI ID" or "Send money" and enter the ID below</li>
+                <li>Choose "Pay to UPI ID" (or "Pay to mobile number") and enter one of the two below</li>
                 <li>Enter {formatMoney(amount, currency)} and complete the payment</li>
               </ol>
               {/* The copy button alone isn't enough — clipboard access can
                   silently fail (older browsers, missing permission, no
                   HTTPS), and even when it works, a member can't visually
-                  verify or manually type an ID they never actually saw. */}
+                  verify or manually type an ID they never actually saw. Two
+                  options since not every UPI app resolves the newer UPI
+                  Number format yet — the VPA below is the universal one. */}
               <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-2">
                 <code className="flex-1 min-w-0 text-xs font-medium text-foreground truncate select-all">{BUSINESS_UPI_ID}</code>
                 <button
                   type="button"
                   onClick={copyUpiId}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border text-xs font-medium text-foreground hover:bg-muted"
+                >
+                  <Copy className="w-3 h-3" /> Copy
+                </button>
+              </div>
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-2">
+                <div className="flex-1 min-w-0">
+                  <code className="text-xs font-medium text-foreground truncate select-all block">{BUSINESS_UPI_NUMBER}</code>
+                  <p className="text-[10px] text-muted-foreground">UPI Number (alternative)</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyUpiNumber}
                   className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border text-xs font-medium text-foreground hover:bg-muted"
                 >
                   <Copy className="w-3 h-3" /> Copy

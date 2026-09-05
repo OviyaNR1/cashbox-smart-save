@@ -3,6 +3,12 @@
 // ADMIN_NOTIFY_PHONE in PlanRequestCard.jsx), or ask for a settings field if
 // you want it editable in the app itself.
 export const BUSINESS_UPI_ID = "8344551836@ybl";
+// The newer NPCI "UPI Number" — the same account, addressable by plain
+// digits instead of a VPA's identifier@handle format. Shown as a second,
+// alternative copy option since not every UPI app resolves this format yet
+// (unlike the VPA above, which every UPI app accepts) — some members' apps
+// may work better with one than the other.
+export const BUSINESS_UPI_NUMBER = "8344551836";
 const BUSINESS_UPI_NAME = "CashBox";
 
 // Builds a `upi://pay` deep link that opens the phone's UPI app chooser
