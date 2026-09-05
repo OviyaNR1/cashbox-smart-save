@@ -18,7 +18,11 @@ export const TEMPLATE_PREVIEWS = {
     paramLabels: ["Name", "Days late", "Breakdown", "Late fee", "Total due"],
   },
   payment_upcoming_reminder_v3: {
-    body: "Hi *{{1}}*, \n\nThis is a reminder about your upcoming CashBox Chit Fund installment:\n\nInstallment: #{{2}}\nAmount: *{{3}}*\nDue date: {{4}}\n\nPlease pay before the due date via UPI or Bank Transfer, and attach a screenshot as proof in the app.\n\nCashBox Team 🏦",
+    body: "Hi *{{1}}*, \n\nThis is a reminder about your upcoming CashBox Chit Fund installment:\n\nInstallment: #{{2}}\nAmount: *{{3}}*\nDue date: *{{4}}*\n\nPlease pay before the due date via UPI or Bank Transfer, and attach a screenshot as proof in the app.\n\nCashBox Team 🏦",
+    paramLabels: ["Name", "Installment #", "Amount", "Due date"],
+  },
+  payment_due_today_v1: {
+    body: "⏰ Hi *{{1}}*, \n\nYour CashBox Chit Fund installment is due *today*!\n\nInstallment: #{{2}}\nAmount: *{{3}}*\nDue date: *{{4}}*\n\nPlease pay today via UPI or Bank Transfer, and attach a screenshot as proof in the app.\n\nCashBox Team 🏦",
     paramLabels: ["Name", "Installment #", "Amount", "Due date"],
   },
   auction_reminder_v4: {

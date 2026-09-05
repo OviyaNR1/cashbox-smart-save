@@ -311,6 +311,7 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
   const dueDateStr = dueDate.toLocaleDateString("en-IN", {
     day: "numeric",
     month: "long",
+    year: "numeric",
     timeZone: currency === "CAD" ? "UTC" : "Asia/Kolkata",
   });
   const targets = [];
@@ -325,13 +326,17 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
     if (!profile?.mobile) continue;
 
     const amountStr = `${currency} ${monthlyAmount}`;
+    // daysBefore=0 (due today) gets its own template with "is due today!"
+    // urgency instead of "upcoming... please pay before the due date",
+    // which reads wrong for something due on the day itself.
+    const template = daysBefore === 0 ? "payment_due_today_v1" : "payment_upcoming_reminder_v3";
     targets.push({
       memberProfileId: profile.id,
       fullName: profile.full_name || "Member",
       mobile: profile.mobile,
       dueDateStr,
       amountStr,
-      template: "payment_upcoming_reminder_v3",
+      template,
       parameters: [profile.full_name, String(group.current_month), amountStr, dueDateStr],
     });
   }
