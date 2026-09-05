@@ -8,9 +8,9 @@ import {
 import { formatMoney } from "@/lib/currency";
 import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
-import { playCallBell, playGavel, playBidPlaced, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
+import { playCallBell, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
 import { speakAnnouncement } from "@/lib/tts";
-import { announceAuctionStart, announceAuctionClosed, announceWinner } from "@/lib/auctionAnnouncements";
+import { announceAuctionStart, announceAuctionClosed, announceWinner, announceNewLowestBid, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown } from "@/lib/useCountdown";
@@ -126,6 +126,11 @@ export default function AdminLiveAuction() {
           base44.entities.MemberProfile.get(payload.new.member_profile_id)
             .then((p) => pushToast(`${p?.full_name || "A member"} sent the lowest bid`, "bid"))
             .catch(() => pushToast("A member sent the lowest bid", "bid"));
+          // Throttled — a burst of bids only gets one excited reaction, not
+          // one stacked announcement per bid.
+          if (shouldAnnounceBid()) {
+            speakAnnouncement(announceNewLowestBid(payload.new.amount, plan?.currency).parts);
+          }
         }
         loadAuction();
       })

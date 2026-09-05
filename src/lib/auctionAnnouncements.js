@@ -90,9 +90,22 @@ export function announceWinner(memberName, amount, currency) {
   };
 }
 
+// A pool of short excited exclamations for when a new (lower) bid arrives
+// — reused randomly instead of one fixed line every time, so the auction
+// doesn't feel like it's replaying the same clip on every bid.
+const BID_REACTION_CLIPS = [
+  "/audio/bid-reaction-1.mp3",
+  "/audio/bid-reaction-2.mp3",
+  "/audio/bid-reaction-3.mp3",
+  "/audio/bid-reaction-4.mp3",
+  "/audio/bid-reaction-5.mp3",
+  "/audio/bid-reaction-6.mp3",
+];
+
 export function announceNewLowestBid(amount, currency) {
+  const reaction = BID_REACTION_CLIPS[Math.floor(Math.random() * BID_REACTION_CLIPS.length)];
   return {
-    parts: amountToSpeechParts(amount, currency),
+    parts: [{ clip: reaction }, ...amountToSpeechParts(amount, currency)],
     visual: `📉 New lowest bid: ${formatMoney(amount, currency)}`,
   };
 }

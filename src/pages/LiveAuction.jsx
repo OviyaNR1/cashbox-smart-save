@@ -2,14 +2,14 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { base44, supabase } from "@/api/base44Client";
 import { formatMoney } from "@/lib/currency";
 import { calcAuctionOutcome } from "@/lib/liveAuctionEngine";
-import { playCallBell, playFanfare, playGavel, playBidPlaced, CALL_TERMS, callAnnouncement, speakCallAnnouncement } from "@/lib/sound";
+import { playCallBell, playFanfare, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
 import { fireConfetti, fireWinnerConfetti } from "@/lib/confetti";
 import { useCountdown } from "@/lib/useCountdown";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { logAudit } from "@/lib/audit";
 import { speakAnnouncement } from "@/lib/tts";
-import { announceAuctionClosed, announceWinner } from "@/lib/auctionAnnouncements";
+import { announceAuctionClosed, announceWinner, announceNewLowestBid, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { Crown, Gavel, Building2, Trophy, Radio } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -157,6 +157,11 @@ export default function LiveAuction() {
             ? state.myName
             : state.profiles?.find((p) => p.id === payload.new.member_profile_id)?.full_name;
           pushToast(`${bidderName || "A member"} sent the lowest bid`, "bid");
+          // Throttled — a burst of bids only gets one excited reaction, not
+          // one stacked announcement per bid.
+          if (shouldAnnounceBid()) {
+            speakAnnouncement(announceNewLowestBid(payload.new.amount, state.plan?.currency).parts);
+          }
         }
         load();
       })
