@@ -58,6 +58,12 @@ export default function AdminReminders() {
   // both to keep the list scannable and because editing several at once
   // with no per-row "saved" indicator would be easy to lose track of.
   const [expandedId, setExpandedId] = useState(null);
+  // Auction day moves every month (no fixed schedule), and there's no
+  // Auction row to read a real date/time from until the admin actually
+  // opens it — this lets the admin announce a specific month's auction
+  // ahead of that, e.g. "Sunday 10:30am", instead of only being able to
+  // send this reminder after bidding is already live.
+  const [auctionDateTime, setAuctionDateTime] = useState("");
   // Every send already writes a permanent audit_logs entry (see
   // sendReminders.js) — the only thing missing was surfacing it here, since
   // the toast confirming a send vanishes the moment you navigate away and
@@ -101,7 +107,7 @@ export default function AdminReminders() {
     try {
       let targets;
       if (type === "payment") targets = await computePaymentReminderTargets(selectedGroup.id);
-      else if (type === "auction") targets = (await computeAuctionReminderTargets(selectedGroup.id)).targets;
+      else if (type === "auction") targets = (await computeAuctionReminderTargets(selectedGroup.id, auctionDateTime || undefined)).targets;
       // "upcoming" (1 day before) and "payment" (strictly past due, daysLate
       // > 0) leave the due date itself with no reminder option at all —
       // "today" fills that gap using the same upcoming-due computation with
@@ -195,6 +201,23 @@ export default function AdminReminders() {
               <Button variant="outline" onClick={() => runPreview("auction")} disabled={previewing === "auction"} className="rounded-lg">
                 <Eye className="w-4 h-4 mr-2" /> {previewing === "auction" ? "Checking..." : "Preview Auction Reminders"}
               </Button>
+            </div>
+
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">
+                Auction date & time (for Auction Reminders) — auction day moves every month, so pick it here
+              </label>
+              <Input
+                type="datetime-local"
+                value={auctionDateTime}
+                onChange={(e) => setAuctionDateTime(e.target.value)}
+                className="max-w-xs"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {auctionDateTime
+                  ? "This exact date/time will be announced in the Auction Reminder message."
+                  : "Leave blank to use the currently open auction's own time instead."}
+              </p>
             </div>
           </div>
         )}

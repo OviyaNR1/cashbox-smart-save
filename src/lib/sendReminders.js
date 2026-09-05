@@ -123,7 +123,14 @@ export const sendPaymentReminders = async (groupId, targets) => {
   return { sent, failed };
 };
 
-export const computeAuctionReminderTargets = async (groupId) => {
+// `manualDateTime` (a datetime-local string, e.g. "2026-09-07T10:30") lets
+// the admin announce a specific month's auction ahead of actually opening
+// it — auction day moves around month to month (no fixed schedule), and no
+// Auction row exists yet at announcement time to read a real date from, so
+// this is the only source of truth for "when" in that case. Omit it to fall
+// back to the original behavior: read the time from whatever auction is
+// currently open.
+export const computeAuctionReminderTargets = async (groupId, manualDateTime) => {
   const group = await base44.entities.ChitGroup.get(groupId);
   if (!group) throw new Error("Group not found");
 
@@ -136,19 +143,25 @@ export const computeAuctionReminderTargets = async (groupId) => {
   });
   if (memberships.length === 0) return { targets: [], auctionDateStr: null };
 
-  // Get the group's current (not-yet-closed) auction. "pending" was never a
-  // real status — the auctions table only allows scheduled/open/call_1/
-  // call_2/final_call/closed/cancelled, so filtering on status: "pending"
-  // could never match a row and this silently sent 0 reminders forever.
-  const groupAuctions = await base44.entities.Auction.filter({ group_id: groupId }, "-month_number", 5);
-  const upcomingAuction = groupAuctions.find((a) => a.status !== "closed" && a.status !== "cancelled");
-  if (!upcomingAuction) return { targets: [], auctionDateStr: null };
+  let auctionDate;
+  if (manualDateTime) {
+    auctionDate = new Date(manualDateTime);
+    if (Number.isNaN(auctionDate.getTime())) throw new Error("Invalid auction date/time");
+  } else {
+    // Get the group's current (not-yet-closed) auction. "pending" was never
+    // a real status — the auctions table only allows scheduled/open/call_1/
+    // call_2/final_call/closed/cancelled, so filtering on status: "pending"
+    // could never match a row and this silently sent 0 reminders forever.
+    const groupAuctions = await base44.entities.Auction.filter({ group_id: groupId }, "-month_number", 5);
+    const upcomingAuction = groupAuctions.find((a) => a.status !== "closed" && a.status !== "cancelled");
+    if (!upcomingAuction) return { targets: [], auctionDateStr: null };
+    auctionDate = new Date(upcomingAuction.created_at);
+  }
 
   const memberProfiles = await Promise.all(
     memberships.map((m) => base44.entities.MemberProfile.get(m.member_profile_id))
   );
 
-  const auctionDate = new Date(upcomingAuction.created_at);
   const auctionDateStr = auctionDate.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
   const targets = memberProfiles
