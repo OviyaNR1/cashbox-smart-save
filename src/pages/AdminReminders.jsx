@@ -102,6 +102,12 @@ export default function AdminReminders() {
       let targets;
       if (type === "payment") targets = await computePaymentReminderTargets(selectedGroup.id);
       else if (type === "auction") targets = (await computeAuctionReminderTargets(selectedGroup.id)).targets;
+      // "upcoming" (1 day before) and "payment" (strictly past due, daysLate
+      // > 0) leave the due date itself with no reminder option at all —
+      // "today" fills that gap using the same upcoming-due computation with
+      // daysBefore=0, reusing the same template since its wording ("Due
+      // date: {{4}}") reads fine whether that date is tomorrow or today.
+      else if (type === "today") targets = await computeUpcomingDueTargets(selectedGroup.id, 0);
       else targets = await computeUpcomingDueTargets(selectedGroup.id, 1);
       setPreview({ type, targets });
       if (targets.length === 0) {
@@ -176,9 +182,12 @@ export default function AdminReminders() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <Button variant="outline" onClick={() => runPreview("upcoming")} disabled={previewing === "upcoming"} className="rounded-lg">
                 <Eye className="w-4 h-4 mr-2" /> {previewing === "upcoming" ? "Checking..." : "Preview Upcoming Due"}
+              </Button>
+              <Button variant="outline" onClick={() => runPreview("today")} disabled={previewing === "today"} className="rounded-lg">
+                <Eye className="w-4 h-4 mr-2" /> {previewing === "today" ? "Checking..." : "Preview Due Today"}
               </Button>
               <Button variant="outline" onClick={() => runPreview("payment")} disabled={previewing === "payment"} className="rounded-lg">
                 <Eye className="w-4 h-4 mr-2" /> {previewing === "payment" ? "Checking..." : "Preview Payment Reminders"}
@@ -221,7 +230,7 @@ export default function AdminReminders() {
                       <div className="flex items-center gap-2">
                         <p className="text-xs text-muted-foreground text-right">
                           {preview.type === "payment" && `${t.daysLate} day${t.daysLate === 1 ? "" : "s"} late · ${t.amountStr}`}
-                          {preview.type === "upcoming" && `Due ${t.dueDateStr} · ${t.amountStr}`}
+                          {(preview.type === "upcoming" || preview.type === "today") && `Due ${t.dueDateStr} · ${t.amountStr}`}
                           {preview.type === "auction" && "Auction reminder"}
                         </p>
                         {hasPreview && (isOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />)}
@@ -295,11 +304,13 @@ export default function AdminReminders() {
 function previewLabel(type) {
   if (type === "payment") return "overdue payment";
   if (type === "upcoming") return "upcoming-due";
+  if (type === "today") return "due-today";
   return "auction";
 }
 
 function reasonForEmpty(type) {
   if (type === "payment") return "Nobody in this group is currently past their due date.";
   if (type === "upcoming") return "Nobody's payment is due exactly 1 day from now, or everyone due has already paid.";
+  if (type === "today") return "Nobody's payment is due exactly today, or everyone due has already paid.";
   return "This group has no live auction currently open, or every member has already paid this month's dues.";
 }
