@@ -120,7 +120,7 @@ export default function AdminDashboard() {
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <CollectionChart data={chart} />
+          <CollectionChart data={chart} currency={filterCurrency} />
         </div>
         <div className="bg-card rounded-2xl border border-border p-5">
           <p className="text-sm font-medium text-foreground flex items-center gap-2">
@@ -155,7 +155,7 @@ export default function AdminDashboard() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.08)" />
                 <XAxis dataKey="month" tick={{ fontSize: 12, fill: "rgba(255,255,255,0.5)" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 12, fill: "rgba(255,255,255,0.5)" }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(v) => `₹${Number(v).toLocaleString("en-IN")}`} />
+                <Tooltip formatter={(v) => `${filterCurrency === "CAD" ? "$" : "₹"}${Number(v).toLocaleString(filterCurrency === "CAD" ? "en-CA" : "en-IN")}`} />
                 <Bar dataKey="amount" fill="#ffb833" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

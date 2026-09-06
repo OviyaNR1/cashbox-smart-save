@@ -576,7 +576,7 @@ export default function LiveAuction() {
           <div className="flex gap-2">
             <div className="relative flex-1">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-semibold text-muted-foreground pointer-events-none">
-                ₹
+                {plan.currency === "CAD" ? "$" : "₹"}
               </span>
               <Input
                 type="number"
@@ -584,8 +584,8 @@ export default function LiveAuction() {
                 onChange={(e) => { setBidAmount(e.target.value); setConfirmingBid(false); }}
                 placeholder={
                   lowest
-                    ? `${(lowest.amount - (auction.min_decrement || 0)).toLocaleString("en-IN")} or lower`
-                    : `${Number(auction.starting_amount).toLocaleString("en-IN")} or lower`
+                    ? `${(lowest.amount - (auction.min_decrement || 0)).toLocaleString(plan.currency === "CAD" ? "en-CA" : "en-IN")} or lower`
+                    : `${Number(auction.starting_amount).toLocaleString(plan.currency === "CAD" ? "en-CA" : "en-IN")} or lower`
                 }
                 autoFocus
                 // Hides the native up/down spinner — a tiny, easy-to-mis-tap
