@@ -208,8 +208,9 @@ export default function AuctionPresenceChat({ auctionId, groupId, monthNumber, u
     setSending(true);
     try {
       await base44.entities.AuctionMessage.create({
-        auction_id: auctionId,
+        auction_id: auctionId || null,
         group_id: groupId,
+        month_number: monthNumber,
         member_profile_id: memberProfileId || null,
         user_id: userId,
         sender_name: senderName,
@@ -258,8 +259,9 @@ export default function AuctionPresenceChat({ auctionId, groupId, monthNumber, u
         try {
           const path = await uploadAuctionVoiceMessage(auctionId, blob);
           await base44.entities.AuctionMessage.create({
-            auction_id: auctionId,
+            auction_id: auctionId || null,
             group_id: groupId,
+            month_number: monthNumber,
             member_profile_id: memberProfileId || null,
             user_id: userId,
             sender_name: senderName,
