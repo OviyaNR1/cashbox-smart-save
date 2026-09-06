@@ -241,7 +241,12 @@ const FINAL_CALL_CLIPS = [
   { clip: "/audio/final-moonu-tharam.mp3", pauseAfter: 0 },
 ];
 
-export function speakCallAnnouncement(status, amount, currency) {
+// atFloor: the current lowest bid has already hit the plan's minimum
+// allowed bid — no lower bid can legally be accepted from here. Call 1/2's
+// "b" clip is specifically the "yaaraavadhu kammiya bidding panreengala"
+// invitation to bid even lower, which would be actively misleading at that
+// point, so it's dropped — just the amount is announced, no invitation.
+export function speakCallAnnouncement(status, amount, currency, atFloor = false) {
   if (!isSoundEnabled()) return;
   if (status === "final_call") {
     const amountParts = amount != null ? amountToSpeechParts(amount, currency) : [];
@@ -257,6 +262,6 @@ export function speakCallAnnouncement(status, amount, currency) {
   if (!clips) return;
   const parts = [{ clip: clips.a }];
   if (amount != null) parts.push(...amountToSpeechParts(amount, currency));
-  parts.push({ clip: clips.b });
+  if (!atFloor) parts.push({ clip: clips.b });
   speakAnnouncement(parts);
 }

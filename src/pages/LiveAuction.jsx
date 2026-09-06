@@ -36,6 +36,8 @@ function friendlyBidRejection(reason, auction, plan) {
       return "Final call has ended — bidding is locked. Waiting for the admin to close the auction.";
     case "Duplicate bid":
       return "Someone already bid that exact amount. Try a lower number.";
+    case "Already the lowest bidder":
+      return "You're already the current lowest bidder — wait for someone else to bid before you can bid again.";
     case "Bid higher than current lowest":
       return "Your bid needs to be lower than the current amount shown. Try a smaller number.";
     case "Bid below minimum decrement":
@@ -254,7 +256,8 @@ export default function LiveAuction() {
         playCallBell();
         const validBidsNow = (state.bids || []).filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
         const calledAmount = validBidsNow[0]?.amount ?? auction.starting_amount;
-        speakCallAnnouncement(auction.status, calledAmount, state.plan?.currency);
+        const atFloor = state.plan?.auction_min_bid > 0 && calledAmount <= state.plan.auction_min_bid;
+        speakCallAnnouncement(auction.status, calledAmount, state.plan?.currency, atFloor);
       } else if (auction.status === "closed") {
         const iWon = state.myMembership && auction.winner_member_profile_id === state.myMembership.member_profile_id;
         const winnerName = state.profiles?.find((p) => p.id === auction.winner_member_profile_id)?.full_name || "Member";

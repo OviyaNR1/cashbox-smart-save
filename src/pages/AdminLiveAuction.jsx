@@ -273,7 +273,8 @@ export default function AdminLiveAuction() {
     await base44.entities.Auction.update(auction.id, { status: nextStatus, call_stage_started_at: new Date().toISOString() });
     logAudit({ module: "Live Auction", action: nextStatus, record_id: auction.id, details: `${CALL_LABELS[nextStatus]} (${CALL_TERMS[nextStatus]}) started for group ${group.group_code} at ${formatMoney(calledAmount, plan.currency)}` });
     playCallBell();
-    speakCallAnnouncement(nextStatus, calledAmount, plan.currency);
+    const atFloor = plan.auction_min_bid > 0 && calledAmount <= plan.auction_min_bid;
+    speakCallAnnouncement(nextStatus, calledAmount, plan.currency, atFloor);
     setBusy(false);
     loadAuction();
   };
