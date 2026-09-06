@@ -9,11 +9,19 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { LogIn, Lock, Loader2, Phone, ShieldCheck, ArrowLeft } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import { safeReturnTo } from "@/lib/authReturnTo";
+import { getCountryPref } from "@/lib/countryPref";
 
 const COUNTRY_CODES = [
   { value: "+91", label: "+91 🇮🇳" },
   { value: "+1", label: "+1 🇨🇦" },
 ];
+
+// Set only by /in or /ca (CountryEntry.jsx) before landing here — a plain
+// /login or /register visit with no prior country link has none, and falls
+// back to the dropdown below. When it IS set, the person already told us
+// their country by which link they clicked, so asking them to also pick a
+// calling code is redundant friction — show it locked instead of editable.
+const lockedCodeFromPref = () => (getCountryPref() === "CA" ? "+1" : getCountryPref() === "IN" ? "+91" : null);
 
 function toE164(countryCode, tenDigits) {
   return `${countryCode}${tenDigits.replace(/\D/g, "")}`;
@@ -33,7 +41,8 @@ export default function Login() {
   // "create-password" (new account) -> "verify" (new account's WhatsApp
   // code) -> done. Going back from either branch returns to "phone".
   const [step, setStep] = useState("phone");
-  const [countryCode, setCountryCode] = useState("+91");
+  const [lockedCode] = useState(lockedCodeFromPref);
+  const [countryCode, setCountryCode] = useState(() => lockedCodeFromPref() || "+91");
   const [phoneDigits, setPhoneDigits] = useState("");
   const [checking, setChecking] = useState(false);
   const [password, setPassword] = useState("");
@@ -217,14 +226,20 @@ export default function Login() {
           <div className="space-y-2">
             <Label htmlFor="phone">WhatsApp number</Label>
             <div className="flex gap-2">
-              <Select value={countryCode} onValueChange={setCountryCode}>
-                <SelectTrigger className="w-[92px] h-12"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {COUNTRY_CODES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {lockedCode ? (
+                <div className="w-[92px] h-12 rounded-md border border-input flex items-center justify-center text-sm font-medium bg-muted/40">
+                  {COUNTRY_CODES.find((c) => c.value === lockedCode)?.label}
+                </div>
+              ) : (
+                <Select value={countryCode} onValueChange={setCountryCode}>
+                  <SelectTrigger className="w-[92px] h-12"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {COUNTRY_CODES.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Input
                 id="phone"
                 type="tel"
