@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { LogIn, Lock, Loader2, Phone, ShieldCheck, ArrowLeft } from "lucide-react";
+import { LogIn, Lock, Loader2, Phone, ShieldCheck, ArrowLeft, Globe } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import { safeReturnTo } from "@/lib/authReturnTo";
 import { getCountryPref } from "@/lib/countryPref";
@@ -207,6 +207,13 @@ export default function Login() {
     <AuthLayout
       icon={step === "phone" ? LogIn : isNewAccount ? ShieldCheck : LogIn}
       title={step === "phone" ? "Welcome to CashBox" : isNewAccount ? "Create your account" : "Welcome back"}
+      badge={
+        step === "phone" && lockedCode === "+1" ? (
+          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-xs font-medium text-primary">
+            <Globe className="w-3.5 h-3.5" /> Now serving Canada
+          </span>
+        ) : null
+      }
       subtitle={
         step === "phone"
           ? "Enter your WhatsApp number to continue"
