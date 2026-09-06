@@ -96,8 +96,15 @@ export default function LiveAuction() {
         .sort((a, b) => new Date(b.auction.closed_at) - new Date(a.auction.closed_at))[0];
       const picked = openPick || closedPick;
       const auction = picked?.auction || null;
-      const group = picked?.group || null;
-      const plan = picked?.plan || null;
+      // No Auction row exists yet for any candidate group (e.g. the admin
+      // hasn't clicked Start Auction this month) — fall back to the first
+      // live-auction group this member belongs to anyway, so the waiting
+      // room (chat + presence) still has somewhere to attach to instead of
+      // showing a dead end. monthNumber is what WOULD be the next auction's
+      // month, used to key the chat room before that auction actually exists.
+      const group = picked?.group || liveGroups[0] || null;
+      const plan = picked?.plan || (group ? plans.find((p) => p.id === group.plan_id) : null);
+      const monthNumber = auction?.month_number ?? (group ? (group.current_month || 1) + 1 : null);
       // A person can hold multiple tickets (memberships) in the same
       // group — picking an arbitrary one here could show "you've already
       // won, bidding closed" for someone who actually still has a
@@ -137,7 +144,7 @@ export default function LiveAuction() {
         ? await base44.entities.MemberProfile.get(myMembership.member_profile_id).catch(() => null)
         : null;
 
-      setState({ loading: false, me, auction, group, plan, myMembership, myName: myProfile?.full_name || "Member", bids, profiles });
+      setState({ loading: false, me, auction, group, plan, monthNumber, myMembership, myName: myProfile?.full_name || "Member", bids, profiles });
     } catch (err) {
       setState({ loading: false, error: err.message || String(err) });
     }
@@ -328,15 +335,34 @@ export default function LiveAuction() {
   }
 
   if (!state.auction) {
+    // Even with no Auction row yet, members should be able to join the
+    // room and chat while waiting — group/monthNumber are computed by
+    // load() specifically to support this, so the same room (and its
+    // history) carries straight through once the admin actually starts it.
     return (
       <div className="space-y-6">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-primary">Live Auction</p>
-          <h1 className="text-3xl font-semibold text-foreground mt-1">Bid Now</h1>
+          <h1 className="text-3xl font-semibold text-foreground mt-1">
+            {state.group ? `${state.group.group_name || state.group.group_code} — Month ${state.monthNumber}` : "Bid Now"}
+          </h1>
         </div>
         <div className="bg-card rounded-2xl border border-border p-12 text-center text-sm text-muted-foreground">
-          No open auction right now. Check back once your group's admin starts this month's auction.
+          {state.group
+            ? "Waiting for your group's admin to start this month's auction — join the chat below while you wait."
+            : "No open auction right now. Check back once your group's admin starts this month's auction."}
         </div>
+        {state.group && (
+          <AuctionPresenceChat
+            auctionId={null}
+            groupId={state.group.id}
+            monthNumber={state.monthNumber}
+            userId={state.me?.id}
+            memberProfileId={state.myMembership?.member_profile_id}
+            senderName={state.myName}
+            onJoin={(name) => pushToast(`${name} joined`, "join")}
+          />
+        )}
       </div>
     );
   }
@@ -402,6 +428,7 @@ export default function LiveAuction() {
         <AuctionPresenceChat
           auctionId={auction.id}
           groupId={group.id}
+          monthNumber={auction.month_number}
           userId={state.me?.id}
           memberProfileId={myMembership?.member_profile_id}
           senderName={myName}
@@ -614,6 +641,7 @@ export default function LiveAuction() {
       <AuctionPresenceChat
         auctionId={auction.id}
         groupId={group.id}
+        monthNumber={auction.month_number}
         userId={state.me?.id}
         memberProfileId={myMembership?.member_profile_id}
         senderName={myName}

@@ -396,6 +396,11 @@ export default function AdminLiveAuction() {
           <p className="text-sm text-muted-foreground">
             Deciding Month {targetMonth} of {plan.duration_months} (currently in Month {currentMonth}) · Starting amount {formatMoney(startingAmount, plan.currency)} · Minimum decrement {formatMoney(plan.auction_min_decrement, plan.currency)}
           </p>
+          {watchingCount > 0 && (
+            <p className="flex items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Eye className="w-3.5 h-3.5" /> {watchingCount} member{watchingCount === 1 ? "" : "s"} already waiting in the room
+            </p>
+          )}
           <Button onClick={startAuction} disabled={busy} className="bg-primary hover:bg-primary/90 rounded-full">
             <Gavel className="w-4 h-4 mr-1" /> {busy ? "Starting…" : `Start Auction for Month ${targetMonth}`}
           </Button>
@@ -410,10 +415,11 @@ export default function AdminLiveAuction() {
         </div>
       )}
 
-      {groupId && plan && !isCompanyMonth && auction && (
+      {groupId && plan && !isCompanyMonth && (
         <AuctionPresenceChat
-          auctionId={auction.id}
+          auctionId={auction?.id || null}
           groupId={group.id}
+          monthNumber={targetMonth}
           userId={me?.id}
           memberProfileId={null}
           // base44.auth.me() never actually returns a full_name (the

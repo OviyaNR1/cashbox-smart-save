@@ -7,6 +7,7 @@ import { MessageCircle, Send, Users, Eye, ChevronDown, ChevronUp } from "lucide-
 import {
   computePaymentReminderTargets, sendPaymentReminders,
   computeAuctionReminderTargets, sendAuctionReminders,
+  computeAuctionStartingNowTargets, sendAuctionStartingNowReminders,
   computeAuctionSaveTheDateTargets, sendAuctionSaveTheDateReminders,
   computeUpcomingDueTargets, sendUpcomingDueReminders,
 } from "@/lib/sendReminders";
@@ -114,6 +115,7 @@ export default function AdminReminders() {
       let targets;
       if (type === "payment") targets = await computePaymentReminderTargets(selectedGroup.id);
       else if (type === "auction") targets = (await computeAuctionReminderTargets(selectedGroup.id, auctionDateTime || undefined)).targets;
+      else if (type === "auctionstart") targets = await computeAuctionStartingNowTargets(selectedGroup.id);
       else if (type === "savedate") targets = await computeAuctionSaveTheDateTargets(selectedGroup.id, { trialDateTime, realDateTime });
       // "upcoming" (1 day before) and "payment" (strictly past due, daysLate
       // > 0) leave the due date itself with no reminder option at all —
@@ -138,6 +140,7 @@ export default function AdminReminders() {
     try {
       const sendFn = preview.type === "payment" ? sendPaymentReminders
         : preview.type === "auction" ? sendAuctionReminders
+        : preview.type === "auctionstart" ? sendAuctionStartingNowReminders
         : preview.type === "savedate" ? sendAuctionSaveTheDateReminders
         : sendUpcomingDueReminders;
       const result = await sendFn(selectedGroup.id, preview.targets);
@@ -168,7 +171,10 @@ export default function AdminReminders() {
           <strong>Payment Reminders:</strong> Automatically finds unpaid members and sends based on days late
         </p>
         <p className="text-sm text-blue-300">
-          <strong>Auction Reminders:</strong> Sends to all members about an upcoming auction
+          <strong>Auction Reminder (2h Before):</strong> Sends ahead of an auction, worded as "starts soon"
+        </p>
+        <p className="text-sm text-blue-300">
+          <strong>Auction Reminder (Starting Now):</strong> Sends once bidding is actually live
         </p>
       </div>
 
@@ -207,13 +213,13 @@ export default function AdminReminders() {
                 <Eye className="w-4 h-4 mr-2" /> {previewing === "payment" ? "Checking..." : "Preview Payment Reminders"}
               </Button>
               <Button variant="outline" onClick={() => runPreview("auction")} disabled={previewing === "auction"} className="rounded-lg">
-                <Eye className="w-4 h-4 mr-2" /> {previewing === "auction" ? "Checking..." : "Preview Auction Reminders"}
+                <Eye className="w-4 h-4 mr-2" /> {previewing === "auction" ? "Checking..." : "Preview Auction Reminder (2h Before)"}
               </Button>
             </div>
 
             <div>
               <label className="text-xs text-muted-foreground block mb-1">
-                Auction date & time (for Auction Reminders) — auction day moves every month, so pick it here
+                Auction date & time (for the 2-hours-before reminder) — auction day moves every month, so pick it here
               </label>
               <Input
                 type="datetime-local"
@@ -225,6 +231,15 @@ export default function AdminReminders() {
                 {auctionDateTime
                   ? "This exact date/time will be announced in the Auction Reminder message."
                   : "Leave blank to use the currently open auction's own time instead."}
+              </p>
+            </div>
+
+            <div>
+              <Button variant="outline" onClick={() => runPreview("auctionstart")} disabled={previewing === "auctionstart"} className="rounded-lg">
+                <Eye className="w-4 h-4 mr-2" /> {previewing === "auctionstart" ? "Checking..." : "Preview Auction Reminder (Starting Now)"}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-1">
+                Send once the auction is actually live — worded as "happening right now," not an advance heads-up.
               </p>
             </div>
 
@@ -284,7 +299,8 @@ export default function AdminReminders() {
                         <p className="text-xs text-muted-foreground text-right">
                           {preview.type === "payment" && `${t.daysLate} day${t.daysLate === 1 ? "" : "s"} late · ${t.amountStr}`}
                           {(preview.type === "upcoming" || preview.type === "today") && `Due ${t.dueDateStr} · ${t.amountStr}`}
-                          {preview.type === "auction" && "Auction reminder"}
+                          {preview.type === "auction" && "Auction reminder (2h before)"}
+                          {preview.type === "auctionstart" && "Auction reminder (starting now)"}
                           {preview.type === "savedate" && "Trial save-the-date"}
                         </p>
                         {hasPreview && (isOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />)}
@@ -360,6 +376,7 @@ function previewLabel(type) {
   if (type === "upcoming") return "upcoming-due";
   if (type === "today") return "due-today";
   if (type === "savedate") return "trial save-the-date";
+  if (type === "auctionstart") return "auction-starting-now";
   return "auction";
 }
 
@@ -368,5 +385,6 @@ function reasonForEmpty(type) {
   if (type === "upcoming") return "Nobody's payment is due exactly 1 day from now, or everyone due has already paid.";
   if (type === "today") return "Nobody's payment is due exactly today, or everyone due has already paid.";
   if (type === "savedate") return "This group has no active members with a phone number on file.";
+  if (type === "auctionstart") return "This group has no active members with a phone number on file.";
   return "This group has no live auction currently open, or every member has already paid this month's dues.";
 }

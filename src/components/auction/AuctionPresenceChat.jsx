@@ -33,7 +33,14 @@ const formatTime = (iso) => {
 // Supabase Realtime's Presence API; join/leave/chat/voice entries are also
 // written to auction_messages so anyone opening the panel mid-auction sees
 // the full history, not just what happens after they open it.
-export default function AuctionPresenceChat({ auctionId, groupId, userId, memberProfileId, senderName, onJoin, onPresenceChange }) {
+//
+// The room is identified by (groupId, monthNumber), not auctionId — members
+// should be able to join and chat while waiting for the admin to start the
+// month's auction, before an Auction row even exists yet. auctionId is
+// passed once it's known and gets attached to new messages/logged events
+// from then on, but is never required for the room itself to work; the same
+// room (and its history) carries straight through into the actual auction.
+export default function AuctionPresenceChat({ auctionId, groupId, monthNumber, userId, memberProfileId, senderName, onJoin, onPresenceChange }) {
   const [open, setOpen] = useState(false);
   const [present, setPresent] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -51,9 +58,15 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
   const chunksRef = useRef([]);
   const onJoinRef = useRef(onJoin);
   const onPresenceChangeRef = useRef(onPresenceChange);
+  // Read fresh inside the room effect below without needing auctionId in
+  // its dependency array — the room itself (channel + history) is keyed on
+  // group+month and shouldn't tear down and reconnect just because the
+  // auction actually opened partway through.
+  const auctionIdRef = useRef(auctionId);
   openRef.current = open;
   onJoinRef.current = onJoin;
   onPresenceChangeRef.current = onPresenceChange;
+  auctionIdRef.current = auctionId;
 
   // Unlock audio playback from whatever the first real interaction with the
   // page turns out to be — a nav click, opening the panel, anything —
@@ -66,17 +79,18 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
   }, []);
 
   useEffect(() => {
-    if (!auctionId || !userId || !senderName) return;
+    if (!groupId || !monthNumber || !userId || !senderName) return;
     let cancelled = false;
 
-    base44.entities.AuctionMessage.filter({ auction_id: auctionId }, "created_date", 200)
+    base44.entities.AuctionMessage.filter({ group_id: groupId, month_number: monthNumber }, "created_date", 200)
       .then((rows) => { if (!cancelled) setMessages(rows); })
       .catch(() => {});
 
     const logEvent = (message_type, extra = {}) =>
       base44.entities.AuctionMessage.create({
-        auction_id: auctionId,
+        auction_id: auctionId || null,
         group_id: groupId,
+        month_number: monthNumber,
         member_profile_id: memberProfileId || null,
         user_id: userId,
         sender_name: senderName,
@@ -85,7 +99,7 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
         ...extra,
       }).catch(() => {});
 
-    const roomKey = `${auctionId}:${userId}`;
+    const roomKey = `${groupId}:${monthNumber}:${userId}`;
     const logJoin = () => {
       const pending = pendingLeaves.get(roomKey);
       if (pending) {
@@ -106,7 +120,7 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
       pendingLeaves.set(roomKey, { timer });
     };
 
-    const channel = supabase.channel(`auction-room-${auctionId}`, {
+    const channel = supabase.channel(`auction-room-${groupId}-${monthNumber}`, {
       config: { presence: { key: userId } },
     });
 
@@ -130,11 +144,16 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
       if (key !== userId) playMemberLeave();
     });
 
+    // Filtered server-side on group_id alone (Realtime only supports one
+    // equality filter per subscription) — month_number is checked once the
+    // row arrives, since the same group's chat from a different month would
+    // otherwise leak into this room too.
     channel.on(
       "postgres_changes",
-      { event: "INSERT", schema: "public", table: "auction_messages", filter: `auction_id=eq.${auctionId}` },
+      { event: "INSERT", schema: "public", table: "auction_messages", filter: `group_id=eq.${groupId}` },
       (payload) => {
         const m = payload.new;
+        if (m.month_number !== monthNumber) return;
         setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
         const iWasMentioned = m.sender_name !== senderName && m.body && m.body.includes(`@${senderName}`);
         if (m.sender_name !== senderName) {
@@ -157,7 +176,7 @@ export default function AuctionPresenceChat({ auctionId, groupId, userId, member
       scheduleLeave();
       supabase.removeChannel(channel);
     };
-  }, [auctionId, groupId, userId, memberProfileId, senderName]);
+  }, [groupId, monthNumber, userId, memberProfileId, senderName, auctionId]);
 
   // Voice clips live in a private bucket — resolve a signed URL for any
   // voice message that doesn't have one cached yet.

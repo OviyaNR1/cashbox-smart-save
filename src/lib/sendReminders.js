@@ -177,6 +177,62 @@ export const computeAuctionReminderTargets = async (groupId, manualDateTime) => 
   return { targets, auctionDateStr };
 };
 
+// The auction is actually live right now — distinct from
+// computeAuctionReminderTargets above, which is worded for an announcement
+// sent some time (typically ~2 hours) ahead of the auction actually
+// opening. Same admin-triggered, manual-send model — no scheduled job.
+export const computeAuctionStartingNowTargets = async (groupId) => {
+  const group = await base44.entities.ChitGroup.get(groupId);
+  if (!group) throw new Error("Group not found");
+
+  const plan = await base44.entities.ChitPlan.get(group.plan_id);
+  if (!plan || plan.model !== "live_auction") throw new Error("Not a live auction group");
+
+  const memberships = await base44.entities.GroupMembership.filter({
+    group_id: groupId,
+    status: "active",
+  });
+  if (memberships.length === 0) return [];
+
+  const memberProfiles = await Promise.all(
+    memberships.map((m) => base44.entities.MemberProfile.get(m.member_profile_id))
+  );
+
+  return memberProfiles
+    .filter((p) => p?.mobile)
+    .map((p) => ({
+      memberProfileId: p.id,
+      fullName: p.full_name || "Member",
+      mobile: p.mobile,
+      template: "auction_starting_now_v1",
+      parameters: [p.full_name, group.group_name || group.group_code, `${window.location.origin}/live-auction`],
+    }));
+};
+
+export const sendAuctionStartingNowReminders = async (groupId, targets) => {
+  let sent = 0;
+  let failed = 0;
+
+  for (const t of targets) {
+    try {
+      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters });
+      sent++;
+    } catch (err) {
+      failed++;
+      console.error(`Failed to send auction-starting-now reminder to ${t.fullName}:`, err);
+    }
+  }
+
+  logAudit({
+    module: "Reminders",
+    action: "send-auction-starting-now",
+    record_id: groupId,
+    details: `Sent ${sent} auction-starting-now reminders${failed ? ` (${failed} failed)` : ""} — ${targets.map((t) => t.fullName).join(", ")}`,
+  });
+
+  return { sent, failed };
+};
+
 // Advance "save the date" announcement for a trial (practice, zero money)
 // auction that precedes the real one — distinct from
 // computeAuctionReminderTargets above (which announces a single auction
