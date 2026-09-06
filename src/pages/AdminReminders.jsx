@@ -76,6 +76,16 @@ export default function AdminReminders() {
   // the toast confirming a send vanishes the moment you navigate away and
   // there was nothing on this page to check back against.
   const [recentSends, setRecentSends] = useState(null);
+  // Per-recipient delivery status — the audit log above only ever recorded
+  // "the app told Meta to send N messages," never whether any of them
+  // actually reached a phone. This reads whatsapp_message_log, which a
+  // webhook (netlify/functions/whatsappWebhook.cjs) updates asynchronously
+  // as Meta reports sent/delivered/read/failed for each one — there's no
+  // realtime subscription here, just a manual refresh, since statuses can
+  // trickle in over the following minutes.
+  const [deliveryLog, setDeliveryLog] = useState(null);
+  const [deliveryProfiles, setDeliveryProfiles] = useState({});
+  const [loadingDelivery, setLoadingDelivery] = useState(false);
 
   const loadRecentSends = () => {
     base44.entities.AuditLog.list("-created_date", 500).then((logs) => {
@@ -83,9 +93,28 @@ export default function AdminReminders() {
     });
   };
 
+  const loadDeliveryLog = () => {
+    setLoadingDelivery(true);
+    base44.entities.WhatsAppMessageLog.list("-sent_at", 50)
+      .then(async (rows) => {
+        setDeliveryLog(rows || []);
+        const ids = [...new Set((rows || []).map((r) => r.member_profile_id).filter(Boolean))];
+        const missing = ids.filter((id) => !deliveryProfiles[id]);
+        if (missing.length) {
+          const profs = await Promise.all(missing.map((id) => base44.entities.MemberProfile.get(id).catch(() => null)));
+          setDeliveryProfiles((prev) => ({
+            ...prev,
+            ...Object.fromEntries(profs.filter(Boolean).map((p) => [p.id, p.full_name])),
+          }));
+        }
+      })
+      .finally(() => setLoadingDelivery(false));
+  };
+
   useEffect(() => {
     base44.entities.ChitGroup.list("-created_date", 100).then(setGroups);
     loadRecentSends();
+    loadDeliveryLog();
   }, []);
 
   const resetPreview = () => { setPreview(null); setExpandedId(null); };
@@ -361,6 +390,48 @@ export default function AdminReminders() {
                     {l.created_at ? new Date(l.created_at).toLocaleString() : "—"}
                   </p>
                   <p className="text-foreground mt-0.5">{l.details || l.action}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {deliveryLog !== null && (
+        <div className="bg-card rounded-2xl border border-border p-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <MessageCircle className="w-4 h-4 text-primary" /> Delivery status (last 50)
+            </p>
+            <button onClick={loadDeliveryLog} disabled={loadingDelivery} className="text-xs text-primary hover:underline disabled:opacity-50">
+              {loadingDelivery ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            "Sent" means WhatsApp accepted it — it can still silently never arrive (e.g. no marketing opt-in). "Delivered"/"Read" confirm it actually reached the phone; "Failed" means Meta reported an error. Statuses arrive after the send, sometimes a few minutes later — refresh to check.
+          </p>
+          {deliveryLog.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No tracked sends yet.</p>
+          ) : (
+            <div className="space-y-1.5 max-h-96 overflow-y-auto">
+              {deliveryLog.map((row) => (
+                <div key={row.id} className="flex items-center justify-between gap-2 text-xs border-b border-border/60 last:border-0 pb-1.5 last:pb-0">
+                  <div className="min-w-0">
+                    <span className="text-foreground font-medium">{deliveryProfiles[row.member_profile_id] || row.phone}</span>
+                    <span className="text-muted-foreground"> · {row.purpose || row.template_name || "—"} · {new Date(row.sent_at).toLocaleString()}</span>
+                  </div>
+                  <span
+                    className={`shrink-0 px-2 py-0.5 rounded-full font-medium ${
+                      row.status === "failed"
+                        ? "bg-destructive/15 text-destructive"
+                        : row.status === "read" || row.status === "delivered"
+                        ? "bg-emerald-500/15 text-emerald-400"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                    title={row.error_message || undefined}
+                  >
+                    {row.status}
+                  </span>
                 </div>
               ))}
             </div>

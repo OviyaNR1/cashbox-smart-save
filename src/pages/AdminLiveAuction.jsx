@@ -498,7 +498,9 @@ export default function AdminLiveAuction() {
                     <span className="w-8 text-center">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground truncate">{profileOf(b.member_profile_id)?.full_name || "Member"}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(b.created_at).toLocaleTimeString()}</p>
+                      <p className="text-xs font-medium text-foreground/80 tabular-nums">
+                        {new Date(b.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                      </p>
                     </div>
                     <p className="font-semibold tabular-nums text-foreground">{formatMoney(b.amount, plan.currency)}</p>
                   </div>
@@ -512,7 +514,12 @@ export default function AdminLiveAuction() {
               <p className="text-sm font-medium text-foreground mb-3">Rejected bid attempts</p>
               <div className="space-y-1 text-xs text-muted-foreground">
                 {rejectedBids.map((b) => (
-                  <p key={b.id}>{profileOf(b.member_profile_id)?.full_name || "Member"} — {formatMoney(b.amount, plan.currency)} — {b.rejection_reason}</p>
+                  <p key={b.id}>
+                    <span className="font-medium tabular-nums text-foreground/80">
+                      {new Date(b.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    </span>{" "}
+                    — {profileOf(b.member_profile_id)?.full_name || "Member"} — {formatMoney(b.amount, plan.currency)} — {b.rejection_reason}
+                  </p>
                 ))}
               </div>
             </div>

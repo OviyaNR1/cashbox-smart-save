@@ -415,6 +415,9 @@ export default function LiveAuction() {
                   <span className="w-8 text-center">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-foreground truncate">{profileOf(b.member_profile_id)?.full_name || "Member"}{b.member_profile_id === myMembership?.member_profile_id ? " (You)" : ""}</p>
+                    <p className="text-xs font-medium text-foreground/80 tabular-nums">
+                      {new Date(b.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    </p>
                   </div>
                   <p className="font-semibold tabular-nums text-foreground">{formatMoney(b.amount, plan.currency)}</p>
                 </div>
@@ -616,7 +619,9 @@ export default function LiveAuction() {
                     {profileOf(b.member_profile_id)?.full_name || "Member"}{b.member_profile_id === myMembership?.member_profile_id ? " (You)" : ""}
                     {i === 0 && <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">Leading</span>}
                   </p>
-                  <p className="text-xs text-muted-foreground">{new Date(b.created_at).toLocaleTimeString()}</p>
+                  <p className="text-xs font-medium text-foreground/80 tabular-nums">
+                    {new Date(b.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                  </p>
                 </div>
                 <p className="font-semibold tabular-nums text-foreground">{formatMoney(b.amount, plan.currency)}</p>
               </div>
@@ -631,7 +636,10 @@ export default function LiveAuction() {
           <div className="space-y-1 text-xs">
             {myBids.slice().reverse().map((b) => (
               <p key={b.id} className={b.status === "valid" ? "text-foreground" : "text-muted-foreground"}>
-                {formatMoney(b.amount, plan.currency)} — {b.status === "valid" ? "Accepted" : `Rejected (${b.rejection_reason})`}
+                <span className="font-medium tabular-nums">
+                  {new Date(b.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                </span>{" "}
+                — {formatMoney(b.amount, plan.currency)} — {b.status === "valid" ? "Accepted" : `Rejected (${b.rejection_reason})`}
               </p>
             ))}
           </div>

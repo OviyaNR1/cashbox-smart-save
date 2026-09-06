@@ -1,3 +1,23 @@
+const { createClient } = require("@supabase/supabase-js");
+
+// Best-effort — a logging failure should never block the actual send. Uses
+// the anon key from trusted server-side code (see whatsapp_message_log's
+// RLS policies), so no separate service-role secret is needed.
+async function logDelivery({ waMessageId, phone, memberProfileId, templateName, purpose }) {
+  try {
+    const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
+    await supabase.from("whatsapp_message_log").insert({
+      wa_message_id: waMessageId,
+      phone,
+      member_profile_id: memberProfileId || null,
+      template_name: templateName || null,
+      purpose: purpose || null,
+    });
+  } catch (err) {
+    console.error("Failed to log WhatsApp delivery row:", err);
+  }
+}
+
 const handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
     return {
@@ -14,7 +34,7 @@ const handler = async (event) => {
   }
 
   try {
-    const { phone, message, templateName, parameters } = JSON.parse(event.body);
+    const { phone, message, templateName, parameters, memberProfileId, purpose } = JSON.parse(event.body);
 
     if (!phone) {
       return {
@@ -92,6 +112,11 @@ const handler = async (event) => {
       };
     }
 
+    const messageId = result.messages?.[0]?.id;
+    if (messageId) {
+      await logDelivery({ waMessageId: messageId, phone, memberProfileId, templateName, purpose });
+    }
+
     return {
       statusCode: 200,
       headers: {
@@ -100,7 +125,7 @@ const handler = async (event) => {
       },
       body: JSON.stringify({
         success: true,
-        messageId: result.messages?.[0]?.id,
+        messageId,
       }),
     };
   } catch (error) {

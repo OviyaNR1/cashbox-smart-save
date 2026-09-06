@@ -105,7 +105,7 @@ export const sendPaymentReminders = async (groupId, targets) => {
 
   for (const t of list) {
     try {
-      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters });
+      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters, memberProfileId: t.memberProfileId, purpose: "payment_reminder" });
       sent++;
     } catch (err) {
       console.error(`Failed to send reminder to ${t.fullName}:`, err);
@@ -215,7 +215,7 @@ export const sendAuctionStartingNowReminders = async (groupId, targets) => {
 
   for (const t of targets) {
     try {
-      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters });
+      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters, memberProfileId: t.memberProfileId, purpose: "auction_starting_now" });
       sent++;
     } catch (err) {
       failed++;
@@ -282,7 +282,7 @@ export const sendAuctionSaveTheDateReminders = async (groupId, targets) => {
 
   for (const t of targets) {
     try {
-      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters });
+      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters, memberProfileId: t.memberProfileId, purpose: "auction_save_the_date" });
       sent++;
     } catch (err) {
       console.error(`Failed to send save-the-date reminder to ${t.fullName}:`, err);
@@ -307,7 +307,7 @@ export const sendAuctionReminders = async (groupId, targets) => {
 
   for (const t of list) {
     try {
-      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters });
+      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters, memberProfileId: t.memberProfileId, purpose: "auction_reminder_2h" });
       sent++;
     } catch (err) {
       console.error(`Failed to send auction reminder to ${t.fullName}:`, err);
@@ -407,7 +407,7 @@ export const sendUpcomingDueReminders = async (groupId, targets, daysBefore = 1)
 
   for (const t of list) {
     try {
-      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters });
+      await sendWhatsAppMessage({ phone: t.mobile, templateName: t.template, parameters: t.parameters, memberProfileId: t.memberProfileId, purpose: `upcoming_due_${daysBefore}d` });
       sent++;
     } catch (err) {
       console.error(`Failed to send upcoming-due reminder to ${t.fullName}:`, err);
