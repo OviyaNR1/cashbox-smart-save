@@ -5,14 +5,16 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import FileUpload from "./FileUpload";
-import { DOC_TYPE_LABELS } from "@/lib/canada";
+import { DOC_TYPE_LABELS, ID_TYPES } from "@/lib/canada";
 import { CheckCircle2, Clock, XCircle, Upload, Loader2, FileText, Plus } from "lucide-react";
 
-// India-only launch: Aadhaar is the only document type members can submit.
-// DOC_TYPE_LABELS keeps the other (Canada-era) entries so any historical
-// documents on file still render a proper label — just not offered here.
-const DOC_TYPE_OPTIONS = [{ value: "aadhaar_card", label: DOC_TYPE_LABELS.aadhaar_card }];
+// India members submit Aadhaar only. Canada members pick from the real
+// Canadian ID types (driver's licence, PR card, passport, etc. — see
+// ID_TYPES in lib/canada.js) since there's no single universal ID there
+// the way Aadhaar covers India.
+const INDIA_DOC_TYPE_OPTIONS = [{ value: "aadhaar_card", label: DOC_TYPE_LABELS.aadhaar_card }];
 
 const statusTone = (status) => {
   if (status === "approved") return { bg: "bg-emerald-500/15", text: "text-emerald-400", icon: CheckCircle2, label: "Approved" };
@@ -20,13 +22,19 @@ const statusTone = (status) => {
   return { bg: "bg-amber-500/15", text: "text-amber-400", icon: Clock, label: "Pending" };
 };
 
-export default function MemberDocumentUpload({ memberProfileId }) {
+export default function MemberDocumentUpload({ memberProfileId, country }) {
+  const isCanada = country === "Canada";
+  const docTypeOptions = isCanada ? ID_TYPES : INDIA_DOC_TYPE_OPTIONS;
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ docType: "aadhaar_card", docNumber: "", expiryDate: "", frontUrl: "", backUrl: "" });
+  // India has exactly one option, so it's pre-selected; Canada has several
+  // real ID types with no single default that makes sense for everyone —
+  // left blank so the member has to actually pick one.
+  const [form, setForm] = useState({ docType: isCanada ? "" : "aadhaar_card", docNumber: "", expiryDate: "", frontUrl: "", backUrl: "" });
   const { toast } = useToast();
+  const selectedDocType = docTypeOptions.find((o) => o.value === form.docType);
 
   const load = () => {
     if (!memberProfileId) return;
@@ -61,7 +69,7 @@ export default function MemberDocumentUpload({ memberProfileId }) {
         verification_status: "pending",
       });
       toast({ title: "Document submitted for review." });
-      setForm({ docType: "aadhaar_card", docNumber: "", expiryDate: "", frontUrl: "", backUrl: "" });
+      setForm({ docType: isCanada ? "" : "aadhaar_card", docNumber: "", expiryDate: "", frontUrl: "", backUrl: "" });
       setShowForm(false);
       load();
     } catch (e) {
@@ -112,12 +120,23 @@ export default function MemberDocumentUpload({ memberProfileId }) {
         <div className="rounded-xl border border-border p-4 space-y-4">
           <div className="space-y-1.5">
             <Label>Document type</Label>
-            <p className="text-sm text-foreground px-3 py-2 rounded-md border border-border bg-muted">{DOC_TYPE_OPTIONS[0].label}</p>
+            {docTypeOptions.length > 1 ? (
+              <Select value={form.docType} onValueChange={(v) => setForm({ ...form, docType: v })}>
+                <SelectTrigger><SelectValue placeholder="Select a document type" /></SelectTrigger>
+                <SelectContent>
+                  {docTypeOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-sm text-foreground px-3 py-2 rounded-md border border-border bg-muted">{docTypeOptions[0].label}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="docNum">Aadhaar number</Label>
-            <Input id="docNum" value={form.docNumber} onChange={(e) => setForm({ ...form, docNumber: e.target.value })} placeholder="1234 5678 9012" />
+            <Label htmlFor="docNum">{selectedDocType ? `${selectedDocType.label} number` : "Document number"} (optional)</Label>
+            <Input id="docNum" value={form.docNumber} onChange={(e) => setForm({ ...form, docNumber: e.target.value })} placeholder={isCanada ? "e.g. D1234-56789-01234" : "1234 5678 9012"} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">

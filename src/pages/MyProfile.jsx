@@ -94,7 +94,7 @@ export default function MyProfile() {
         <p className="text-xs text-muted-foreground mb-3">
           Upload your identity documents (ID, selfie, etc.) for verification. Each document is reviewed by an administrator.
         </p>
-        <MemberDocumentUpload memberProfileId={profile.id} />
+        <MemberDocumentUpload memberProfileId={profile.id} country={profile.country} />
       </SectionCard>
 
       {/* The sidebar has its own sign-out icon, but it's unlabeled and easy

@@ -22,18 +22,22 @@ import { useToast } from "@/components/ui/use-toast";
 import { formatMoney } from "@/lib/currency";
 import FileUpload from "@/components/members/FileUpload";
 import { buildUpiPaymentLink, BUSINESS_UPI_ID, BUSINESS_UPI_NUMBER } from "@/lib/upi";
+import { BUSINESS_INTERAC_EMAIL } from "@/lib/interac";
 import { Loader2, CreditCard, Smartphone, Copy } from "lucide-react";
 import QRCode from "qrcode";
 
-const PAYMENT_METHODS = [
-  { value: "upi", label: "UPI" },
-  { value: "cash", label: "Cash" },
-];
+// India members pay by UPI, Canada members by Interac e-Transfer — there's
+// no cross-border equivalent of either, so the option list itself switches
+// on the plan's currency rather than offering both everywhere.
+const PAYMENT_METHODS_BY_CURRENCY = {
+  INR: [{ value: "upi", label: "UPI" }, { value: "cash", label: "Cash" }],
+  CAD: [{ value: "interac", label: "Interac e-Transfer" }, { value: "cash", label: "Cash" }],
+};
 
 // Cash is handled in person with no digital trail, so it deliberately gets
-// no reference field or screenshot — nothing to attach. UPI/Bank Transfer
-// get both, since those are the methods that actually produce a receipt.
-const METHODS_WITH_PROOF = ["upi", "bank_transfer"];
+// no reference field or screenshot — nothing to attach. Every other method
+// gets both, since those are the ones that actually produce a receipt.
+const METHODS_WITH_PROOF = ["upi", "bank_transfer", "interac"];
 
 // Tapping the UPI deep link hands off to another app for however long the
 // member takes to pay and screenshot the confirmation — mobile browsers
@@ -78,7 +82,7 @@ export default function PayInstallmentDialog({
   user,
   onPaid,
 }) {
-  const [method, setMethod] = useState("upi");
+  const [method, setMethod] = useState(() => (plan?.currency === "CAD" ? "interac" : "upi"));
   const [screenshotPath, setScreenshotPath] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -127,6 +131,18 @@ export default function PayInstallmentDialog({
   }, [open, plan, group, membership]);
 
   const currency = plan?.currency || "INR";
+  const paymentMethods = PAYMENT_METHODS_BY_CURRENCY[currency] || PAYMENT_METHODS_BY_CURRENCY.INR;
+
+  // Guards against the lazy useState above having picked "upi"/"interac"
+  // before `plan` (and therefore `currency`) was available yet — corrects
+  // it once the real plan loads, rather than leaving a Canada member stuck
+  // looking at a "UPI" method that has no matching UI below.
+  useEffect(() => {
+    if (!paymentMethods.some((m) => m.value === method)) {
+      setMethod(paymentMethods[0].value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency]);
 
   // Every installment through the group's current month, oldest first —
   // this already includes the immediate "next" payment (it's the last
@@ -196,6 +212,13 @@ export default function PayInstallmentDialog({
     navigator.clipboard?.writeText(BUSINESS_UPI_NUMBER)
       .then(() => toast({ title: "UPI Number copied", description: "Paste it in your UPI app to pay." }))
       .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_NUMBER, variant: "destructive" }));
+  };
+
+  const copyInteracEmail = () => {
+    saveDraft(membership.id, { method });
+    navigator.clipboard?.writeText(BUSINESS_INTERAC_EMAIL)
+      .then(() => toast({ title: "Email copied", description: "Paste it as the recipient in your bank's e-Transfer screen." }))
+      .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_INTERAC_EMAIL, variant: "destructive" }));
   };
 
   const screenshotMissing = method === "upi" && !screenshotPath;
@@ -295,7 +318,7 @@ export default function PayInstallmentDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PAYMENT_METHODS.map((m) => (
+                {paymentMethods.map((m) => (
                   <SelectItem key={m.value} value={m.value}>
                     {m.label}
                   </SelectItem>
@@ -308,6 +331,27 @@ export default function PayInstallmentDialog({
             <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
               Viewing this from a WhatsApp message? Tap <span className="font-semibold">⋮ (top-right) → Open in browser</span> first — WhatsApp's built-in browser blocks the button below from opening your UPI app.
             </p>
+          )}
+
+          {method === "interac" && (
+            <div className="rounded-lg border border-border p-3 space-y-2">
+              <p className="text-xs font-medium text-foreground">
+                Send an Interac e-Transfer for {formatMoney(amount, currency)} to:
+              </p>
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-2">
+                <code className="flex-1 min-w-0 text-xs font-medium text-foreground truncate select-all">{BUSINESS_INTERAC_EMAIL}</code>
+                <button
+                  type="button"
+                  onClick={copyInteracEmail}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border text-xs font-medium text-foreground hover:bg-muted"
+                >
+                  <Copy className="w-3 h-3" /> Copy
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Autodeposit is enabled on this email — no security question needed, the transfer completes automatically.
+              </p>
+            </div>
           )}
 
           {method === "upi" && amount > 0 && (

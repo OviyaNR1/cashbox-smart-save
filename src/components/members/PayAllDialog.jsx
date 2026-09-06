@@ -21,14 +21,20 @@ import { useToast } from "@/components/ui/use-toast";
 import { formatMoney } from "@/lib/currency";
 import FileUpload from "@/components/members/FileUpload";
 import { buildUpiPaymentLink, BUSINESS_UPI_ID, BUSINESS_UPI_NUMBER } from "@/lib/upi";
+import { BUSINESS_INTERAC_EMAIL } from "@/lib/interac";
 import { Loader2, CreditCard, Smartphone, Copy } from "lucide-react";
 import QRCode from "qrcode";
 
-const PAYMENT_METHODS = [
-  { value: "upi", label: "UPI" },
-  { value: "cash", label: "Cash" },
-];
-const METHODS_WITH_PROOF = ["upi", "bank_transfer"];
+// See PayInstallmentDialog.jsx — same India-UPI / Canada-Interac split.
+// Cross-country membership isn't possible (assignment is blocked in
+// MemberGroupAssignment.jsx), so a member's cart here is always one
+// currency in practice; INR is the fallback for the brief window before
+// `items` loads and singleCurrency is still null.
+const PAYMENT_METHODS_BY_CURRENCY = {
+  INR: [{ value: "upi", label: "UPI" }, { value: "cash", label: "Cash" }],
+  CAD: [{ value: "interac", label: "Interac e-Transfer" }, { value: "cash", label: "Cash" }],
+};
+const METHODS_WITH_PROOF = ["upi", "bank_transfer", "interac"];
 
 // See PayInstallmentDialog.jsx's DRAFT_KEY comment — same reload-survival
 // fix, applied here too since this dialog has the identical UPI deep-link
@@ -125,6 +131,17 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
   const totalDisplay = currencies.length
     ? currencies.map((c) => formatMoney(totalsByCurrency[c], c)).join(" + ")
     : formatMoney(0, "INR");
+  const paymentMethods = PAYMENT_METHODS_BY_CURRENCY[singleCurrency] || PAYMENT_METHODS_BY_CURRENCY.INR;
+
+  // Reconciles the method once real items (and therefore singleCurrency)
+  // load — the initial "upi" default is only a guess made before any items
+  // exist yet.
+  useEffect(() => {
+    if (!paymentMethods.some((m) => m.value === method)) {
+      setMethod(paymentMethods[0].value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [singleCurrency]);
 
   const toggle = (key) => {
     setSelected((prev) => {
@@ -147,6 +164,13 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
     navigator.clipboard?.writeText(BUSINESS_UPI_NUMBER)
       .then(() => toast({ title: "UPI Number copied", description: "Paste it in your UPI app to pay." }))
       .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_UPI_NUMBER, variant: "destructive" }));
+  };
+
+  const copyInteracEmail = () => {
+    saveDraft({ method, selectedKeys: [...selected] });
+    navigator.clipboard?.writeText(BUSINESS_INTERAC_EMAIL)
+      .then(() => toast({ title: "Email copied", description: "Paste it as the recipient in your bank's e-Transfer screen." }))
+      .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_INTERAC_EMAIL, variant: "destructive" }));
   };
 
   // See PayInstallmentDialog.jsx for why scanning is more reliable than
@@ -266,7 +290,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PAYMENT_METHODS.map((m) => (
+                    {paymentMethods.map((m) => (
                       <SelectItem key={m.value} value={m.value}>
                         {m.label}
                       </SelectItem>
@@ -279,6 +303,27 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
                 <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
                   Viewing this from a WhatsApp message? Tap <span className="font-semibold">⋮ (top-right) → Open in browser</span> first — WhatsApp's built-in browser blocks the button below from opening your UPI app.
                 </p>
+              )}
+
+              {method === "interac" && (
+                <div className="rounded-lg border border-border p-3 space-y-2">
+                  <p className="text-xs font-medium text-foreground">
+                    Send an Interac e-Transfer for {totalDisplay} to:
+                  </p>
+                  <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-2">
+                    <code className="flex-1 min-w-0 text-xs font-medium text-foreground truncate select-all">{BUSINESS_INTERAC_EMAIL}</code>
+                    <button
+                      type="button"
+                      onClick={copyInteracEmail}
+                      className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border text-xs font-medium text-foreground hover:bg-muted"
+                    >
+                      <Copy className="w-3 h-3" /> Copy
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Autodeposit is enabled on this email — no security question needed, the transfer completes automatically.
+                  </p>
+                </div>
               )}
 
               {method === "upi" && chosen.length > 0 && singleCurrency === "INR" && (
