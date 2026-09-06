@@ -41,6 +41,10 @@ export default function AdminLiveAuction() {
   const [watchingCount, setWatchingCount] = useState(0);
   const [bidFlash, setBidFlash] = useState(0);
   const { toasts, pushToast } = useLiveToasts();
+  // Honest "how long this admin has been on this screen" — there's no
+  // stored scheduled-start time before the Auction row is actually created.
+  const [waitingSince] = useState(() => new Date().toISOString());
+  const waitingElapsed = useElapsedTime(waitingSince);
 
   useEffect(() => {
     base44.entities.ChitPlan.list("-created_date", 200).then(setPlans);
@@ -396,6 +400,9 @@ export default function AdminLiveAuction() {
         <div className="bg-card rounded-2xl border border-border p-8 text-center space-y-4">
           <p className="text-sm text-muted-foreground">
             Deciding Month {targetMonth} of {plan.duration_months} (currently in Month {currentMonth}) · Starting amount {formatMoney(startingAmount, plan.currency)} · Minimum decrement {formatMoney(plan.auction_min_decrement, plan.currency)}
+          </p>
+          <p className="flex items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground tabular-nums">
+            <Radio className="w-3 h-3 animate-pulse text-rose-400" /> Waiting {waitingElapsed}
           </p>
           {watchingCount > 0 && (
             <p className="flex items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground">

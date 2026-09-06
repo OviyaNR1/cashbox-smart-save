@@ -55,6 +55,12 @@ function friendlyBidRejection(reason, auction, plan) {
 
 export default function LiveAuction() {
   const [state, setState] = useState({ loading: true });
+  // No stored "scheduled start" exists before the admin actually creates the
+  // Auction row, so this is honestly "how long you've personally been
+  // waiting" (from when this page mounted) rather than a shared countdown
+  // to a specific time.
+  const [waitingSince] = useState(() => new Date().toISOString());
+  const waitingElapsed = useElapsedTime(waitingSince);
   const [bidAmount, setBidAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -350,10 +356,17 @@ export default function LiveAuction() {
             {state.group ? `${state.group.group_name || state.group.group_code} — Month ${state.monthNumber}` : "Bid Now"}
           </h1>
         </div>
-        <div className="bg-card rounded-2xl border border-border p-12 text-center text-sm text-muted-foreground">
-          {state.group
-            ? "Waiting for your group's admin to start this month's auction — join the chat below while you wait."
-            : "No open auction right now. Check back once your group's admin starts this month's auction."}
+        <div className="bg-card rounded-2xl border border-border p-12 text-center text-sm text-muted-foreground space-y-3">
+          <p>
+            {state.group
+              ? "Waiting for your group's admin to start this month's auction — join the chat below while you wait."
+              : "No open auction right now. Check back once your group's admin starts this month's auction."}
+          </p>
+          {state.group && (
+            <p className="flex items-center justify-center gap-1.5 text-xs font-medium tabular-nums">
+              <Radio className="w-3 h-3 animate-pulse text-rose-400" /> Waiting {waitingElapsed}
+            </p>
+          )}
         </div>
         {state.group && (
           <AuctionPresenceChat
