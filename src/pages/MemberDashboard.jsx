@@ -5,7 +5,7 @@ import MemberOnboardingWizard from "@/components/members/MemberOnboardingWizard"
 import PayAllDialog from "@/components/members/PayAllDialog";
 import { formatMoney } from "@/lib/currency";
 import { getNextPaymentPreview } from "@/lib/paymentPreview";
-import { ArrowRight, CreditCard, ChevronRight, XCircle, Gavel } from "lucide-react";
+import { ArrowRight, CreditCard, ChevronRight, XCircle, Gavel, FileWarning, Clock } from "lucide-react";
 
 function greeting() {
   const h = new Date().getHours();
@@ -33,7 +33,15 @@ export default function MemberDashboard() {
         base44.entities.Payment.filter({ user_id: me.id, status: "pending" }),
         base44.entities.PlanRequest.filter({ user_id: me.id }),
       ]);
-      setData({ me, profile: profiles[0], memberships, plans, groups, auctions, pendingPayments, planRequests });
+      const profile = profiles[0];
+      // The wizard never itself prompts for a document — kyc_stage just gets
+      // set to "document_upload" and the member is dropped straight onto
+      // this dashboard, with nothing else in the whole flow ever mentioning
+      // it again. Checked here so the dashboard can nudge a member who
+      // hasn't submitted anything yet, rather than leaving kyc_status stuck
+      // on "pending" silently forever.
+      const documents = profile ? await base44.entities.Document.filter({ member_profile_id: profile.id }) : [];
+      setData({ me, profile, memberships, plans, groups, auctions, pendingPayments, planRequests, documents });
     } catch (err) {
       setError(err.message || String(err));
     }
@@ -44,7 +52,7 @@ export default function MemberDashboard() {
   if (error) return <div className="h-64 grid place-items-center text-destructive text-sm text-center px-4">Error loading dashboard: {error}</div>;
   if (!data) return <div className="h-64 grid place-items-center text-muted-foreground text-sm">Loading your dashboard…</div>;
 
-  const { me, profile, memberships, plans, groups, auctions, pendingPayments, planRequests } = data;
+  const { me, profile, memberships, plans, groups, auctions, pendingPayments, planRequests, documents } = data;
 
   const pendingNumbersFor = (membershipId) =>
     new Set((pendingPayments || []).filter((p) => p.membership_id === membershipId).map((p) => p.installment_number));
@@ -146,6 +154,33 @@ export default function MemberDashboard() {
   return (
     <div className="space-y-8">
       <Header firstName={firstName} />
+
+      {profile.kyc_status === "pending" && (documents || []).length === 0 && (
+        <Link
+          to="/profile"
+          className="bg-amber-500/10 rounded-2xl border border-amber-500/30 p-5 sm:p-6 flex items-center justify-between gap-4 hover:bg-amber-500/15 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="w-10 h-10 rounded-full bg-amber-500/20 grid place-items-center shrink-0">
+              <FileWarning className="w-5 h-5 text-amber-400" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-amber-400">Verification needed</p>
+              <p className="text-xs text-amber-400/80 mt-0.5">Upload an ID document to complete your verification</p>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-amber-400 shrink-0" />
+        </Link>
+      )}
+
+      {profile.kyc_status === "pending" && (documents || []).length > 0 && (
+        <div className="bg-muted/40 rounded-2xl border border-border p-4 sm:p-5 flex items-center gap-3">
+          <span className="w-9 h-9 rounded-full bg-muted grid place-items-center shrink-0">
+            <Clock className="w-4 h-4 text-muted-foreground" />
+          </span>
+          <p className="text-xs text-muted-foreground">Your documents are submitted and awaiting admin review.</p>
+        </div>
+      )}
 
       {openAuction && (
         <Link
