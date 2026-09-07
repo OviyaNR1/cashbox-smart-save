@@ -77,10 +77,12 @@ export default function MyProfile() {
           <Row icon={Phone} label="Mobile" value={profile.mobile || "—"} />
           <Row icon={MapPin} label="Address" value={[profile.address, profile.city, profile.state].filter(Boolean).join(", ") || "—"} />
         </SectionCard>
-        <SectionCard title="Guarantor" icon={UsersIcon}>
-          <Row icon={User} label="Name" value={profile.guarantor_name || "—"} />
-          <Row icon={UsersIcon} label="Relationship" value={profile.guarantor_relationship || "—"} />
-        </SectionCard>
+        {profile.guarantor_name && (
+          <SectionCard title="Guarantor" icon={UsersIcon}>
+            <Row icon={User} label="Name" value={profile.guarantor_name} />
+            <Row icon={UsersIcon} label="Relationship" value={profile.guarantor_relationship || "—"} />
+          </SectionCard>
+        )}
       </div>
 
       {profile.kyc_status === "rejected" && profile.kyc_rejection_reason && (

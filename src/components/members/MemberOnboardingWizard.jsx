@@ -35,14 +35,6 @@ const isCanadaPhone = (authPhone) => (authPhone || "").length === 11;
 
 const RELATIONSHIP_OPTIONS = ["Father", "Mother", "Husband", "Wife", "Brother", "Sister", "Son", "Daughter", "Relative", "Friend", "Neighbour"];
 
-// Request-gating order: a member's full profile — identity, KYC details,
-// and guarantor — has to be complete BEFORE they can request a group, not
-// after. Requesting used to sit at step 2, ahead of guarantor details
-// entirely, so someone could request a slot with no guarantor on file at
-// all. Now "Join your Chit" is the last step, reached only once everything
-// else is saved.
-const STEPS = ["Create account", "Your details", "Guarantor", "Join your Chit"];
-
 export default function MemberOnboardingWizard({ user, profile: initialProfile, startStep = 1, onDone }) {
   const [step, setStep] = useState(startStep);
   const [profile, setProfile] = useState(initialProfile || null);
@@ -81,6 +73,16 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
   const isCanada = isCanadaPhone(user?.phone);
   const CC = isCanada ? "+1" : "+91";
   const flag = isCanada ? "🇨🇦" : "🇮🇳";
+
+  // Request-gating order: a member's full profile — identity, KYC details,
+  // and (for India) guarantor — has to be complete BEFORE they can request
+  // a group, not after. "Join your Chit" is always the last step, reached
+  // only once everything else is saved. Canada drops Guarantor entirely —
+  // it's an India chit-fund convention with no equivalent requirement
+  // there — so its step numbers shift up by one from "Your details" on.
+  const STEPS = isCanada
+    ? ["Create account", "Your details", "Join your Chit"]
+    : ["Create account", "Your details", "Guarantor", "Join your Chit"];
 
   const [form, setForm] = useState({
     full_name: initialProfile?.full_name || user?.full_name || "",
@@ -156,7 +158,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
   const submitStep2Details = async () => {
     setSaving(true);
     try {
-      await base44.entities.MemberProfile.update(profile.id, {
+      const payload = {
         dob: form.dob,
         gender: form.gender || "female",
         address: form.address,
@@ -169,7 +171,14 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
         // block below) — re-enable these two lines alongside them.
         // aadhaar_number: isCanada ? "" : form.aadhaar_number,
         // pan_number: isCanada ? "" : form.pan_number,
-      });
+      };
+      // India's flow advances kyc_stage in submitStep3Guarantor below —
+      // Canada skips that step entirely, so this is where it happens instead.
+      if (isCanada) payload.kyc_stage = "document_upload";
+      await base44.entities.MemberProfile.update(profile.id, payload);
+      if (isCanada) {
+        logAudit({ module: "Members", action: "self-verify", record_id: profile.id, details: `${form.full_name || profile.full_name} completed self-service verification (no guarantor required)` });
+      }
       setStep(3);
     } catch (e) {
       toast({ title: "Could not save your details", description: e.message, variant: "destructive" });
@@ -205,7 +214,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
           <UserPlus className="w-7 h-7 text-primary" />
         </div>
         <h1 className="text-2xl font-semibold text-foreground">
-          {step === 1 ? "Create your account" : step === 2 ? "Your details" : step === 3 ? "Guarantor details" : "Join your Chit"}
+          {step === 1 ? "Create your account" : step === 2 ? "Your details" : (!isCanada && step === 3) ? "Guarantor details" : "Join your Chit"}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">Step {step} of {STEPS.length} — {STEPS[step - 1]}</p>
         <div className="flex gap-1.5 mt-4 max-w-[240px] mx-auto">
@@ -341,7 +350,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
         </div>
       )}
 
-      {step === 3 && (
+      {!isCanada && step === 3 && (
         <div className="bg-card rounded-2xl border border-border p-4 sm:p-6 space-y-4">
           <div>
             <Label>Guarantor name *</Label>
@@ -401,7 +410,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
         </div>
       )}
 
-      {step === 4 && (
+      {((isCanada && step === 3) || (!isCanada && step === 4)) && (
         <JoinChitStep user={user} profile={profile} onDone={onDone} />
       )}
     </div>
