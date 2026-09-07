@@ -7,14 +7,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import FileUpload from "./FileUpload";
-import { DOC_TYPE_LABELS, ID_TYPES } from "@/lib/canada";
+import { DOC_TYPE_LABELS } from "@/lib/canada";
 import { CheckCircle2, Clock, XCircle, Upload, Loader2, FileText, Plus } from "lucide-react";
 
-// India members submit Aadhaar only. Canada members pick from the real
-// Canadian ID types (driver's licence, PR card, passport, etc. — see
-// ID_TYPES in lib/canada.js) since there's no single universal ID there
-// the way Aadhaar covers India.
+// India members submit Aadhaar only. Canada is limited to Driver's Licence
+// and PR Card specifically (not the full ID_TYPES list in lib/canada.js —
+// that has more Canadian ID types on file for historical documents, but
+// only these two are offered here per the business decision to keep it to
+// just these two for now).
 const INDIA_DOC_TYPE_OPTIONS = [{ value: "aadhaar_card", label: DOC_TYPE_LABELS.aadhaar_card }];
+const CANADA_DOC_TYPE_OPTIONS = [
+  { value: "driver_license", label: DOC_TYPE_LABELS.driver_license },
+  { value: "pr_card", label: DOC_TYPE_LABELS.pr_card },
+];
 
 const statusTone = (status) => {
   if (status === "approved") return { bg: "bg-emerald-500/15", text: "text-emerald-400", icon: CheckCircle2, label: "Approved" };
@@ -22,9 +27,9 @@ const statusTone = (status) => {
   return { bg: "bg-amber-500/15", text: "text-amber-400", icon: Clock, label: "Pending" };
 };
 
-export default function MemberDocumentUpload({ memberProfileId, country }) {
+export default function MemberDocumentUpload({ memberProfileId, country, onUploaded }) {
   const isCanada = country === "Canada";
-  const docTypeOptions = isCanada ? ID_TYPES : INDIA_DOC_TYPE_OPTIONS;
+  const docTypeOptions = isCanada ? CANADA_DOC_TYPE_OPTIONS : INDIA_DOC_TYPE_OPTIONS;
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -72,6 +77,7 @@ export default function MemberDocumentUpload({ memberProfileId, country }) {
       setForm({ docType: isCanada ? "" : "aadhaar_card", docNumber: "", expiryDate: "", frontUrl: "", backUrl: "" });
       setShowForm(false);
       load();
+      if (onUploaded) onUploaded();
     } catch (e) {
       toast({ title: e.message || "Failed to upload document.", variant: "destructive" });
     } finally {

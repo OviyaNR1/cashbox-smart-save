@@ -7,6 +7,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { useToast } from "@/components/ui/use-toast";
 import { logAudit } from "@/lib/audit";
 import PlanRequestCard from "@/components/members/PlanRequestCard";
+import MemberDocumentUpload from "@/components/members/MemberDocumentUpload";
 import { UserPlus, Check } from "lucide-react";
 const stripCc = (v) => (v || "").replace(/^\+\d{1,3}/, "");
 // user.phone comes straight from Supabase auth (via profiles.phone) in its
@@ -79,10 +80,23 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
   // a group, not after. "Join your Chit" is always the last step, reached
   // only once everything else is saved. Canada drops Guarantor entirely —
   // it's an India chit-fund convention with no equivalent requirement
-  // there — so its step numbers shift up by one from "Your details" on.
+  // there — but adds its own required step 3, "Upload document" (a real ID
+  // upload, not just the after-the-fact dashboard nudge), so both flows end
+  // up the same length.
   const STEPS = isCanada
-    ? ["Create account", "Your details", "Join your Chit"]
+    ? ["Create account", "Your details", "Upload document", "Join your Chit"]
     : ["Create account", "Your details", "Guarantor", "Join your Chit"];
+
+  // Tracks whether the member has submitted at least one ID document yet —
+  // fetched once a profile exists (Canada's step 3 requires this before
+  // Continue unlocks) and bumped by MemberDocumentUpload's onUploaded.
+  const [docCount, setDocCount] = useState(0);
+  useEffect(() => {
+    if (!isCanada || !profile?.id) return;
+    base44.entities.Document.filter({ member_profile_id: profile.id })
+      .then((rows) => setDocCount(rows.length))
+      .catch(() => setDocCount(0));
+  }, [isCanada, profile?.id]);
 
   const [form, setForm] = useState({
     full_name: initialProfile?.full_name || user?.full_name || "",
@@ -172,13 +186,12 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
         // aadhaar_number: isCanada ? "" : form.aadhaar_number,
         // pan_number: isCanada ? "" : form.pan_number,
       };
-      // India's flow advances kyc_stage in submitStep3Guarantor below —
-      // Canada skips that step entirely, so this is where it happens instead.
+      // India advances kyc_stage in submitStep3Guarantor below; Canada has
+      // no guarantor step, so it reaches "document_upload" here instead —
+      // one step earlier than its own Upload Document step, which is fine
+      // since that IS the document_upload stage.
       if (isCanada) payload.kyc_stage = "document_upload";
       await base44.entities.MemberProfile.update(profile.id, payload);
-      if (isCanada) {
-        logAudit({ module: "Members", action: "self-verify", record_id: profile.id, details: `${form.full_name || profile.full_name} completed self-service verification (no guarantor required)` });
-      }
       setStep(3);
     } catch (e) {
       toast({ title: "Could not save your details", description: e.message, variant: "destructive" });
@@ -207,6 +220,14 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
     setSaving(false);
   };
 
+  const submitStep3Document = () => {
+    if (docCount === 0) {
+      return toast({ title: "Upload at least one ID document to continue", variant: "destructive" });
+    }
+    logAudit({ module: "Members", action: "self-verify", record_id: profile.id, details: `${form.full_name || profile.full_name} completed self-service verification` });
+    setStep(4);
+  };
+
   return (
     <div className="max-w-xl mx-auto">
       <div className="text-center mb-6">
@@ -214,7 +235,7 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
           <UserPlus className="w-7 h-7 text-primary" />
         </div>
         <h1 className="text-2xl font-semibold text-foreground">
-          {step === 1 ? "Create your account" : step === 2 ? "Your details" : (!isCanada && step === 3) ? "Guarantor details" : "Join your Chit"}
+          {step === 1 ? "Create your account" : step === 2 ? "Your details" : step === 3 ? (isCanada ? "Upload your ID" : "Guarantor details") : "Join your Chit"}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">Step {step} of {STEPS.length} — {STEPS[step - 1]}</p>
         <div className="flex gap-1.5 mt-4 max-w-[240px] mx-auto">
@@ -410,7 +431,23 @@ export default function MemberOnboardingWizard({ user, profile: initialProfile, 
         </div>
       )}
 
-      {((isCanada && step === 3) || (!isCanada && step === 4)) && (
+      {isCanada && step === 3 && (
+        <div className="bg-card rounded-2xl border border-border p-4 sm:p-6 space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Upload a photo of your Driver's Licence or PR Card so an admin can verify your identity.
+          </p>
+          <MemberDocumentUpload
+            memberProfileId={profile.id}
+            country="Canada"
+            onUploaded={() => setDocCount((c) => c + 1)}
+          />
+          <Button onClick={submitStep3Document} disabled={docCount === 0} className="w-full rounded-full bg-primary hover:bg-primary/90">
+            Continue
+          </Button>
+        </div>
+      )}
+
+      {step === 4 && (
         <JoinChitStep user={user} profile={profile} onDone={onDone} />
       )}
     </div>
