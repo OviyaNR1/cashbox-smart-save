@@ -113,7 +113,7 @@ export default function MemberDocumentUpload({ memberProfileId, country, onUploa
                 </div>
                 {doc.document_number && <p className="text-xs text-muted-foreground">Doc #: {doc.document_number}</p>}
                 {doc.front_image_url && (
-                  <img src={doc.front_image_url} alt={doc.document_type} className="w-full h-24 object-cover rounded-lg border border-border" />
+                  <img src={doc.front_image_url} alt={doc.document_type} className="w-full h-24 object-contain rounded-lg border border-border bg-muted/30" />
                 )}
                 {doc.rejection_reason && <p className="text-xs text-destructive">Reason: {doc.rejection_reason}</p>}
               </div>

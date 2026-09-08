@@ -7,7 +7,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import FileUpload from "./FileUpload";
-import { ShieldCheck, ShieldX, FileText, Loader2, Upload, Plus } from "lucide-react";
+import { ShieldCheck, ShieldX, FileText, Loader2, Upload, Plus, RotateCw, X, ZoomIn } from "lucide-react";
 import { DOC_TYPE_LABELS } from "@/lib/canada";
 
 const DOC_TYPE_OPTIONS = Object.entries(DOC_TYPE_LABELS).map(([value, label]) => ({ value, label }));
@@ -19,6 +19,12 @@ export default function MemberDocuments({ memberProfileId }) {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ docType: "", docNumber: "", expiryDate: "", frontUrl: "", backUrl: "" });
   const { toast } = useToast();
+  // A phone photo of a landscape ID card, taken in portrait, frequently
+  // arrives sideways here — the small h-24 thumbnail below crops it further
+  // via object-cover, making it borderline unreadable. This full-size
+  // lightbox with a rotate control is the fix: { url, rotation } for
+  // whichever image is currently open, rotation reset to 0 each open.
+  const [preview, setPreview] = useState(null);
 
   const load = () => {
     if (!memberProfileId) return;
@@ -101,7 +107,16 @@ export default function MemberDocuments({ memberProfileId }) {
                 </div>
                 {doc.document_number && <p className="text-xs text-muted-foreground">Doc #: {doc.document_number}</p>}
                 {doc.front_image_url && (
-                  <img src={doc.front_image_url} alt={doc.document_type} className="w-full h-24 object-cover rounded-lg border border-border" />
+                  <button
+                    type="button"
+                    onClick={() => setPreview({ url: doc.front_image_url, rotation: 0 })}
+                    className="relative w-full h-24 rounded-lg border border-border overflow-hidden bg-muted/30 group"
+                  >
+                    <img src={doc.front_image_url} alt={doc.document_type} className="w-full h-full object-contain" />
+                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center transition-colors">
+                      <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100" />
+                    </span>
+                  </button>
                 )}
                 {doc.rejection_reason && <p className="text-xs text-destructive">Reason: {doc.rejection_reason}</p>}
                 {status !== "approved" && (
@@ -169,6 +184,37 @@ export default function MemberDocuments({ memberProfileId }) {
         <Button onClick={() => setShowForm(true)} variant="outline" className="rounded-full" size="sm">
           <Plus className="w-4 h-4 mr-1" /> Upload document
         </Button>
+      )}
+
+      {preview && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4"
+          onClick={() => setPreview(null)}
+        >
+          <div className="absolute top-4 right-4 flex gap-2">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setPreview((p) => ({ ...p, rotation: (p.rotation + 90) % 360 })); }}
+              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+            >
+              <RotateCw className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreview(null)}
+              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <img
+            src={preview.url}
+            alt="Document, full size"
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-[90vw] max-h-[80vh] object-contain transition-transform"
+            style={{ transform: `rotate(${preview.rotation}deg)` }}
+          />
+        </div>
       )}
     </div>
   );
