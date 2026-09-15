@@ -229,10 +229,10 @@ export default function LiveAuction() {
     if (hasBidSinceStage) { silenceStageRef.current.tier = 2; return; }
     if (silenceStageRef.current.tier < 1 && countdown <= half) {
       silenceStageRef.current.tier = 1;
-      speakAnnouncement(announceSilence("first").parts);
+      speakAnnouncement(announceSilence("first", state.plan?.currency).parts);
     } else if (silenceStageRef.current.tier < 2 && countdown <= nearEnd) {
       silenceStageRef.current.tier = 2;
-      speakAnnouncement(announceSilence("second").parts);
+      speakAnnouncement(announceSilence("second", state.plan?.currency).parts);
     }
   }, [countdown, state.auction, state.bids]);
 
@@ -267,7 +267,7 @@ export default function LiveAuction() {
       } else if (auction.status === "closed") {
         const iWon = state.myMembership && auction.winner_member_profile_id === state.myMembership.member_profile_id;
         const winnerName = state.profiles?.find((p) => p.id === auction.winner_member_profile_id)?.full_name || "Member";
-        const closedLine = announceAuctionClosed();
+        const closedLine = announceAuctionClosed(state.plan?.currency);
         pushToast(closedLine.visual, "default");
         speakAnnouncement(closedLine.parts);
         // A brief pause before the reveal, same beat as a real auctioneer.
@@ -278,7 +278,7 @@ export default function LiveAuction() {
           // A closing sign-off once the winner's named, so the room doesn't
           // just go silent — speakAnnouncement's own shared queue means
           // this naturally waits for the winner line to finish first.
-          speakAnnouncement(announceSignOff().parts);
+          speakAnnouncement(announceSignOff(state.plan?.currency).parts);
         }, 1800);
         if (iWon) {
           playFanfare();

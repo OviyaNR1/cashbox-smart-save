@@ -7,6 +7,15 @@
 // falling back to a live robotic voice — only a name (which can't be
 // tiled) is ever spoken live.
 //
+// The recorded clips are all Tamil (India's live_auction plans). Canada has
+// no equivalent recordings and explicitly must never hear Tamil/Malayalam —
+// every builder below branches on `currency === "CAD"` and, for Canada,
+// returns plain English { text } parts instead of { clip } ones. Those go
+// through the exact same speakAnnouncement/tts.js pipeline as the live-read
+// amount already does (real TTS provider first, browser speechSynthesis as
+// fallback) — it's a genuine live English voice, not silence. India's path
+// is untouched either way.
+//
 // Each builder returns { parts, visual } — `parts` for speakAnnouncement
 // (see @/lib/tts), and a short `visual` label. Every announcement must be
 // readable on-screen too, since a member with sound off must get the same
@@ -15,34 +24,43 @@
 import { formatMoney } from "@/lib/currency";
 import { amountToSpeechParts } from "./numberSpeech";
 
+const isCAD = (currency) => currency === "CAD";
+
 export function announceAuctionStart(startingAmount, currency) {
+  const parts = isCAD(currency)
+    ? [
+        { text: "Alright everyone, let's get started! The bidding opens at" },
+        ...amountToSpeechParts(startingAmount, currency),
+        { text: "Who's ready to go lower?" },
+      ]
+    : [
+        { clip: "/audio/auction-start-a.mp3" },
+        ...amountToSpeechParts(startingAmount, currency),
+        { clip: "/audio/auction-start-b.mp3" },
+      ];
   return {
-    parts: [
-      { clip: "/audio/auction-start-a.mp3" },
-      ...amountToSpeechParts(startingAmount, currency),
-      { clip: "/audio/auction-start-b.mp3" },
-    ],
+    parts,
     visual: `🔔 Auction started — starting bid ${formatMoney(startingAmount, currency)}`,
   };
 }
 
-export function announceOneMinuteWarning() {
+export function announceOneMinuteWarning(currency) {
   return {
-    parts: [{ clip: "/audio/warn-1min.wav" }],
+    parts: isCAD(currency) ? [{ text: "One minute left!" }] : [{ clip: "/audio/warn-1min.wav" }],
     visual: "⏰ One minute left",
   };
 }
 
-export function announceThirtySeconds() {
+export function announceThirtySeconds(currency) {
   return {
-    parts: [{ clip: "/audio/warn-30s.wav" }],
+    parts: isCAD(currency) ? [{ text: "Last thirty seconds!" }] : [{ clip: "/audio/warn-30s.wav" }],
     visual: "⚠️ Last 30 seconds!",
   };
 }
 
-export function announceTenSeconds() {
+export function announceTenSeconds(currency) {
   return {
-    parts: [{ clip: "/audio/warn-10s.wav" }],
+    parts: isCAD(currency) ? [{ text: "Ten seconds left!" }] : [{ clip: "/audio/warn-10s.wav" }],
     visual: "🔥 10 seconds left!",
   };
 }
@@ -67,9 +85,11 @@ export function announceCountdownDigit(n) {
   return { parts: [{ clip }], visual: String(n) };
 }
 
-export function announceAuctionClosed() {
+export function announceAuctionClosed(currency) {
   return {
-    parts: [{ clip: "/audio/auction-closed.mp3" }],
+    parts: isCAD(currency)
+      ? [{ text: "The auction is now closed! Let's see who won." }]
+      : [{ clip: "/audio/auction-closed.mp3" }],
     visual: "🏁 Auction closed! Let's see the winner...",
   };
 }
@@ -77,15 +97,24 @@ export function announceAuctionClosed() {
 // Only the member's approved display name and the winning amount are ever
 // spoken/shown — no other personal detail passes through this function.
 // The name can't be pre-recorded (it's different every month), so it's the
-// one part still spoken live, sandwiched between the real recorded clips.
+// one part still spoken live, sandwiched between the real recorded clips
+// (or, for Canada, between two more live-spoken English lines).
 export function announceWinner(memberName, amount, currency) {
+  const parts = isCAD(currency)
+    ? [
+        { text: "And the winner is..." },
+        { text: memberName },
+        ...amountToSpeechParts(amount, currency),
+        { text: "Congratulations!" },
+      ]
+    : [
+        { clip: "/audio/winner-prefix.mp3" },
+        { text: memberName },
+        ...amountToSpeechParts(amount, currency),
+        { clip: "/audio/winner-congrats.mp3" },
+      ];
   return {
-    parts: [
-      { clip: "/audio/winner-prefix.mp3" },
-      { text: memberName },
-      ...amountToSpeechParts(amount, currency),
-      { clip: "/audio/winner-congrats.mp3" },
-    ],
+    parts,
     visual: `🏆 Winner: ${memberName} — ${formatMoney(amount, currency)}. Congrats!`,
   };
 }
@@ -93,9 +122,11 @@ export function announceWinner(memberName, amount, currency) {
 // A closing sign-off, spoken after the winner announcement — closes out
 // the auction on a warm note instead of just going silent once the winner
 // is named.
-export function announceSignOff() {
+export function announceSignOff(currency) {
   return {
-    parts: [{ clip: "/audio/winner-signoff.mp3" }],
+    parts: isCAD(currency)
+      ? [{ text: "Thanks everyone — see you at next month's auction!" }]
+      : [{ clip: "/audio/winner-signoff.mp3" }],
     visual: "👋 See you at next month's auction!",
   };
 }
@@ -103,7 +134,10 @@ export function announceSignOff() {
 // A pool of short excited exclamations for a routine new (lower) bid —
 // reused randomly instead of one fixed line every time, so the auction
 // doesn't feel like it's replaying the same clip on every bid. This is the
-// fallback once none of SPECIAL_REACTIONS below match.
+// fallback once none of SPECIAL_REACTIONS below match. English equivalents
+// (spoken live via TTS, for Canada) get their own pool of the same size —
+// picked from the same random index as the clip pool would be, so the
+// "variety, not repetition" intent carries over identically.
 const BID_REACTION_CLIPS = [
   "/audio/bid-reaction-1.mp3",
   "/audio/bid-reaction-2.mp3",
@@ -112,6 +146,15 @@ const BID_REACTION_CLIPS = [
   "/audio/bid-reaction-5.mp3",
   "/audio/bid-reaction-6.mp3",
   "/audio/bid-reaction-7.mp3",
+];
+const BID_REACTION_TEXTS = [
+  "Ooh, nice one!",
+  "There we go!",
+  "New lowest bid!",
+  "Now we're talking!",
+  "Love it!",
+  "Keep it coming!",
+  "That's the spirit!",
 ];
 
 // Context-specific reactions, tried in this priority order before falling
@@ -134,15 +177,18 @@ const BID_REACTION_CLIPS = [
 const SPECIAL_REACTIONS = [
   {
     clips: ["/audio/reaction-back-to-back.mp3"],
+    texts: ["Wow, back to back bids!"],
     matches: (ctx) =>
       ctx.previousBidAt && ctx.newBidAt && new Date(ctx.newBidAt) - new Date(ctx.previousBidAt) < 5000,
   },
   {
     clips: ["/audio/reaction-last-second.mp3"],
+    texts: ["Right at the buzzer!"],
     matches: (ctx) => ctx.countdownRemaining != null && ctx.countdownRemaining <= 5,
   },
   {
     clips: ["/audio/reaction-big-drop.mp3"],
+    texts: ["Whoa, big drop there!"],
     matches: (ctx) => ctx.dropSize != null && ctx.minDecrement > 0 && ctx.dropSize >= ctx.minDecrement * 3,
   },
   {
@@ -150,6 +196,7 @@ const SPECIAL_REACTIONS = [
     // one of them — a single fixed clip would repeat verbatim back to back,
     // so this category gets a couple of variants like the generic pool does.
     clips: ["/audio/reaction-very-low.mp3", "/audio/reaction-very-low-2.mp3"],
+    texts: ["That's getting close to the floor!", "We're near the minimum now!"],
     matches: (ctx) => ctx.minBid > 0 && ctx.amount - ctx.minBid <= (ctx.minDecrement || 0) * 2,
   },
   {
@@ -158,6 +205,7 @@ const SPECIAL_REACTIONS = [
     // — chit auctions here tend to close in this range. Same repeat-risk as
     // very-low above, so it also gets a couple of variants.
     clips: ["/audio/reaction-close-range.mp3", "/audio/reaction-close-range-2.mp3", "/audio/reaction-close-range-3.mp3"],
+    texts: ["That's right in the typical range!", "Solid bid!", "That's a strong one!"],
     matches: (ctx) =>
       ctx.startingAmount > 0 && ctx.amount <= ctx.startingAmount * 0.88 && ctx.amount >= ctx.startingAmount * 0.78,
   },
@@ -167,10 +215,11 @@ export function announceNewLowestBid(amount, currency, context = {}) {
   const dropSize = context.previousAmount != null ? context.previousAmount - amount : null;
   const ctx = { ...context, amount, dropSize };
   const special = SPECIAL_REACTIONS.find((r) => r.matches(ctx));
-  const pool = special ? special.clips : BID_REACTION_CLIPS;
+  const cad = isCAD(currency);
+  const pool = special ? (cad ? special.texts : special.clips) : (cad ? BID_REACTION_TEXTS : BID_REACTION_CLIPS);
   const reaction = pool[Math.floor(Math.random() * pool.length)];
   return {
-    parts: [{ clip: reaction }, ...amountToSpeechParts(amount, currency)],
+    parts: [cad ? { text: reaction } : { clip: reaction }, ...amountToSpeechParts(amount, currency)],
     visual: `📉 New lowest bid: ${formatMoney(amount, currency)}`,
   };
 }
@@ -179,10 +228,12 @@ export function announceNewLowestBid(amount, currency, context = {}) {
 // bid — a real auctioneer doesn't just silently wait out the clock.
 // "first" fires at the stage's halfway point; "second" is a firmer escalation
 // close to the end if it's still silent. Each fires at most once per stage.
-export function announceSilence(tier = "first") {
-  const clip = tier === "second" ? "/audio/silence-nudge-2.mp3" : "/audio/silence-nudge.mp3";
+export function announceSilence(tier = "first", currency) {
+  const parts = isCAD(currency)
+    ? [{ text: tier === "second" ? "Still no bids? Come on, don't be shy — someone bid!" : "It's quiet out there... someone want to bid?" }]
+    : [{ clip: tier === "second" ? "/audio/silence-nudge-2.mp3" : "/audio/silence-nudge.mp3" }];
   return {
-    parts: [{ clip }],
+    parts,
     visual: tier === "second" ? "🤫 Still no bids — come on, someone bid!" : "🤫 No bids yet — come on, someone bid!",
   };
 }

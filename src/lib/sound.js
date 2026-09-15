@@ -227,41 +227,59 @@ export function callAnnouncement(status, amountLabel) {
 // restated before each of three clips ("...oru tharam", "...rendu tharam",
 // "...moonu tharam!"), building suspense the same way a real chit-fund
 // auctioneer counts down, instead of an English "once/twice/final call".
+//
+// These clips are all Tamil — India-only. Canada has no equivalent
+// recordings and must never hear Tamil/Malayalam, so it gets the English
+// text equivalents below instead, spoken live through the same TTS
+// pipeline the amount itself already uses.
 const CALL_AUDIO = {
   call_1: { a: "/audio/call-1-a.mp3", b: "/audio/call-1-b.mp3" },
   call_2: { a: "/audio/call-2-a.mp3", b: "/audio/call-2-b.mp3" },
 };
+const CALL_TEXT_EN = {
+  call_1: { a: "Alright everyone, the current lowest bid is", b: "Can anyone go lower? Come on!" },
+  call_2: { a: "Current lowest bid stands at", b: "Last chance to beat it — any takers?" },
+};
 // Pause after each round — "Pause and wait" / "Longer pause" / "Short
-// dramatic pause" per spec — so oru/rendu/moonu tharam land as three
-// distinct suspenseful calls instead of one continuous read. No pause after
-// the last one; whatever triggers the close announcement provides its own gap.
+// dramatic pause" per spec — so oru/rendu/moonu tharam (or, for Canada,
+// "Going once/twice/three times") land as three distinct suspenseful calls
+// instead of one continuous read. No pause after the last one; whatever
+// triggers the close announcement provides its own gap.
 const FINAL_CALL_CLIPS = [
   { clip: "/audio/final-oru-tharam.mp3", pauseAfter: 1500 },
   { clip: "/audio/final-rendu-tharam.mp3", pauseAfter: 2200 },
   { clip: "/audio/final-moonu-tharam.mp3", pauseAfter: 0 },
 ];
+const FINAL_CALL_TEXT_EN = [
+  { text: "Going once!", pauseAfter: 1500 },
+  { text: "Going twice!", pauseAfter: 2200 },
+  { text: "Going three times!", pauseAfter: 0 },
+];
 
 // atFloor: the current lowest bid has already hit the plan's minimum
 // allowed bid — no lower bid can legally be accepted from here. Call 1/2's
-// "b" clip is specifically the "yaaraavadhu kammiya bidding panreengala"
-// invitation to bid even lower, which would be actively misleading at that
-// point, so it's dropped — just the amount is announced, no invitation.
+// "b" line is specifically the "yaaraavadhu kammiya bidding panreengala" /
+// "can anyone go lower" invitation to bid even lower, which would be
+// actively misleading at that point, so it's dropped — just the amount is
+// announced, no invitation.
 export function speakCallAnnouncement(status, amount, currency, atFloor = false) {
   if (!isSoundEnabled()) return;
+  const cad = currency === "CAD";
   if (status === "final_call") {
     const amountParts = amount != null ? amountToSpeechParts(amount, currency) : [];
+    const rounds = cad ? FINAL_CALL_TEXT_EN : FINAL_CALL_CLIPS;
     const parts = [];
-    FINAL_CALL_CLIPS.forEach(({ clip, pauseAfter }) => {
-      parts.push(...amountParts, { clip });
-      if (pauseAfter) parts.push({ pause: pauseAfter });
+    rounds.forEach((round) => {
+      parts.push(...amountParts, cad ? { text: round.text } : { clip: round.clip });
+      if (round.pauseAfter) parts.push({ pause: round.pauseAfter });
     });
     speakAnnouncement(parts);
     return;
   }
-  const clips = CALL_AUDIO[status];
-  if (!clips) return;
-  const parts = [{ clip: clips.a }];
+  const lines = cad ? CALL_TEXT_EN[status] : CALL_AUDIO[status];
+  if (!lines) return;
+  const parts = [cad ? { text: lines.a } : { clip: lines.a }];
   if (amount != null) parts.push(...amountToSpeechParts(amount, currency));
-  if (!atFloor) parts.push({ clip: clips.b });
+  if (!atFloor) parts.push(cad ? { text: lines.b } : { clip: lines.b });
   speakAnnouncement(parts);
 }

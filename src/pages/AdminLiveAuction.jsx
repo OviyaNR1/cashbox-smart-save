@@ -212,10 +212,10 @@ export default function AdminLiveAuction() {
     if (hasBidSinceStage) { silenceStageRef.current.tier = 2; return; }
     if (silenceStageRef.current.tier < 1 && countdown <= half) {
       silenceStageRef.current.tier = 1;
-      speakAnnouncement(announceSilence("first").parts);
+      speakAnnouncement(announceSilence("first", plan?.currency).parts);
     } else if (silenceStageRef.current.tier < 2 && countdown <= nearEnd) {
       silenceStageRef.current.tier = 2;
-      speakAnnouncement(announceSilence("second").parts);
+      speakAnnouncement(announceSilence("second", plan?.currency).parts);
     }
   }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at, bids]);
 
@@ -337,7 +337,7 @@ export default function AdminLiveAuction() {
 
     playGavel();
     fireConfetti();
-    const closedLine = announceAuctionClosed();
+    const closedLine = announceAuctionClosed(plan.currency);
     pushToast(closedLine.visual, "default");
     speakAnnouncement(closedLine.parts);
     setTimeout(() => {
@@ -347,7 +347,7 @@ export default function AdminLiveAuction() {
       // A closing sign-off once the winner's named, so the room doesn't
       // just go silent — speakAnnouncement's own shared queue means this
       // naturally waits for the winner line to finish first.
-      speakAnnouncement(announceSignOff().parts);
+      speakAnnouncement(announceSignOff(plan.currency).parts);
     }, 1800);
     setBusy(false);
     setCloseConfirmOpen(false);
