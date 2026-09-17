@@ -69,10 +69,19 @@ export default function MemberOnboardingForm({ open, onClose, onSaved, member })
 
         if (form.group_id) {
           const group = groups.find((g) => g.id === form.group_id);
+          // Was missing entirely here (unlike MemberGroupAssignment.jsx and
+          // PlanRequests.jsx's confirmApprove, both of which compute this) —
+          // left every membership created through this admin "manual add"
+          // form with a null ticket_number, which Winners.jsx's Lakhbox
+          // payout order and the next-ticket calculation elsewhere both rely
+          // on being a real, unique-per-group number.
+          const existingMemberships = await base44.entities.GroupMembership.filter({ group_id: form.group_id });
+          const nextTicket = Math.max(0, ...existingMemberships.map((m) => m.ticket_number || 0)) + 1;
           const chitNumber = await generateChitNumber();
           await base44.entities.GroupMembership.create({
             group_id: form.group_id,
             member_profile_id: memberId,
+            ticket_number: nextTicket,
             chit_number: chitNumber,
             status: "active",
             paid_installments: 0,
