@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, CalendarClock } from "lucide-react";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
+import { collectionDateUTC, todayUTC } from "@/lib/dates";
 
 // A member-by-member roster of who's paid the current month and who
 // hasn't — nothing in the admin app answered "who is still pending" as a
@@ -55,12 +56,15 @@ export default function PaymentStatus() {
 
   const profileOf = (id) => profiles.find((p) => p?.id === id);
 
-  // "Not paid" here means behind on the group's current month specifically
-  // (paid_installments < current_month) — same convention as
-  // paymentPreview.js/sendReminders.js use elsewhere in the app. A pending
-  // (submitted, not yet admin-approved) payment for that next installment
-  // shows as its own "Pending review" state rather than lumping it in with
-  // members who haven't submitted anything at all.
+  // "Not paid" used to mean nothing more than paid_installments < current_month
+  // — so the moment the group's cycle advanced, EVERY member who hadn't paid
+  // that instant showed as "N months behind" even if the real due date was
+  // still days away. Now checks the actual due date (same collectionDateUTC
+  // convention computePaymentReminderTargets uses in sendReminders.js) — a
+  // member isn't "behind" until that date has actually passed. "Pending
+  // review" (submitted, not yet admin-approved) still takes priority over
+  // both, same as before.
+  const currency = plan?.currency || "INR";
   const rows = memberships
     .map((m) => {
       const paid = m.paid_installments || 0;
@@ -70,19 +74,36 @@ export default function PaymentStatus() {
         (p) => p.membership_id === m.id && p.status === "pending" && p.installment_number === paid + 1
       );
       let status;
-      if (unpaidCount === 0) status = "paid";
-      else if (pendingForNext) status = "pending_review";
-      else status = "not_paid";
-      return { membership: m, profile: profileOf(m.member_profile_id), paid, unpaidCount, status };
+      let dueDateStr = null;
+      let daysLate = 0;
+      if (unpaidCount === 0) {
+        status = "paid";
+      } else if (pendingForNext) {
+        status = "pending_review";
+      } else {
+        // Installment `paid + 1` (the oldest unpaid one) is due `paid`
+        // months after start_date — same "installment N due N-1 months in"
+        // convention as everywhere else that computes this.
+        const dueDate = new Date(collectionDateUTC(group?.start_date, paid, group?.monthly_collection_date));
+        const today = todayUTC(currency);
+        daysLate = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
+        dueDateStr = dueDate.toLocaleDateString("en-IN", {
+          day: "numeric", month: "short", year: "numeric",
+          timeZone: currency === "CAD" ? "UTC" : "Asia/Kolkata",
+        });
+        status = daysLate > 0 ? "not_paid" : "upcoming";
+      }
+      return { membership: m, profile: profileOf(m.member_profile_id), paid, unpaidCount, status, dueDateStr, daysLate };
     })
     .sort((a, b) => {
-      const order = { not_paid: 0, pending_review: 1, paid: 2 };
+      const order = { not_paid: 0, pending_review: 1, upcoming: 2, paid: 3 };
       return order[a.status] - order[b.status];
     });
 
   const notPaidCount = rows.filter((r) => r.status === "not_paid").length;
   const pendingCount = rows.filter((r) => r.status === "pending_review").length;
-  const paidCount = rows.length - notPaidCount - pendingCount;
+  const upcomingCount = rows.filter((r) => r.status === "upcoming").length;
+  const paidCount = rows.filter((r) => r.status === "paid").length;
 
   return (
     <div className="space-y-6">
@@ -107,8 +128,9 @@ export default function PaymentStatus() {
 
       {groupId && !loading && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <StatCard label="Not Paid" value={notPaidCount} tone="destructive" icon={AlertCircle} />
+            <StatCard label="Upcoming" value={upcomingCount} tone="blue" icon={CalendarClock} />
             <StatCard label="Pending Review" value={pendingCount} tone="amber" icon={Clock} />
             <StatCard label="Paid Up" value={paidCount} tone="emerald" icon={CheckCircle2} />
           </div>
@@ -142,9 +164,14 @@ export default function PaymentStatus() {
                           {r.status === "pending_review" && (
                             <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400">Pending review</span>
                           )}
+                          {r.status === "upcoming" && (
+                            <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/15 text-blue-400">
+                              Due {r.dueDateStr}
+                            </span>
+                          )}
                           {r.status === "not_paid" && (
                             <span className="text-xs px-2.5 py-1 rounded-full bg-destructive/15 text-destructive">
-                              {r.unpaidCount} month{r.unpaidCount > 1 ? "s" : ""} behind
+                              {r.daysLate} day{r.daysLate === 1 ? "" : "s"} late (due {r.dueDateStr})
                             </span>
                           )}
                         </td>
@@ -170,6 +197,7 @@ function StatCard({ label, value, tone, icon: Icon }) {
     destructive: "bg-destructive/10 text-destructive",
     amber: "bg-amber-500/10 text-amber-400",
     emerald: "bg-emerald-500/10 text-emerald-400",
+    blue: "bg-blue-500/10 text-blue-400",
   };
   return (
     <div className="bg-card rounded-2xl border border-border p-5">
