@@ -271,8 +271,19 @@ export const computeAuctionSaveTheDateTargets = async (groupId, { trialDateTime,
       memberProfileId: p.id,
       fullName: p.full_name || "Member",
       mobile: p.mobile,
-      template: "auction_save_the_date_v1",
-      parameters: [p.full_name, trialDateStr, group.group_name || group.group_code, realDateStr],
+      // v1 has a "Join Live Auction" URL button — WhatsApp prefetches a
+      // link-preview card for that button's target and renders it above the
+      // message, and since /live-auction is just a client-side route with no
+      // page-specific metadata, that card falls back to the whole site's
+      // generic title/description. Reads as a random ad card before the
+      // actual "Hi {{name}}" greeting. v2 drops the button entirely (no
+      // in-app deep link, but no stray card either) — same {{1..4}} meaning
+      // and order in both, so only the template name changes here.
+      template: "auction_save_the_date_v2",
+      // Single-quoted in the parameter value itself, not the template body —
+      // the approved body text can't be edited without a new Meta review,
+      // but whatever string is substituted into {{3}} is ours to format.
+      parameters: [p.full_name, trialDateStr, `'${group.group_name || group.group_code}'`, realDateStr],
     }));
 };
 
