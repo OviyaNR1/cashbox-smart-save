@@ -395,8 +395,14 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
     const amountStr = `${currency} ${monthlyAmount}`;
     // daysBefore=0 (due today) gets its own template with "is due today!"
     // urgency instead of "upcoming... please pay before the due date",
-    // which reads wrong for something due on the day itself.
-    const template = daysBefore === 0 ? "payment_due_today_v1" : "payment_upcoming_reminder_v3";
+    // which reads wrong for something due on the day itself. Separately,
+    // India's templates name UPI/Bank Transfer explicitly — wrong for
+    // Canada, which only has Interac e-Transfer/Cash — so Canada gets its
+    // own _ca_v1 templates with a payment-method-neutral swap instead.
+    const isCanada = currency === "CAD";
+    const template = daysBefore === 0
+      ? (isCanada ? "payment_due_today_ca_v1" : "payment_due_today_v1")
+      : (isCanada ? "payment_upcoming_reminder_ca_v1" : "payment_upcoming_reminder_v3");
     targets.push({
       memberProfileId: profile.id,
       fullName: profile.full_name || "Member",
