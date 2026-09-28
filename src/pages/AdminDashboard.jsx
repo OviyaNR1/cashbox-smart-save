@@ -174,6 +174,7 @@ export default function AdminDashboard() {
               <tr>
                 <th className="text-left px-5 py-3">Member</th>
                 <th className="text-left px-5 py-3">Transaction</th>
+                <th className="text-left px-5 py-3">Installment</th>
                 <th className="text-left px-5 py-3">Date</th>
                 <th className="text-left px-5 py-3">Method</th>
                 <th className="text-right px-5 py-3">Amount</th>
@@ -194,6 +195,7 @@ export default function AdminDashboard() {
                     {allProfiles.find((m) => m.id === p.member_profile_id)?.full_name || "—"}
                   </td>
                   <td className="px-5 py-3 text-foreground">{p.transaction_id || p.id.slice(0, 8)}</td>
+                  <td className="px-5 py-3 text-muted-foreground">#{p.installment_number || "—"}</td>
                   <td className="px-5 py-3 text-muted-foreground">{p.payment_date || "—"}</td>
                   <td className="px-5 py-3 text-muted-foreground capitalize">{(p.method || "").replace("_", " ")}</td>
                   <td className="px-5 py-3 text-right tabular-nums">{formatMoney(p.amount, p.currency || "INR")}</td>
@@ -212,7 +214,7 @@ export default function AdminDashboard() {
                 </tr>
               ))}
               {payments.length === 0 && (
-                <tr><td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">No payments recorded yet.</td></tr>
+                <tr><td colSpan={8} className="px-5 py-8 text-center text-muted-foreground">No payments recorded yet.</td></tr>
               )}
             </tbody>
           </table>

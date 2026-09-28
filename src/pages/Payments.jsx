@@ -247,6 +247,7 @@ export default function Payments() {
               <tr>
                 <th className="text-left px-5 py-3">Transaction</th>
                 <th className="text-left px-5 py-3">Member</th>
+                <th className="text-left px-5 py-3">Installment</th>
                 <th className="text-left px-5 py-3">Date</th>
                 <th className="text-left px-5 py-3">Method</th>
                 <th className="text-right px-5 py-3">Amount</th>
@@ -256,15 +257,16 @@ export default function Payments() {
             </thead>
             <tbody className="divide-y divide-border">
               {payments === null ? (
-                <tr><td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">Loading…</td></tr>
+                <tr><td colSpan={8} className="px-5 py-8 text-center text-muted-foreground">Loading…</td></tr>
               ) : filteredPayments.length === 0 ? (
-                <tr><td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">{payments.length === 0 ? "No payments recorded." : "No payments match your search."}</td></tr>
+                <tr><td colSpan={8} className="px-5 py-8 text-center text-muted-foreground">{payments.length === 0 ? "No payments recorded." : "No payments match your search."}</td></tr>
               ) : filteredPayments.map((p) => {
                 const prof = profileOf(p.member_profile_id);
                 return (
                   <tr key={p.id}>
                     <td className="px-5 py-3 text-foreground">{p.transaction_id || p.id.slice(0, 8)}</td>
                     <td className="px-5 py-3 text-muted-foreground">{prof?.full_name || "—"}</td>
+                    <td className="px-5 py-3 text-muted-foreground">#{p.installment_number || "—"}</td>
                     <td className="px-5 py-3 text-muted-foreground">{p.payment_date || "—"}</td>
                     <td className="px-5 py-3 text-muted-foreground capitalize">{(p.method || "").replace("_", " ")}</td>
                     <td className="px-5 py-3 text-right tabular-nums text-foreground">{formatMoney(p.amount, currencyOf(p))}</td>
