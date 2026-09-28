@@ -68,11 +68,6 @@ export default function AdminReminders() {
   // both to keep the list scannable and because editing several at once
   // with no per-row "saved" indicator would be easy to lose track of.
   const [expandedId, setExpandedId] = useState(null);
-  // "Preview Upcoming Due" used to only ever check exactly 1 day before the
-  // due date — fine once you're actually 1 day out, but useless any earlier
-  // (e.g. wanting to notify people several days ahead), since it always came
-  // back "nobody's due exactly tomorrow" until that specific day arrived.
-  const [upcomingDaysBefore, setUpcomingDaysBefore] = useState(1);
   // Auction day moves every month (no fixed schedule), and there's no
   // Auction row to read a real date/time from until the admin actually
   // opens it — this lets the admin announce a specific month's auction
@@ -186,13 +181,13 @@ export default function AdminReminders() {
       else if (type === "auction") targets = (await computeAuctionReminderTargets(selectedGroup.id, auctionDateTime || undefined)).targets;
       else if (type === "auctionstart") targets = await computeAuctionStartingNowTargets(selectedGroup.id);
       else if (type === "savedate") targets = await computeAuctionSaveTheDateTargets(selectedGroup.id, { trialDateTime, realDateTime });
-      // "upcoming" (1 day before) and "payment" (strictly past due, daysLate
-      // > 0) leave the due date itself with no reminder option at all —
-      // "today" fills that gap using the same upcoming-due computation with
-      // daysBefore=0, reusing the same template since its wording ("Due
-      // date: {{4}}") reads fine whether that date is tomorrow or today.
+      // "upcoming" (any day before due) and "payment" (strictly past due,
+      // daysLate > 0) leave the due date itself with no reminder option at
+      // all — "today" fills that gap using the same upcoming-due computation
+      // with daysBefore=0, reusing the same template since its wording ("Due
+      // date: {{4}}") reads fine whether that date is days away or today.
       else if (type === "today") targets = await computeUpcomingDueTargets(selectedGroup.id, 0);
-      else targets = await computeUpcomingDueTargets(selectedGroup.id, Number(upcomingDaysBefore) || 1);
+      else targets = await computeUpcomingDueTargets(selectedGroup.id, 1);
       setPreview({ type, targets });
       if (targets.length === 0) {
         toast({ title: "No one to remind right now", description: reasonForEmpty(type) });
@@ -234,13 +229,13 @@ export default function AdminReminders() {
 
       <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-2">
         <p className="text-sm text-blue-300">
-          <strong>Upcoming Due:</strong> 1 day before the due date, to anyone who hasn't paid yet
+          <strong>Payment Date Announcement:</strong> Let anyone who hasn't paid yet know the due date — any time before it, whenever you need
         </p>
         <p className="text-sm text-blue-300">
           <strong>Payment Reminders:</strong> Automatically finds unpaid members and sends based on days late
         </p>
         <p className="text-sm text-blue-300">
-          <strong>Auction Reminder (2h Before):</strong> Sends ahead of an auction, worded as "starts soon"
+          <strong>Auction Date Announcement:</strong> Tell members when the next auction is — works whether that's days away or starting soon, whatever date/time you type in
         </p>
         <p className="text-sm text-blue-300">
           <strong>Auction Reminder (Starting Now):</strong> Sends once bidding is actually live
@@ -278,35 +273,19 @@ export default function AdminReminders() {
                 onChange={(e) => { setReminderType(e.target.value); resetPreview(); }}
                 className="w-full mt-2 px-4 py-2 rounded-lg border border-border bg-background text-foreground"
               >
-                <option value="upcoming">Payment reminder — coming up (pick how many days ahead)</option>
+                <option value="upcoming">Payment date announcement (any time ahead of the due date)</option>
                 <option value="today">Payment reminder — due today</option>
                 <option value="payment">Payment reminder — overdue (auto-finds who's late)</option>
-                <option value="auction">Auction reminder — 2 hours before it opens</option>
+                <option value="auction">Auction date announcement (any time ahead, or last-minute)</option>
                 <option value="auctionstart">Auction reminder — bidding is live right now</option>
                 <option value="savedate">Trial + real auction — save the date</option>
               </select>
             </div>
 
-            {/* Only the date input(s) this specific type actually needs —
-                the other three types need no extra input at all. */}
-            {reminderType === "upcoming" && (
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">How many days before the due date?</label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={upcomingDaysBefore}
-                  onChange={(e) => setUpcomingDaysBefore(e.target.value)}
-                  className="max-w-[100px]"
-                />
-              </div>
-            )}
-
             {reminderType === "auction" && (
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">
-                  Auction date & time — auction day moves every month, so pick it here
+                  Auction date & time — pick any date/time, days ahead or the same day, since auction day moves every month
                 </label>
                 <Input
                   type="datetime-local"
@@ -384,7 +363,7 @@ export default function AdminReminders() {
                         <p className="text-xs text-muted-foreground text-right">
                           {preview.type === "payment" && `${t.daysLate} day${t.daysLate === 1 ? "" : "s"} late · ${t.amountStr}`}
                           {(preview.type === "upcoming" || preview.type === "today") && `Due ${t.dueDateStr} · ${t.amountStr}`}
-                          {preview.type === "auction" && "Auction reminder (2h before)"}
+                          {preview.type === "auction" && "Auction date announcement"}
                           {preview.type === "auctionstart" && "Auction reminder (starting now)"}
                           {preview.type === "savedate" && "Trial save-the-date"}
                         </p>
@@ -500,16 +479,16 @@ export default function AdminReminders() {
 
 function previewLabel(type) {
   if (type === "payment") return "overdue payment";
-  if (type === "upcoming") return "upcoming-due";
+  if (type === "upcoming") return "payment date";
   if (type === "today") return "due-today";
   if (type === "savedate") return "trial save-the-date";
   if (type === "auctionstart") return "auction-starting-now";
-  return "auction";
+  return "auction date";
 }
 
 function reasonForEmpty(type) {
   if (type === "payment") return "Nobody in this group is currently past their due date.";
-  if (type === "upcoming") return "Nobody's payment is due exactly 1 day from now, or everyone due has already paid.";
+  if (type === "upcoming") return "The due date has already passed, or everyone due has already paid.";
   if (type === "today") return "Nobody's payment is due exactly today, or everyone due has already paid.";
   if (type === "savedate") return "This group has no active members with a phone number on file.";
   if (type === "auctionstart") return "This group has no active members with a phone number on file.";

@@ -336,10 +336,18 @@ export const sendAuctionReminders = async (groupId, targets) => {
   return { sent, failed };
 };
 
-// The "1 day before it's due" nudge — distinct from computePaymentReminderTargets,
-// which only ever fires AFTER the due date has already passed. This fires the
-// day before, for anyone who hasn't paid yet, regardless of how many days
-// remain until the group's overall current-month cycle.
+// The "coming up" nudge — distinct from computePaymentReminderTargets, which
+// only ever fires AFTER the due date has already passed. `daysBefore` used
+// to require an EXACT match (today must be precisely N days before due, or
+// this silently returns nobody) — a fine assumption for an automated daily
+// cron checking "is it exactly day N," but this is an admin manually
+// clicking a button, not a scheduled job, and there isn't one. That made it
+// impossible to announce the due date whenever the admin actually wanted to
+// (had to correctly pre-calculate today's exact distance from the due date
+// first). Now: daysBefore=0 ("due today") still means exactly today, since
+// that's inherently date-specific wording, but any other call just needs
+// the due date to still be in the future — works any day before it, not one
+// specific day.
 export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
   const group = await base44.entities.ChitGroup.get(groupId);
   if (!group) throw new Error("Group not found");
@@ -367,7 +375,7 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
   // current instant, which previously made this silently miss its target
   // day (and so send nothing) depending on what time it was when it ran.
   const daysUntilDue = Math.round((dueDate - today) / (1000 * 60 * 60 * 24));
-  if (daysUntilDue !== daysBefore) return [];
+  if (daysBefore === 0 ? daysUntilDue !== 0 : daysUntilDue <= 0) return [];
 
   // An India group's due date is always shown in IST -- explicit
   // Asia/Kolkata, not the viewer's own browser timezone (which, left
