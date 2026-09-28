@@ -25,16 +25,33 @@ export const TEMPLATE_PREVIEWS = {
     body: "⏰ Hi *{{1}}*, \n\nYour CashBox Chit Fund installment is due *today*!\n\nInstallment: #{{2}}\nAmount: *{{3}}*\nDue date: *{{4}}*\n\nPlease pay today via UPI or Bank Transfer, and attach a screenshot as proof in the app.\n\nCashBox Team 🏦",
     paramLabels: ["Name", "Installment #", "Amount", "Due date"],
   },
-  auction_reminder_v4: {
-    body: "🔨 Hi *{{1}}*, the {{2}} auction for *{{3}}* starts soon.\nPlace your bid: {{4}}\n*CashBox Team* 🏦",
+  // Canada equivalents of the two above — same {{1..4}} params, only the
+  // payment-method line differs (Interac e-Transfer/Cash, not UPI/Bank
+  // Transfer, which don't exist for Canada members).
+  payment_upcoming_reminder_ca_v1: {
+    body: "Hi *{{1}}*, \n\nThis is a reminder about your upcoming CashBox Chit Fund installment:\n\nInstallment: #{{2}}\nAmount: *{{3}}*\nDue date: *{{4}}*\n\nPlease pay before the due date via Interac e-Transfer or Cash, and attach a screenshot as proof in the app.\n\nCashBox Team 🏦",
+    paramLabels: ["Name", "Installment #", "Amount", "Due date"],
+  },
+  payment_due_today_ca_v1: {
+    body: "⏰ Hi *{{1}}*, \n\nYour CashBox Chit Fund installment is due *today*!\n\nInstallment: #{{2}}\nAmount: *{{3}}*\nDue date: *{{4}}*\n\nPlease pay today via Interac e-Transfer or Cash, and attach a screenshot as proof in the app.\n\nCashBox Team 🏦",
+    paramLabels: ["Name", "Installment #", "Amount", "Due date"],
+  },
+  // v4 said "starts soon" — fine for a 2-hours-ahead heads-up, wrong once
+  // reused as a flexible "announce whenever" reminder sent days in advance.
+  auction_reminder_v5: {
+    body: "🔨 Hi *{{1}}*, your next auction for *{{3}}* is on *{{2}}*.\nPlace your bid: {{4}}\n*CashBox Team* 🏦",
     paramLabels: ["Name", "Auction date/time", "Group", "Link"],
   },
   auction_starting_now_v1: {
     body: "🔨 Hi *{{1}}*, the *{{2}}* auction is *live right now*! Join and place your bid: {{3}}\n*CashBox Team* 🏦",
     paramLabels: ["Name", "Group", "Link"],
   },
-  auction_save_the_date_v1: {
-    body: "📅 Hi *{{1}}*, we're conducting a *trial auction* for *{{3}}* on *{{2}}* — no real money involved, just a practice run to help everyone get comfortable with bidding.\n\nThe *actual auction* (with real money) will follow on *{{4}}*.\n\nJoin the trial to practice!\n\nCashBox Team 🏦",
+  // v2 dropped v1's "Join Live Auction" URL button — that button made
+  // WhatsApp prefetch and render a stray link-preview card above the actual
+  // message (see sendReminders.js), since the button's target is just a
+  // client-side route with no page-specific metadata to show instead.
+  auction_save_the_date_v2: {
+    body: "Hi {{1}},\n\nThis is a notice for your group {{3}}: a trial auction session is scheduled on {{2}} to help members practice bidding before the real auction. The official auction (with real funds) is scheduled for {{4}}.\n\n— CashBox Team 🏦",
     paramLabels: ["Name", "Trial auction date/time", "Group", "Real auction date/time"],
   },
 };

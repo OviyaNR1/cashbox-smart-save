@@ -170,7 +170,11 @@ export const computeAuctionReminderTargets = async (groupId, manualDateTime) => 
       memberProfileId: p.id,
       fullName: p.full_name || "Member",
       mobile: p.mobile,
-      template: "auction_reminder_v4",
+      // v4 (and every earlier version) said "starts soon" — fine for the
+      // original 2-hours-ahead use case, misleading once this got reused as
+      // a flexible "announce whenever" reminder that can go out days in
+      // advance. v5 has the same {{1..4}} params with neutral wording.
+      template: "auction_reminder_v5",
       parameters: [p.full_name, auctionDateStr, group.group_name || group.group_code, `${window.location.origin}/live-auction`],
     }));
 
