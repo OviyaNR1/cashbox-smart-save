@@ -44,6 +44,8 @@ function formatUTCDateStr(dateStr) {
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
+const REMINDERS_STATE_KEY = "cashbox_admin_reminders_state_v1";
+
 // Every reminder is a two-step action: preview computes exactly who would
 // receive one and what it says, with nothing sent yet; only "Confirm & Send"
 // actually dispatches messages, using that exact previewed list — so what
@@ -52,6 +54,12 @@ export default function AdminReminders() {
   const { toast } = useToast();
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
+  // Was a grid of 4-6 separate buttons (one per reminder type) plus their
+  // date inputs scattered around/below them — confusing since it wasn't
+  // obvious which date field belonged to which button, or what half these
+  // types even meant. Now one dropdown picks the type, and only the date
+  // input(s) that type actually needs appear underneath it.
+  const [reminderType, setReminderType] = useState("upcoming");
   const [previewing, setPreviewing] = useState(null);
   const [sending, setSending] = useState(false);
   // { type: "payment" | "auction" | "upcoming", targets: [...] }
@@ -60,6 +68,11 @@ export default function AdminReminders() {
   // both to keep the list scannable and because editing several at once
   // with no per-row "saved" indicator would be easy to lose track of.
   const [expandedId, setExpandedId] = useState(null);
+  // "Preview Upcoming Due" used to only ever check exactly 1 day before the
+  // due date — fine once you're actually 1 day out, but useless any earlier
+  // (e.g. wanting to notify people several days ahead), since it always came
+  // back "nobody's due exactly tomorrow" until that specific day arrived.
+  const [upcomingDaysBefore, setUpcomingDaysBefore] = useState(1);
   // Auction day moves every month (no fixed schedule), and there's no
   // Auction row to read a real date/time from until the admin actually
   // opens it — this lets the admin announce a specific month's auction
@@ -111,11 +124,38 @@ export default function AdminReminders() {
       .finally(() => setLoadingDelivery(false));
   };
 
+  // Plain useState alone forgets the selected group/type the moment you
+  // navigate away and back — this page is a multi-step setup (pick group,
+  // pick type, pick a date), and losing all of it on every accidental nav
+  // away (e.g. checking a member's profile mid-way through) meant redoing
+  // the same clicks over and over. Restored from localStorage once the
+  // groups list is in (so the saved id can actually be matched to a group).
   useEffect(() => {
-    base44.entities.ChitGroup.list("-created_date", 100).then(setGroups);
+    base44.entities.ChitGroup.list("-created_date", 100).then((list) => {
+      setGroups(list);
+      try {
+        const saved = JSON.parse(localStorage.getItem(REMINDERS_STATE_KEY) || "{}");
+        if (saved.groupId) {
+          const match = list.find((g) => g.id === saved.groupId);
+          if (match) setSelectedGroup(match);
+        }
+        if (saved.reminderType) setReminderType(saved.reminderType);
+      } catch {
+        // Corrupt or unavailable storage — just start fresh, same as before.
+      }
+    });
     loadRecentSends();
     loadDeliveryLog();
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(REMINDERS_STATE_KEY, JSON.stringify({ groupId: selectedGroup?.id || null, reminderType }));
+    } catch {
+      // Storage unavailable (private browsing, quota, etc.) — selection just
+      // won't survive a navigation this time, same as before this feature.
+    }
+  }, [selectedGroup, reminderType]);
 
   const resetPreview = () => { setPreview(null); setExpandedId(null); };
 
@@ -152,7 +192,7 @@ export default function AdminReminders() {
       // daysBefore=0, reusing the same template since its wording ("Due
       // date: {{4}}") reads fine whether that date is tomorrow or today.
       else if (type === "today") targets = await computeUpcomingDueTargets(selectedGroup.id, 0);
-      else targets = await computeUpcomingDueTargets(selectedGroup.id, 1);
+      else targets = await computeUpcomingDueTargets(selectedGroup.id, Number(upcomingDaysBefore) || 1);
       setPreview({ type, targets });
       if (targets.length === 0) {
         toast({ title: "No one to remind right now", description: reasonForEmpty(type) });
@@ -223,7 +263,7 @@ export default function AdminReminders() {
         </div>
 
         {selectedGroup && (
-          <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-3">
+          <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
             <div>
               <p className="text-sm font-semibold text-foreground">{selectedGroup.group_name}</p>
               <p className="text-xs text-muted-foreground">
@@ -231,49 +271,64 @@ export default function AdminReminders() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <Button variant="outline" onClick={() => runPreview("upcoming")} disabled={previewing === "upcoming"} className="rounded-lg">
-                <Eye className="w-4 h-4 mr-2" /> {previewing === "upcoming" ? "Checking..." : "Preview Upcoming Due"}
-              </Button>
-              <Button variant="outline" onClick={() => runPreview("today")} disabled={previewing === "today"} className="rounded-lg">
-                <Eye className="w-4 h-4 mr-2" /> {previewing === "today" ? "Checking..." : "Preview Due Today"}
-              </Button>
-              <Button variant="outline" onClick={() => runPreview("payment")} disabled={previewing === "payment"} className="rounded-lg">
-                <Eye className="w-4 h-4 mr-2" /> {previewing === "payment" ? "Checking..." : "Preview Payment Reminders"}
-              </Button>
-              <Button variant="outline" onClick={() => runPreview("auction")} disabled={previewing === "auction"} className="rounded-lg">
-                <Eye className="w-4 h-4 mr-2" /> {previewing === "auction" ? "Checking..." : "Preview Auction Reminder (2h Before)"}
-              </Button>
+            <div>
+              <label className="text-sm font-semibold text-foreground">What do you want to send?</label>
+              <select
+                value={reminderType}
+                onChange={(e) => { setReminderType(e.target.value); resetPreview(); }}
+                className="w-full mt-2 px-4 py-2 rounded-lg border border-border bg-background text-foreground"
+              >
+                <option value="upcoming">Payment reminder — coming up (pick how many days ahead)</option>
+                <option value="today">Payment reminder — due today</option>
+                <option value="payment">Payment reminder — overdue (auto-finds who's late)</option>
+                <option value="auction">Auction reminder — 2 hours before it opens</option>
+                <option value="auctionstart">Auction reminder — bidding is live right now</option>
+                <option value="savedate">Trial + real auction — save the date</option>
+              </select>
             </div>
 
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">
-                Auction date & time (for the 2-hours-before reminder) — auction day moves every month, so pick it here
-              </label>
-              <Input
-                type="datetime-local"
-                value={auctionDateTime}
-                onChange={(e) => setAuctionDateTime(e.target.value)}
-                className="max-w-xs"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                {auctionDateTime
-                  ? "This exact date/time will be announced in the Auction Reminder message."
-                  : "Leave blank to use the currently open auction's own time instead."}
-              </p>
-            </div>
+            {/* Only the date input(s) this specific type actually needs —
+                the other three types need no extra input at all. */}
+            {reminderType === "upcoming" && (
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">How many days before the due date?</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={upcomingDaysBefore}
+                  onChange={(e) => setUpcomingDaysBefore(e.target.value)}
+                  className="max-w-[100px]"
+                />
+              </div>
+            )}
 
-            <div>
-              <Button variant="outline" onClick={() => runPreview("auctionstart")} disabled={previewing === "auctionstart"} className="rounded-lg">
-                <Eye className="w-4 h-4 mr-2" /> {previewing === "auctionstart" ? "Checking..." : "Preview Auction Reminder (Starting Now)"}
-              </Button>
-              <p className="text-xs text-muted-foreground mt-1">
+            {reminderType === "auction" && (
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">
+                  Auction date & time — auction day moves every month, so pick it here
+                </label>
+                <Input
+                  type="datetime-local"
+                  value={auctionDateTime}
+                  onChange={(e) => setAuctionDateTime(e.target.value)}
+                  className="max-w-xs"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {auctionDateTime
+                    ? "This exact date/time will be announced in the message."
+                    : "Leave blank to use the currently open auction's own time instead."}
+                </p>
+              </div>
+            )}
+
+            {reminderType === "auctionstart" && (
+              <p className="text-xs text-muted-foreground">
                 Send once the auction is actually live — worded as "happening right now," not an advance heads-up.
               </p>
-            </div>
+            )}
 
-            <div className="pt-2 border-t border-border/60 space-y-3">
-              <p className="text-xs font-medium text-foreground">Trial auction save-the-date</p>
+            {reminderType === "savedate" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">Trial auction (no money)</label>
@@ -284,15 +339,16 @@ export default function AdminReminders() {
                   <Input type="datetime-local" value={realDateTime} onChange={(e) => setRealDateTime(e.target.value)} />
                 </div>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => runPreview("savedate")}
-                disabled={previewing === "savedate" || !trialDateTime || !realDateTime}
-                className="rounded-lg"
-              >
-                <Eye className="w-4 h-4 mr-2" /> {previewing === "savedate" ? "Checking..." : "Preview Trial Announcement"}
-              </Button>
-            </div>
+            )}
+
+            <Button
+              variant="outline"
+              onClick={() => runPreview(reminderType)}
+              disabled={previewing === reminderType || (reminderType === "savedate" && (!trialDateTime || !realDateTime))}
+              className="rounded-lg w-full sm:w-auto"
+            >
+              <Eye className="w-4 h-4 mr-2" /> {previewing === reminderType ? "Checking..." : "Preview"}
+            </Button>
           </div>
         )}
       </div>
