@@ -10,7 +10,7 @@ import { useAdminCountry } from "@/lib/AdminCountryContext";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 
 const TEMPLATES = {
-  payment_reminder: {
+  payment_reminder_static_v1: {
     body: "Dear Member,\n\nThis is a friendly reminder that your monthly chit installment is now due. Please make your payment at your earliest convenience to avoid late fees.\n\nThank you,\nCashBox Team",
     isTemplate: true,
     params: [],
@@ -35,7 +35,9 @@ const TEMPLATES = {
     isTemplate: true,
     params: ["winnerName", "month", "prizeAmount", "dividend", "nextInstallment", "groupName"],
   },
-  auction_reminder_v4: {
+  // v4 said "starts soon" regardless of how far ahead it's sent — see
+  // sendReminders.js for the same fix. v5 has the same params, neutral wording.
+  auction_reminder_v5: {
     body: "Member Name, Auction Date, Group Name, Auction Link",
     isTemplate: true,
     params: ["memberName", "auctionDate", "groupName", "auctionLink"],
@@ -52,8 +54,8 @@ export default function Notifications() {
   const { country: countryFilter } = useAdminCountry();
   const [members, setMembers] = useState([]);
   const [recipients, setRecipients] = useState("all");
-  const [template, setTemplate] = useState("payment_reminder");
-  const [body, setBody] = useState(TEMPLATES.payment_reminder.body);
+  const [template, setTemplate] = useState("payment_reminder_static_v1");
+  const [body, setBody] = useState(TEMPLATES.payment_reminder_static_v1.body);
   const [templateParams, setTemplateParams] = useState({});
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(null);
@@ -147,12 +149,12 @@ export default function Notifications() {
             <Select value={template} onValueChange={onTemplate}>
               <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="payment_reminder">Payment reminder (static)</SelectItem>
+                <SelectItem value="payment_reminder_static_v1">Payment reminder (static)</SelectItem>
                 <SelectItem value="payment_reminder_overdue_v4">Payment reminder - Overdue</SelectItem>
                 <SelectItem value="payment_reminder_urgent_v4">Payment reminder - Urgent</SelectItem>
                 <SelectItem value="winner_announcement_all_v5">Winner announcement (all members)</SelectItem>
                 <SelectItem value="winner_announcement_winner_v5">Winner announcement (personalized)</SelectItem>
-                <SelectItem value="auction_reminder_v4">Auction reminder</SelectItem>
+                <SelectItem value="auction_reminder_v5">Auction reminder</SelectItem>
                 <SelectItem value="kyc_reminder">KYC reminder</SelectItem>
                 <SelectItem value="custom">Custom message</SelectItem>
               </SelectContent>
