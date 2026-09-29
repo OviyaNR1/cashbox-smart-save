@@ -2,6 +2,23 @@ import { base44 } from "@/api/base44Client";
 import { collectionDateUTC, todayUTC } from "./dates";
 import { sendWhatsAppMessage } from "./sendWhatsAppMessage";
 import { logAudit } from "./audit";
+import { getNextPaymentPreview } from "./paymentPreview";
+
+// Every unpaid installment shown in a reminder must price at what the
+// member actually owes right now, not the plan's flat monthly_contribution
+// — for a live_auction plan, a closed auction applies a per-member dividend
+// that lowers the real amount below the base rate (see paymentPreview.js /
+// liveAuctionEngine.js), and that discount can only be known by asking the
+// same shared preview function everything else in the app already relies
+// on. A real send once told members ₹5,000 when the correct dividend-
+// adjusted price was ₹3,850 — this is exactly the bug that caused it.
+// Fetched once per group (not per membership) — every membership in the
+// same group shares the same auction history.
+async function auctionsFor(plan, groupId) {
+  return plan?.model === "live_auction"
+    ? await base44.entities.Auction.filter({ group_id: groupId })
+    : [];
+}
 
 // Every "compute" function below only reads data and returns who WOULD get
 // a reminder and exactly what it would say — no message is sent. The admin
@@ -22,54 +39,34 @@ export const computePaymentReminderTargets = async (groupId) => {
   });
   if (memberships.length === 0) return [];
 
-  // Get every successful payment ever made in this group, so we can tell
-  // which installments (not just the current one) each member has settled.
-  const allPayments = await base44.entities.Payment.filter({
-    group_id: groupId,
-    status: "success",
-  });
-
+  const auctions = await auctionsFor(plan, groupId);
   const currency = plan?.currency || "INR";
-  const monthlyAmount = plan?.monthly_contribution || 0;
   const today = todayUTC(currency);
 
   const targets = [];
 
   for (const membership of memberships) {
-    const paidInstallments = new Set(
-      allPayments
-        .filter((p) => p.member_profile_id === membership.member_profile_id)
-        .map((p) => p.installment_number)
-    );
-
-    // Every installment from 1 through the group's current month that this
-    // member hasn't paid — a member stuck for several months accrues all
-    // of them, not just the latest one.
-    const unpaidInstallments = [];
-    for (let i = 1; i <= group.current_month; i++) {
-      if (!paidInstallments.has(i)) unpaidInstallments.push(i);
-    }
+    // Correctly priced per installment (dividend-adjusted for live_auction,
+    // formula-based for chit_fund, flat for lakhbox) — not a flat
+    // monthly_contribution multiplied by count. Oldest-first, same as before.
+    const unpaidInstallments = getNextPaymentPreview({ membership, plan, group, auctions }).unpaidInstallments;
     if (unpaidInstallments.length === 0) continue;
 
-    const oldestUnpaid = Math.min(...unpaidInstallments);
-    // Installment N is due N-1 months after start_date (installment 1 is
-    // due in the start month itself) — same convention as
-    // auctionEngine.js/paymentPreview.js. Passing the installment number
-    // directly here (no -1) made every due date compute a full month late.
-    const collDate = new Date(collectionDateUTC(group.start_date, oldestUnpaid - 1, group.monthly_collection_date));
-    const daysLate = Math.floor((today - collDate) / (1000 * 60 * 60 * 24));
+    const oldest = unpaidInstallments[0];
+    const daysLate = Math.floor((today - new Date(oldest.dueDate)) / (1000 * 60 * 60 * 24));
     if (daysLate <= 0) continue; // oldest unpaid installment isn't due yet
 
     const profile = await base44.entities.MemberProfile.get(membership.member_profile_id);
     if (!profile?.mobile) continue;
 
-    const outstandingAmount = unpaidInstallments.length * monthlyAmount;
+    const outstandingAmount = unpaidInstallments.reduce((s, i) => s + i.amount, 0);
     const amountStr = `${currency} ${outstandingAmount}`;
     const daysLateStr = daysLate.toString();
     const breakdown = unpaidInstallments
-      .map((n) => `Month ${n} overdue = ${currency} ${monthlyAmount}`)
+      .map((i) => `Month ${i.number} overdue = ${currency} ${i.amount}`)
       .join("\n");
-    const template = daysLate <= 7 ? "payment_reminder_overdue_v4" : "payment_reminder_urgent_v4";
+    const template = daysLate <= 7 ? "payment_reminder_overdue_v5" : "payment_reminder_urgent_v5";
+    const payLink = `${window.location.origin}/payments`;
 
     // late_interest_percent is the plan's own configured monthly rate (e.g.
     // 2%) — prorated by how many days late against the actual outstanding
@@ -78,9 +75,9 @@ export const computePaymentReminderTargets = async (groupId) => {
     // late fee rather than a fabricated one.
     const lateFee = Math.round(outstandingAmount * ((plan?.late_interest_percent || 0) / 100) * (daysLate / 30));
 
-    const parameters = template === "payment_reminder_urgent_v4"
-      ? [profile.full_name, daysLateStr, breakdown, `${currency} ${lateFee}`, amountStr]
-      : [profile.full_name, daysLateStr, breakdown, amountStr];
+    const parameters = template === "payment_reminder_urgent_v5"
+      ? [profile.full_name, daysLateStr, breakdown, `${currency} ${lateFee}`, amountStr, payLink]
+      : [profile.full_name, daysLateStr, breakdown, amountStr, payLink];
 
     targets.push({
       memberProfileId: profile.id,
@@ -367,9 +364,9 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
     group_id: groupId,
     status: "success",
   });
+  const auctions = await auctionsFor(plan, groupId);
 
   const currency = plan?.currency || "INR";
-  const monthlyAmount = plan?.monthly_contribution || 0;
   // current_month is 1-indexed ("Month 1" is due in the start month itself),
   // same convention as auctionEngine.js/paymentPreview.js.
   const dueDate = new Date(collectionDateUTC(group.start_date, group.current_month - 1, group.monthly_collection_date));
@@ -404,17 +401,27 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
     const profile = await base44.entities.MemberProfile.get(membership.member_profile_id);
     if (!profile?.mobile) continue;
 
-    const amountStr = `${currency} ${monthlyAmount}`;
+    // Priced correctly for this specific installment (dividend-adjusted for
+    // live_auction, etc.) instead of the flat monthly_contribution — same
+    // bug, and same fix, as computePaymentReminderTargets above. Falls back
+    // to the flat rate only if current_month somehow isn't in this
+    // member's own unpaid list (shouldn't happen given the alreadyPaid
+    // check above, but never crash a reminder send over it).
+    const preview = getNextPaymentPreview({ membership, plan, group, auctions });
+    const currentInstallment = preview.unpaidInstallments.find((i) => i.number === group.current_month);
+    const amount = currentInstallment ? currentInstallment.amount : (plan?.monthly_contribution || 0);
+    const amountStr = `${currency} ${amount}`;
+    const payLink = `${window.location.origin}/payments`;
     // daysBefore=0 (due today) gets its own template with "is due today!"
     // urgency instead of "upcoming... please pay before the due date",
     // which reads wrong for something due on the day itself. Separately,
     // India's templates name UPI/Bank Transfer explicitly — wrong for
     // Canada, which only has Interac e-Transfer/Cash — so Canada gets its
-    // own _ca_v1 templates with a payment-method-neutral swap instead.
+    // own _ca_v2 templates with a payment-method-neutral swap instead.
     const isCanada = currency === "CAD";
     const template = daysBefore === 0
-      ? (isCanada ? "payment_due_today_ca_v1" : "payment_due_today_v1")
-      : (isCanada ? "payment_upcoming_reminder_ca_v1" : "payment_upcoming_reminder_v3");
+      ? (isCanada ? "payment_due_today_ca_v2" : "payment_due_today_v2")
+      : (isCanada ? "payment_upcoming_reminder_ca_v2" : "payment_upcoming_reminder_v4");
     targets.push({
       memberProfileId: profile.id,
       fullName: profile.full_name || "Member",
@@ -422,7 +429,7 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
       dueDateStr,
       amountStr,
       template,
-      parameters: [profile.full_name, String(group.current_month), amountStr, dueDateStr],
+      parameters: [profile.full_name, String(group.current_month), amountStr, dueDateStr, payLink],
     });
   }
 
