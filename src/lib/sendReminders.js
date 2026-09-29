@@ -4,6 +4,14 @@ import { sendWhatsAppMessage } from "./sendWhatsAppMessage";
 import { logAudit } from "./audit";
 import { getNextPaymentPreview } from "./paymentPreview";
 
+// The *_v4/*_v2/*_ca_v2/*_v5 templates (adding a "Pay now" link) are still
+// PENDING Meta review as of this fix — sending with them fails outright
+// until approved, same as any unapproved template. Flip this to true once
+// they clear review; until then, every payment reminder falls back to the
+// older already-approved template names below (same amount fix either
+// way, just without the link and its extra trailing parameter).
+const PAY_LINK_TEMPLATES_APPROVED = false;
+
 // Every unpaid installment shown in a reminder must price at what the
 // member actually owes right now, not the plan's flat monthly_contribution
 // — for a live_auction plan, a closed auction applies a per-member dividend
@@ -65,7 +73,10 @@ export const computePaymentReminderTargets = async (groupId) => {
     const breakdown = unpaidInstallments
       .map((i) => `Month ${i.number} overdue = ${currency} ${i.amount}`)
       .join("\n");
-    const template = daysLate <= 7 ? "payment_reminder_overdue_v5" : "payment_reminder_urgent_v5";
+    const isUrgent = daysLate > 7;
+    const template = PAY_LINK_TEMPLATES_APPROVED
+      ? (isUrgent ? "payment_reminder_urgent_v5" : "payment_reminder_overdue_v5")
+      : (isUrgent ? "payment_reminder_urgent_v4" : "payment_reminder_overdue_v4");
     const payLink = `${window.location.origin}/payments`;
 
     // late_interest_percent is the plan's own configured monthly rate (e.g.
@@ -75,9 +86,10 @@ export const computePaymentReminderTargets = async (groupId) => {
     // late fee rather than a fabricated one.
     const lateFee = Math.round(outstandingAmount * ((plan?.late_interest_percent || 0) / 100) * (daysLate / 30));
 
-    const parameters = template === "payment_reminder_urgent_v5"
-      ? [profile.full_name, daysLateStr, breakdown, `${currency} ${lateFee}`, amountStr, payLink]
-      : [profile.full_name, daysLateStr, breakdown, amountStr, payLink];
+    const linkParam = PAY_LINK_TEMPLATES_APPROVED ? [payLink] : [];
+    const parameters = isUrgent
+      ? [profile.full_name, daysLateStr, breakdown, `${currency} ${lateFee}`, amountStr, ...linkParam]
+      : [profile.full_name, daysLateStr, breakdown, amountStr, ...linkParam];
 
     targets.push({
       memberProfileId: profile.id,
@@ -419,9 +431,14 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
     // Canada, which only has Interac e-Transfer/Cash — so Canada gets its
     // own _ca_v2 templates with a payment-method-neutral swap instead.
     const isCanada = currency === "CAD";
-    const template = daysBefore === 0
-      ? (isCanada ? "payment_due_today_ca_v2" : "payment_due_today_v2")
-      : (isCanada ? "payment_upcoming_reminder_ca_v2" : "payment_upcoming_reminder_v4");
+    const template = PAY_LINK_TEMPLATES_APPROVED
+      ? (daysBefore === 0
+          ? (isCanada ? "payment_due_today_ca_v2" : "payment_due_today_v2")
+          : (isCanada ? "payment_upcoming_reminder_ca_v2" : "payment_upcoming_reminder_v4"))
+      : (daysBefore === 0
+          ? (isCanada ? "payment_due_today_ca_v1" : "payment_due_today_v1")
+          : (isCanada ? "payment_upcoming_reminder_ca_v1" : "payment_upcoming_reminder_v3"));
+    const linkParam = PAY_LINK_TEMPLATES_APPROVED ? [payLink] : [];
     targets.push({
       memberProfileId: profile.id,
       fullName: profile.full_name || "Member",
@@ -429,7 +446,7 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
       dueDateStr,
       amountStr,
       template,
-      parameters: [profile.full_name, String(group.current_month), amountStr, dueDateStr, payLink],
+      parameters: [profile.full_name, String(group.current_month), amountStr, dueDateStr, ...linkParam],
     });
   }
 
