@@ -30,11 +30,14 @@ import QRCode from "qrcode";
 // MemberGroupAssignment.jsx), so a member's cart here is always one
 // currency in practice; INR is the fallback for the brief window before
 // `items` loads and singleCurrency is still null.
+// "e_transfer" (not "interac") because that's the value the payments
+// table's method check constraint actually allows — see
+// PayInstallmentDialog.jsx's matching comment.
 const PAYMENT_METHODS_BY_CURRENCY = {
   INR: [{ value: "upi", label: "UPI" }, { value: "cash", label: "Cash" }],
-  CAD: [{ value: "interac", label: "Interac e-Transfer" }, { value: "cash", label: "Cash" }],
+  CAD: [{ value: "e_transfer", label: "Interac e-Transfer" }, { value: "cash", label: "Cash" }],
 };
-const METHODS_WITH_PROOF = ["upi", "bank_transfer", "interac"];
+const METHODS_WITH_PROOF = ["upi", "bank_transfer", "e_transfer"];
 
 // See PayInstallmentDialog.jsx's DRAFT_KEY comment — same reload-survival
 // fix, applied here too since this dialog has the identical UPI deep-link
@@ -305,7 +308,7 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
                 </p>
               )}
 
-              {method === "interac" && (
+              {method === "e_transfer" && (
                 <div className="rounded-lg border border-border p-3 space-y-2">
                   <p className="text-xs font-medium text-foreground">
                     Send an Interac e-Transfer for {totalDisplay} to:

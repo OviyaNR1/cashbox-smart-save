@@ -13,7 +13,7 @@ export function buildInvoiceNumber({ group, payment }) {
  * Generates and downloads a CashBox invoice/receipt PDF with an embedded
  * QR code linking back to the in-app receipt.
  */
-export async function generateInvoicePdf({ payment, member, group, plan, dividendAmount = 0, remainingBalance = null }) {
+export async function generateInvoicePdf({ payment, member, group, membership, plan, dividendAmount = 0, remainingBalance = null }) {
   const cur = payment.currency || plan?.currency || "INR";
   const invoiceNumber = buildInvoiceNumber({ group, payment });
   const receiptUrl = `${window.location.origin}/receipt/${payment.id}`;
@@ -73,10 +73,10 @@ export async function generateInvoicePdf({ payment, member, group, plan, dividen
   field("Group", group?.group_name || group?.group_code, col1);
   field("Plan", plan?.plan_name, col2);
   y += 40;
-  field("Installment #", payment.installment_number, col1);
-  field("Payment date", payment.payment_date, col2);
+  field("Chit number", membership?.chit_number ? `#${membership.chit_number}` : null, col1);
+  field("Installment #", payment.installment_number, col2);
   y += 40;
-  field("Month", plan ? `${payment.installment_number || "—"} of ${plan.duration_months}` : "—", col1);
+  field("Payment date", payment.payment_date, col1);
   field("Method", (payment.method || "").replace("_", " "), col2);
   y += 48;
 

@@ -31,13 +31,17 @@ import QRCode from "qrcode";
 // on the plan's currency rather than offering both everywhere.
 const PAYMENT_METHODS_BY_CURRENCY = {
   INR: [{ value: "upi", label: "UPI" }, { value: "cash", label: "Cash" }],
-  CAD: [{ value: "interac", label: "Interac e-Transfer" }, { value: "cash", label: "Cash" }],
+  // "e_transfer" (not "interac") because that's the value the payments
+  // table's method check constraint actually allows — every Interac
+  // submission previously failed at the database with "violates check
+  // constraint payments_method_check" since "interac" was never a valid value.
+  CAD: [{ value: "e_transfer", label: "Interac e-Transfer" }, { value: "cash", label: "Cash" }],
 };
 
 // Cash is handled in person with no digital trail, so it deliberately gets
 // no reference field or screenshot — nothing to attach. Every other method
 // gets both, since those are the ones that actually produce a receipt.
-const METHODS_WITH_PROOF = ["upi", "bank_transfer", "interac"];
+const METHODS_WITH_PROOF = ["upi", "bank_transfer", "e_transfer"];
 
 // Tapping the UPI deep link hands off to another app for however long the
 // member takes to pay and screenshot the confirmation — mobile browsers
@@ -82,7 +86,7 @@ export default function PayInstallmentDialog({
   user,
   onPaid,
 }) {
-  const [method, setMethod] = useState(() => (plan?.currency === "CAD" ? "interac" : "upi"));
+  const [method, setMethod] = useState(() => (plan?.currency === "CAD" ? "e_transfer" : "upi"));
   const [screenshotPath, setScreenshotPath] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -133,7 +137,7 @@ export default function PayInstallmentDialog({
   const currency = plan?.currency || "INR";
   const paymentMethods = PAYMENT_METHODS_BY_CURRENCY[currency] || PAYMENT_METHODS_BY_CURRENCY.INR;
 
-  // Guards against the lazy useState above having picked "upi"/"interac"
+  // Guards against the lazy useState above having picked "upi"/"e_transfer"
   // before `plan` (and therefore `currency`) was available yet — corrects
   // it once the real plan loads, rather than leaving a Canada member stuck
   // looking at a "UPI" method that has no matching UI below.
@@ -333,7 +337,7 @@ export default function PayInstallmentDialog({
             </p>
           )}
 
-          {method === "interac" && (
+          {method === "e_transfer" && (
             <div className="rounded-lg border border-border p-3 space-y-2">
               <p className="text-xs font-medium text-foreground">
                 Send an Interac e-Transfer for {formatMoney(amount, currency)} to:

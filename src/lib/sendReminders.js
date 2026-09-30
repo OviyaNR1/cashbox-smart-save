@@ -48,7 +48,13 @@ export const computePaymentReminderTargets = async (groupId) => {
   const currency = plan?.currency || "INR";
   const today = todayUTC(currency);
 
-  const targets = [];
+  // A member can hold more than one ticket (GroupMembership row) in the same
+  // group — group per-ticket results by member_profile_id so each phone
+  // number gets exactly ONE combined WhatsApp message, not one per ticket.
+  // Multi-ticket counts are precomputed so the breakdown only tags lines
+  // with a chit number when there's actually more than one to disambiguate.
+  const ticketCounts = memberships.reduce((m, x) => m.set(x.member_profile_id, (m.get(x.member_profile_id) || 0) + 1), new Map());
+  const byMember = new Map();
 
   for (const membership of memberships) {
     // Correctly priced per installment (dividend-adjusted for live_auction,
@@ -61,16 +67,25 @@ export const computePaymentReminderTargets = async (groupId) => {
     const daysLate = Math.floor((today - new Date(oldest.dueDate)) / (1000 * 60 * 60 * 24));
     if (daysLate <= 0) continue; // oldest unpaid installment isn't due yet
 
-    const profile = await base44.entities.MemberProfile.get(membership.member_profile_id);
+    const entry = byMember.get(membership.member_profile_id) || { daysLate: 0, amount: 0, lines: [] };
+    entry.daysLate = Math.max(entry.daysLate, daysLate);
+    entry.amount += unpaidInstallments.reduce((s, i) => s + i.amount, 0);
+    const prefix = ticketCounts.get(membership.member_profile_id) > 1 ? `Chit #${membership.chit_number} - ` : "";
+    unpaidInstallments.forEach((i) => entry.lines.push(`${prefix}Month ${i.number} overdue = ${currency} ${i.amount}`));
+    byMember.set(membership.member_profile_id, entry);
+  }
+
+  const targets = [];
+
+  for (const [memberProfileId, entry] of byMember) {
+    const profile = await base44.entities.MemberProfile.get(memberProfileId);
     if (!profile?.mobile) continue;
 
-    const outstandingAmount = unpaidInstallments.reduce((s, i) => s + i.amount, 0);
+    const outstandingAmount = entry.amount;
     const amountStr = `${currency} ${outstandingAmount}`;
-    const daysLateStr = daysLate.toString();
-    const breakdown = unpaidInstallments
-      .map((i) => `Month ${i.number} overdue = ${currency} ${i.amount}`)
-      .join("\n");
-    const isUrgent = daysLate > 7;
+    const daysLateStr = entry.daysLate.toString();
+    const breakdown = entry.lines.join("\n");
+    const isUrgent = entry.daysLate > 7;
     const template = PAY_LINK_TEMPLATES_APPROVED
       ? (isUrgent ? "payment_reminder_urgent_v5" : "payment_reminder_overdue_v5")
       : (isUrgent ? "payment_reminder_urgent_v4" : "payment_reminder_overdue_v4");
@@ -81,7 +96,7 @@ export const computePaymentReminderTargets = async (groupId) => {
     // amount, same as a simple monthly interest calculation. A plan with no
     // rate configured (0, e.g. live_auction/lakhbox) correctly charges no
     // late fee rather than a fabricated one.
-    const lateFee = Math.round(outstandingAmount * ((plan?.late_interest_percent || 0) / 100) * (daysLate / 30));
+    const lateFee = Math.round(outstandingAmount * ((plan?.late_interest_percent || 0) / 100) * (entry.daysLate / 30));
 
     const linkParam = PAY_LINK_TEMPLATES_APPROVED ? [payLink] : [];
     const parameters = isUrgent
@@ -92,7 +107,7 @@ export const computePaymentReminderTargets = async (groupId) => {
       memberProfileId: profile.id,
       fullName: profile.full_name || "Member",
       mobile: profile.mobile,
-      daysLate,
+      daysLate: entry.daysLate,
       outstandingAmount,
       amountStr,
       lateFee,
@@ -399,16 +414,20 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
     year: "numeric",
     timeZone: currency === "CAD" ? "UTC" : "Asia/Kolkata",
   });
-  const targets = [];
+  // Combine tickets held by the same member into a single summed amount —
+  // same reasoning as computePaymentReminderTargets above: one phone number
+  // must only ever get one message, not one per ticket.
+  const byMember = new Map();
 
   for (const membership of memberships) {
+    // Scoped to THIS ticket (membership_id), not just the member overall —
+    // matching only on member_profile_id would treat a payment made toward
+    // one of a member's OTHER tickets as if it also covered this one,
+    // silently dropping a real reminder for the unpaid ticket.
     const alreadyPaid = allPayments.some(
-      (p) => p.member_profile_id === membership.member_profile_id && p.installment_number === group.current_month
+      (p) => p.membership_id === membership.id && p.installment_number === group.current_month
     );
     if (alreadyPaid) continue;
-
-    const profile = await base44.entities.MemberProfile.get(membership.member_profile_id);
-    if (!profile?.mobile) continue;
 
     // Priced correctly for this specific installment (dividend-adjusted for
     // live_auction, etc.) instead of the flat monthly_contribution — same
@@ -419,6 +438,16 @@ export const computeUpcomingDueTargets = async (groupId, daysBefore = 1) => {
     const preview = getNextPaymentPreview({ membership, plan, group, auctions });
     const currentInstallment = preview.unpaidInstallments.find((i) => i.number === group.current_month);
     const amount = currentInstallment ? currentInstallment.amount : (plan?.monthly_contribution || 0);
+
+    byMember.set(membership.member_profile_id, (byMember.get(membership.member_profile_id) || 0) + amount);
+  }
+
+  const targets = [];
+
+  for (const [memberProfileId, amount] of byMember) {
+    const profile = await base44.entities.MemberProfile.get(memberProfileId);
+    if (!profile?.mobile) continue;
+
     const amountStr = `${currency} ${amount}`;
     const payLink = `${window.location.origin}/payments`;
     // daysBefore=0 (due today) gets its own template with "is due today!"

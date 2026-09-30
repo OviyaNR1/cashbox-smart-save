@@ -20,9 +20,13 @@ export default function Receipt() {
     (async () => {
       try {
         const payment = await base44.entities.Payment.get(id);
-        const [prof, grp] = await Promise.all([
+        const [prof, grp, membership] = await Promise.all([
           payment.member_profile_id ? base44.entities.MemberProfile.get(payment.member_profile_id) : Promise.resolve(null),
           payment.group_id ? base44.entities.ChitGroup.get(payment.group_id) : Promise.resolve(null),
+          // A member can hold more than one ticket in the same group — the
+          // group name/installment number alone don't say which one this
+          // payment was for, so the specific ticket's chit number is needed.
+          payment.membership_id ? base44.entities.GroupMembership.get(payment.membership_id).catch(() => null) : Promise.resolve(null),
         ]);
         let planObj = null;
         if (grp?.plan_id) planObj = await base44.entities.ChitPlan.get(grp.plan_id);
@@ -32,7 +36,7 @@ export default function Receipt() {
           : [];
         const dividendAmount = dividends?.[0]?.amount || 0;
 
-        setData({ payment, prof, grp, plan: planObj, dividendAmount });
+        setData({ payment, prof, grp, membership, plan: planObj, dividendAmount });
       } catch (e) {
         setError(e.message || "Could not load this receipt.");
       }
@@ -52,13 +56,13 @@ export default function Receipt() {
   );
 
   if (!data) return <div className="h-64 grid place-items-center text-muted-foreground text-sm">Loading receipt…</div>;
-  const { payment: p, prof, grp, plan, dividendAmount, remainingBalance } = data;
+  const { payment: p, prof, grp, membership, plan, dividendAmount, remainingBalance } = data;
   const cur = p.currency || plan?.currency || "INR";
 
   const downloadPdf = async () => {
     setSending("pdf");
     try {
-      await generateInvoicePdf({ payment: p, member: prof, group: grp, plan, dividendAmount, remainingBalance });
+      await generateInvoicePdf({ payment: p, member: prof, group: grp, membership, plan, dividendAmount, remainingBalance });
     } catch (e) {
       toast({ title: "Could not generate PDF", description: e.message, variant: "destructive" });
     }
@@ -133,6 +137,7 @@ export default function Receipt() {
           <div><p className="text-xs text-muted-foreground">Member code</p><p className="text-foreground">{prof?.member_code || "—"}</p></div>
           <div><p className="text-xs text-muted-foreground">Group</p><p className="text-foreground">{grp?.group_name || grp?.group_code || "—"}</p></div>
           <div><p className="text-xs text-muted-foreground">Plan</p><p className="text-foreground">{plan?.plan_name || "—"}</p></div>
+          <div><p className="text-xs text-muted-foreground">Chit number</p><p className="text-foreground">{membership?.chit_number ? `#${membership.chit_number}` : "—"}</p></div>
           <div><p className="text-xs text-muted-foreground">Installment</p><p className="text-foreground">#{p.installment_number || "—"}</p></div>
           <div><p className="text-xs text-muted-foreground">Payment date</p><p className="text-foreground">{p.payment_date || "—"}</p></div>
           <div><p className="text-xs text-muted-foreground">Method</p><p className="text-foreground capitalize">{(p.method || "").replace("_", " ")}</p></div>
