@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { uploadToBucket, getSignedUrl } from "@/lib/storage";
 import { Upload, X, Loader2 } from "lucide-react";
 
 export default function FileUpload({ label, value, onChange, accept = "image/*", bucket = "kyc-documents" }) {
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const inputRef = useRef(null);
   // A failed upload used to just log to the console and silently revert to
   // "Click to upload" — indistinguishable from having never attached
   // anything at all, so a member whose upload kept failing (flaky mobile
@@ -54,7 +55,23 @@ export default function FileUpload({ label, value, onChange, accept = "image/*",
         </div>
       ) : (
         <>
-          <label className={`flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted transition-colors ${error ? "border-destructive" : "border-border"}`}>
+          {/* A plain onClick-triggered input (not a <label> relying on
+              native label-for association, and not display:none via
+              "hidden") — some mobile browsers, notably older Samsung
+              Internet builds, are unreliable at opening the native file
+              picker from a fully display:none input reached only through
+              label association. sr-only keeps it out of view without
+              display:none, and the div's onClick calls .click() on it
+              directly, which every browser treats as a normal user-
+              triggered file picker request regardless of how the input
+              that issued it is hidden. */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => inputRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") inputRef.current?.click(); }}
+            className={`flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted transition-colors ${error ? "border-destructive" : "border-border"}`}
+          >
             {uploading ? (
               <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
             ) : (
@@ -64,12 +81,13 @@ export default function FileUpload({ label, value, onChange, accept = "image/*",
               {uploading ? "Uploading…" : "Click to upload"}
             </span>
             <input
+              ref={inputRef}
               type="file"
               accept={accept}
-              className="hidden"
+              className="sr-only"
               onChange={(e) => handleFile(e.target.files[0])}
             />
-          </label>
+          </div>
           {error && <p className="text-xs text-destructive mt-1">{error}</p>}
         </>
       )}
