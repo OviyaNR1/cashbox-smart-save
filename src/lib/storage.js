@@ -3,7 +3,17 @@ import { supabase } from "@/api/base44Client";
 export async function uploadToBucket(bucket, file) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
-  const path = `${user.id}/${crypto.randomUUID()}-${file.name}`;
+  // Every bucket's insert policy requires the path's first folder segment
+  // to equal auth.uid() exactly (storage.foldername(name)[1] = auth.uid()).
+  // A raw file.name is normally just a basename, but some Android share-sheet
+  // / content-provider flows hand back names with "/" or other characters —
+  // a "/" in particular would silently insert an extra folder segment and
+  // make every single upload fail this check the same way, indistinguishable
+  // from a one-off network failure but never succeeding no matter how many
+  // times it's retried. Stripping anything that isn't safe for a path
+  // segment keeps the folder structure intact regardless of what the OS hands back.
+  const safeName = (file.name || "upload").replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `${user.id}/${crypto.randomUUID()}-${safeName}`;
   const { error } = await supabase.storage.from(bucket).upload(path, file);
   if (error) throw error;
   return path;
