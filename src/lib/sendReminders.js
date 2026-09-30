@@ -4,13 +4,10 @@ import { sendWhatsAppMessage } from "./sendWhatsAppMessage";
 import { logAudit } from "./audit";
 import { getNextPaymentPreview } from "./paymentPreview";
 
-// The *_v4/*_v2/*_ca_v2/*_v5 templates (adding a "Pay now" link) are still
-// PENDING Meta review as of this fix — sending with them fails outright
-// until approved, same as any unapproved template. Flip this to true once
-// they clear review; until then, every payment reminder falls back to the
-// older already-approved template names below (same amount fix either
-// way, just without the link and its extra trailing parameter).
-const PAY_LINK_TEMPLATES_APPROVED = false;
+// The *_v4/*_v2/*_ca_v2/*_v5 templates (adding a "Pay now" link) all cleared
+// Meta review 2026-09-30 — confirmed APPROVED via the Graph API. Flip back
+// to false only if a future template of this shape goes back to PENDING.
+const PAY_LINK_TEMPLATES_APPROVED = true;
 
 // Every unpaid installment shown in a reminder must price at what the
 // member actually owes right now, not the plan's flat monthly_contribution
