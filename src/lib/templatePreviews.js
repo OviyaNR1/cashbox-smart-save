@@ -9,9 +9,40 @@
 // *bold*/_italic_ markdown) and `paramLabels` (what each parameter means,
 // in order, for the edit form).
 export const TEMPLATE_PREVIEWS = {
+  // Both the old (no link) and new (with "Pay now" link) versions of every
+  // payment template are kept here side by side — sendReminders.js's
+  // PAY_LINK_TEMPLATES_APPROVED flag picks which one actually gets sent,
+  // and this file has no visibility into that flag's value. Deleting the
+  // "old" half the moment the new templates were submitted (while the flag
+  // was still false, using the old ones in production) broke the preview
+  // expand entirely for every live send in the meantime — keep both.
+  payment_reminder_overdue_v4: {
+    body: "⏰ Hi *{{1}}*, your payment is {{2}} days overdue.\n{{3}}\nTotal due today: *{{4}}*\nPlease pay soon to avoid extra late fees.\n*CashBox Team* 🏦",
+    paramLabels: ["Name", "Days late", "Breakdown", "Total due"],
+  },
+  payment_reminder_urgent_v4: {
+    body: "🚨 Hi *{{1}}*, urgent: your payment is {{2}} days overdue.\n{{3}}\nLate fee: {{4}}. Total due today: *{{5}}*.\nPlease pay immediately to restore your account.\n*CashBox Team* 🏦",
+    paramLabels: ["Name", "Days late", "Breakdown", "Late fee", "Total due"],
+  },
+  payment_upcoming_reminder_v3: {
+    body: "Hi *{{1}}*, \n\nThis is a reminder about your upcoming CashBox Chit Fund installment:\n\nInstallment: #{{2}}\nAmount: *{{3}}*\nDue date: *{{4}}*\n\nPlease pay before the due date via UPI or Bank Transfer, and attach a screenshot as proof in the app.\n\nCashBox Team 🏦",
+    paramLabels: ["Name", "Installment #", "Amount", "Due date"],
+  },
+  payment_due_today_v1: {
+    body: "⏰ Hi *{{1}}*, \n\nYour CashBox Chit Fund installment is due *today*!\n\nInstallment: #{{2}}\nAmount: *{{3}}*\nDue date: *{{4}}*\n\nPlease pay today via UPI or Bank Transfer, and attach a screenshot as proof in the app.\n\nCashBox Team 🏦",
+    paramLabels: ["Name", "Installment #", "Amount", "Due date"],
+  },
+  payment_upcoming_reminder_ca_v1: {
+    body: "Hi *{{1}}*, \n\nThis is a reminder about your upcoming CashBox Chit Fund installment:\n\nInstallment: #{{2}}\nAmount: *{{3}}*\nDue date: *{{4}}*\n\nPlease pay before the due date via Interac e-Transfer or Cash, and attach a screenshot as proof in the app.\n\nCashBox Team 🏦",
+    paramLabels: ["Name", "Installment #", "Amount", "Due date"],
+  },
+  payment_due_today_ca_v1: {
+    body: "⏰ Hi *{{1}}*, \n\nYour CashBox Chit Fund installment is due *today*!\n\nInstallment: #{{2}}\nAmount: *{{3}}*\nDue date: *{{4}}*\n\nPlease pay today via Interac e-Transfer or Cash, and attach a screenshot as proof in the app.\n\nCashBox Team 🏦",
+    paramLabels: ["Name", "Installment #", "Amount", "Due date"],
+  },
   // v4/v5 add a "Pay now: {{link}}" line — the originals had no tap-through
   // path to actually pay at all, on either the reminder or the overdue
-  // templates. Still PENDING Meta review as of this fix.
+  // templates.
   payment_reminder_overdue_v5: {
     body: "⏰ Hi *{{1}}*, your payment is {{2}} days overdue.\n{{3}}\nTotal due today: *{{4}}*\nPlease pay soon to avoid extra late fees.\nPay now: {{5}}\n*CashBox Team* 🏦",
     paramLabels: ["Name", "Days late", "Breakdown", "Total due", "Pay link"],
