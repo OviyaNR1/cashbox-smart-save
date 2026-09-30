@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/currency";
 import { getSignedUrl } from "@/lib/storage";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 const sumByCurrency = (items, field, emptyCurrency = "INR") => {
   const totals = {};
@@ -24,6 +25,12 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   // Shared with every other admin page via the header dropdown.
   const { country: countryFilter } = useAdminCountry();
+  // "all" (no filter) or a specific installment number as a string, since
+  // Select values are always strings — same pattern as Payments.jsx's
+  // month filter. Scopes the stat cards and "Latest payments" table below
+  // to one month; the two trend charts stay unfiltered since showing a
+  // trend across a single month defeats their purpose.
+  const [installmentFilter, setInstallmentFilter] = useState("all");
 
   useEffect(() => {
     (async () => {
@@ -65,8 +72,15 @@ export default function AdminDashboard() {
       return byDate !== 0 ? byDate : (b.created_at || "").localeCompare(a.created_at || "");
     });
 
-  const success = payments.filter((p) => p.status === "success");
-  const pending = payments.filter((p) => p.status === "pending");
+  // Options for the month filter — only installment numbers that actually
+  // appear for this country, not a hardcoded 1..N (plans vary in length).
+  const installmentOptions = [...new Set(payments.map((p) => p.installment_number))].sort((a, b) => a - b);
+  const monthFiltered = installmentFilter === "all"
+    ? payments
+    : payments.filter((p) => p.installment_number === +installmentFilter);
+
+  const success = monthFiltered.filter((p) => p.status === "success");
+  const pending = monthFiltered.filter((p) => p.status === "pending");
   const totalCollectedDisplay = sumByCurrency(success, "amount", filterCurrency);
   const lateFeesDisplay = sumByCurrency(success, "late_fee", filterCurrency);
   const pendingTotalDisplay = sumByCurrency(pending, "amount", filterCurrency);
@@ -82,8 +96,11 @@ export default function AdminDashboard() {
     }
   };
 
+  // Deliberately built from ALL successful payments, not the month-filtered
+  // `success` above — a trend chart scoped to a single month would just be
+  // one bar, defeating the point of showing a trend at all.
   const byMonth = {};
-  success.forEach((p) => {
+  payments.filter((p) => p.status === "success").forEach((p) => {
     const key = (p.payment_date || "").slice(0, 7);
     if (!key) return;
     byMonth[key] = (byMonth[key] || 0) + (p.amount || 0);
@@ -106,16 +123,27 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-primary">Admin</p>
-        <h1 className="text-3xl font-semibold text-foreground mt-1">Business overview</h1>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-primary">Admin</p>
+          <h1 className="text-3xl font-semibold text-foreground mt-1">Business overview</h1>
+        </div>
+        <Select value={installmentFilter} onValueChange={setInstallmentFilter}>
+          <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Month" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All months</SelectItem>
+            {installmentOptions.map((n) => (
+              <SelectItem key={n} value={String(n)}>Month {n}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Members" value={profiles.length} icon={Users} hint={`${profiles.filter((p) => p.kyc_status === "pending").length} awaiting KYC`} onClick={() => navigate("/admin/members")} />
         <StatCard label="Active groups" value={groups.filter((g) => g.status === "active").length} icon={Layers} accent="emerald" onClick={() => navigate("/admin/groups")} />
-        <StatCard label="Total collected" value={totalCollectedDisplay} icon={IndianRupee} accent="emerald" hint={`${lateFeesDisplay} late fees`} onClick={() => navigate("/admin/reports")} />
-        <StatCard label="Pending payments" value={pending.length} icon={Clock} accent="gold" hint={pendingTotalDisplay} onClick={() => navigate("/admin/payments")} />
+        <StatCard label={installmentFilter === "all" ? "Total collected" : `Collected (Month ${installmentFilter})`} value={totalCollectedDisplay} icon={IndianRupee} accent="emerald" hint={`${lateFeesDisplay} late fees`} onClick={() => navigate("/admin/reports")} />
+        <StatCard label={installmentFilter === "all" ? "Pending payments" : `Pending (Month ${installmentFilter})`} value={pending.length} icon={Clock} accent="gold" hint={pendingTotalDisplay} onClick={() => navigate("/admin/payments")} />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
@@ -166,7 +194,9 @@ export default function AdminDashboard() {
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <p className="text-sm font-medium text-foreground">Latest payments</p>
+          <p className="text-sm font-medium text-foreground">
+            Latest payments{installmentFilter !== "all" && ` — Month ${installmentFilter}`}
+          </p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -183,7 +213,7 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {payments.slice(0, 8).map((p) => (
+              {monthFiltered.slice(0, 8).map((p) => (
                 <tr key={p.id}>
                   <td className="px-5 py-3 text-foreground">
                     {/* allProfiles, not the country-filtered `profiles` — a
@@ -213,8 +243,8 @@ export default function AdminDashboard() {
                   </td>
                 </tr>
               ))}
-              {payments.length === 0 && (
-                <tr><td colSpan={8} className="px-5 py-8 text-center text-muted-foreground">No payments recorded yet.</td></tr>
+              {monthFiltered.length === 0 && (
+                <tr><td colSpan={8} className="px-5 py-8 text-center text-muted-foreground">{payments.length === 0 ? "No payments recorded yet." : `No payments for Month ${installmentFilter}.`}</td></tr>
               )}
             </tbody>
           </table>
