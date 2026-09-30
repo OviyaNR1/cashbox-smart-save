@@ -24,8 +24,8 @@ const BUSINESS_UPI_NAME = "CashBox";
 // drops the member back into the host app, which looks like "it opened
 // WhatsApp instead of my UPI app". There's no reliable cross-app way to
 // detect or work around this from inside the WebView; the copy-UPI-ID
-// fallback next to this button in PayInstallmentDialog.jsx exists because
-// of exactly this.
+// fallback next to this button in PayAllDialog.jsx exists because of
+// exactly this.
 export function buildUpiPaymentLink({ amount, note }) {
   const params = new URLSearchParams({
     pa: BUSINESS_UPI_ID,

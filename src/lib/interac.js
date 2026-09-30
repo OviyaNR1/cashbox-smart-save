@@ -7,6 +7,6 @@ export const BUSINESS_INTERAC_EMAIL = "sathya.jovial222@gmail.com";
 // Autodeposit is enabled on this email, so a transfer lands automatically
 // with no security question/answer step — members only ever need the email
 // itself. If Autodeposit is ever turned off, a security question/answer
-// pair would need to be surfaced here and in PayInstallmentDialog.jsx /
-// PayAllDialog.jsx's Interac instructions.
+// pair would need to be surfaced here and in PayAllDialog.jsx's Interac
+// instructions.
 export const INTERAC_AUTODEPOSIT_ENABLED = true;

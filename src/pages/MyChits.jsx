@@ -5,7 +5,7 @@ import { formatMoney } from "@/lib/currency";
 import { generateAuctionPlan } from "@/lib/auctionEngine";
 import { getNextPaymentPreview } from "@/lib/paymentPreview";
 import { Trophy, CalendarClock, TrendingUp, Coins, CreditCard, Wallet } from "lucide-react";
-import PayInstallmentDialog from "@/components/members/PayInstallmentDialog";
+import PayAllDialog from "@/components/members/PayAllDialog";
 
 export default function MyChits() {
   const [state, setState] = useState({ loading: true });
@@ -68,6 +68,28 @@ export default function MyChits() {
   // column existed, when one person could only ever hold one ticket.
   const myWin = (m) =>
     winners.find((w) => w.group_id === m.group_id && (w.membership_id ? w.membership_id === m.id : w.member_profile_id === m.member_profile_id));
+
+  // Every unpaid installment across every ticket, flattened into one list —
+  // same shape and reasoning as MyPayments.jsx/MemberDashboard.jsx's "Pay
+  // All" cart, so tapping "Pay Installment" on any one ticket's card opens
+  // that same combined dialog (pre-selected to just this ticket via
+  // preselectMembershipId below) instead of a separate single-ticket-only
+  // flow that can't see a member's other tickets at all.
+  const allDueItems = memberships
+    .filter((m) => m.status === "active")
+    .flatMap((m) => {
+      const { group, plan } = planFor(m);
+      if (!plan) return [];
+      const preview = getNextPaymentPreview({ membership: m, plan, group, auctions, pendingNumbers: pendingNumbersFor(m.id) });
+      return (preview.unpaidInstallments || []).map((item) => ({
+        key: `${m.id}-${item.number}`,
+        membership: m,
+        group,
+        plan,
+        currency: plan.currency || "INR",
+        ...item,
+      }));
+    });
 
   return (
     <div className="space-y-6">
@@ -258,12 +280,11 @@ export default function MyChits() {
         );
       })}
 
-      <PayInstallmentDialog
+      <PayAllDialog
         open={!!payMembership}
         onOpenChange={(v) => !v && setPayMembership(null)}
-        membership={payMembership}
-        plan={payMembership ? planFor(payMembership).plan : null}
-        group={payMembership ? planFor(payMembership).group : null}
+        items={allDueItems}
+        preselectMembershipId={payMembership?.id}
         user={state.data?.me}
         onPaid={loadData}
       />

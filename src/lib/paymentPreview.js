@@ -48,8 +48,9 @@ function deriveFromUnpaid(unpaidInstallments, pendingNumbers) {
 
 // Single source of truth for "what does this member owe, are they behind,
 // and what's their dividend this month" across all three plan models. Used
-// by MyChits.jsx, MemberDashboard.jsx, and PayInstallmentDialog.jsx so the
-// previewed amount and the amount actually charged can never drift apart.
+// by MyChits.jsx, MemberDashboard.jsx, MyPayments.jsx, and PayAllDialog.jsx
+// so the previewed amount and the amount actually charged can never drift
+// apart.
 //
 // Every installment through the group's current month is "unpaid and
 // payable now" — the last one (current_month) is the immediate "next"

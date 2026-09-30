@@ -25,25 +25,30 @@ import { BUSINESS_INTERAC_EMAIL } from "@/lib/interac";
 import { Loader2, CreditCard, Smartphone, Copy } from "lucide-react";
 import QRCode from "qrcode";
 
-// See PayInstallmentDialog.jsx — same India-UPI / Canada-Interac split.
-// Cross-country membership isn't possible (assignment is blocked in
+// India members pay by UPI, Canada members by Interac e-Transfer — there's
+// no cross-border equivalent of either, so the option list itself switches
+// on the plan's currency rather than offering both everywhere. Cross-country
+// membership isn't possible (assignment is blocked in
 // MemberGroupAssignment.jsx), so a member's cart here is always one
 // currency in practice; INR is the fallback for the brief window before
 // `items` loads and singleCurrency is still null.
 // "e_transfer" (not "interac") because that's the value the payments
-// table's method check constraint actually allows — see
-// PayInstallmentDialog.jsx's matching comment.
+// table's method check constraint actually allows — "interac" is never a
+// valid value and silently failed every submission until this was caught.
 const PAYMENT_METHODS_BY_CURRENCY = {
   INR: [{ value: "upi", label: "UPI" }, { value: "cash", label: "Cash" }],
   CAD: [{ value: "e_transfer", label: "Interac e-Transfer" }, { value: "cash", label: "Cash" }],
 };
 const METHODS_WITH_PROOF = ["upi", "bank_transfer", "e_transfer"];
 
-// See PayInstallmentDialog.jsx's DRAFT_KEY comment — same reload-survival
-// fix, applied here too since this dialog has the identical UPI deep-link
-// hand-off. Keyed globally (not per-membership) since this dialog already
-// spans every membership a member has; a member only has one of these
-// carts in flight at a time.
+// Tapping the UPI deep link hands off to another app for however long the
+// member takes to pay and screenshot the confirmation — mobile browsers
+// frequently reclaim/reload a backgrounded tab during that gap, which wipes
+// all in-memory React state (including this dialog being open at all).
+// Saving a tiny draft right before navigating and restoring it on the next
+// mount makes the round trip survive a reload. Keyed globally (not per
+// membership) since this dialog already spans every membership a member
+// has; a member only has one of these carts in flight at a time.
 const DRAFT_KEY = "cashbox_payall_draft_v1";
 const DRAFT_MAX_AGE_MS = 30 * 60 * 1000;
 
@@ -70,35 +75,49 @@ function clearDraft() {
 }
 
 // Cart-style checkout across every unpaid installment a member has, across
-// all of their tickets and groups at once — instead of paying one ticket's
-// installments at a time (PayInstallmentDialog), this is the "select what
-// you want to pay, see one total, submit once" flow off the Dashboard's
-// consolidated "Total Due" summary.
-export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }) {
+// all of their tickets and groups at once — the "select what you want to
+// pay, see one total, submit once" flow used everywhere a member can pay
+// (Dashboard, Payments, My Chits), so a member with several tickets never
+// has to submit a separate screenshot per ticket.
+// `preselectMembershipId` lets a "Pay" button on one specific ticket (e.g.
+// My Chits' per-ticket card) open this same combined dialog defaulting to
+// just that ticket's items checked — not every ticket the member holds —
+// while every other unpaid ticket is still right there, one tap away from
+// being added to the same submission. That's the whole point of routing
+// every pay entry point through this one dialog instead of each screen
+// keeping its own single-ticket version: the member always sees the same
+// screen, and combining two tickets into one screenshot is always just
+// checking a second box, never a separate flow.
+export default function PayAllDialog({ open, onOpenChange, items, user, onPaid, preselectMembershipId }) {
   const [method, setMethod] = useState("upi");
   const [screenshotPath, setScreenshotPath] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const { toast } = useToast();
-  // See PayInstallmentDialog.jsx for why this ref (not the submitting
-  // state, which only updates on the next render) is what actually stops a
-  // double-tap from bulkCreate-ing the same payments twice.
+  // setSubmitting(true) only takes effect on the next render, so it can't
+  // block a second click/tap that lands in the same tick (double-tap on
+  // mobile, or a duplicate click/touchend some browsers still emit) — this
+  // ref is checked-and-set synchronously as the very first thing in
+  // handleSubmit, closing that gap.
   const submitLockRef = useRef(false);
   const draftRestoredRef = useRef(false);
   const [qrDataUrl, setQrDataUrl] = useState("");
 
-  // Every item defaults to selected whenever the dialog opens with a new
-  // item set — matches PayInstallmentDialog's own default-all-selected
-  // behavior for a single ticket. Skipped when a saved draft is about to
-  // restore a specific selection instead (see below).
+  // Defaults to every item selected — unless a specific ticket was the
+  // reason this dialog opened (preselectMembershipId), in which case only
+  // that ticket's own items start checked. Skipped when a saved draft is
+  // about to restore a specific selection instead (see below).
   useEffect(() => {
     if (!open) {
       setScreenshotPath("");
       return;
     }
     if (readDraft()) return;
-    setSelected(new Set((items || []).map((i) => i.key)));
-  }, [open, items]);
+    const keys = preselectMembershipId
+      ? (items || []).filter((i) => i.membership.id === preselectMembershipId).map((i) => i.key)
+      : (items || []).map((i) => i.key);
+    setSelected(new Set(keys));
+  }, [open, items, preselectMembershipId]);
 
   const allItems = items || [];
   const chosen = allItems.filter((i) => selected.has(i.key));
@@ -176,8 +195,10 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid }
       .catch(() => toast({ title: "Couldn't copy", description: BUSINESS_INTERAC_EMAIL, variant: "destructive" }));
   };
 
-  // See PayInstallmentDialog.jsx for why scanning is more reliable than
-  // either the deep-link button or manual copy-paste.
+  // Scanning a QR code sidesteps both of the reliability issues the deep
+  // link and manual copy-paste have: it doesn't depend on the browser
+  // handing off to an app (the in-app-browser problem), and it doesn't go
+  // through a UPI app's own "search by ID" resolution.
   useEffect(() => {
     if (method !== "upi" || singleCurrency !== "INR" || !totalsByCurrency.INR) { setQrDataUrl(""); return; }
     let active = true;
