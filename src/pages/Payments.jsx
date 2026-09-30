@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import { formatMoney } from "@/lib/currency";
 import { logAudit } from "@/lib/audit";
 import { getSignedUrl } from "@/lib/storage";
+import FileUpload from "@/components/members/FileUpload";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useToast } from "@/components/ui/use-toast";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
@@ -31,7 +32,7 @@ export default function Payments() {
   const [query, setQuery] = useState("");
   // Shared with every other admin page via the header dropdown.
   const { country: countryFilter } = useAdminCountry();
-  const [form, setForm] = useState({ membership_id: "", amount: "", installment_number: "", method: "cash", payment_date: new Date().toISOString().slice(0, 10) });
+  const [form, setForm] = useState({ membership_id: "", amount: "", installment_number: "", method: "cash", payment_date: new Date().toISOString().slice(0, 10), screenshotPath: "" });
   const [suggested, setSuggested] = useState(null);
   const { toast } = useToast();
 
@@ -107,6 +108,7 @@ export default function Payments() {
       currency: planOf(ms.group_id)?.currency || "INR",
       status: "success",
       collected_by: (await base44.auth.me().catch(() => ({}))).email || "admin",
+      etransfer_screenshot_url: form.screenshotPath || undefined,
     });
     // Read the membership fresh right before incrementing — `memberships`
     // in component state is only fetched once on mount, so basing the
@@ -121,7 +123,7 @@ export default function Payments() {
     logAudit({ module: "Payments", action: "create", record_id: created.id, details: `Recorded ${form.method} payment of ${form.amount} (txn ${txn}) for ${profileOf(ms.member_profile_id)?.full_name || "member"}` });
     setSaving(false);
     setOpen(false);
-    setForm({ membership_id: "", amount: "", installment_number: "", method: "cash", payment_date: new Date().toISOString().slice(0, 10) });
+    setForm({ membership_id: "", amount: "", installment_number: "", method: "cash", payment_date: new Date().toISOString().slice(0, 10), screenshotPath: "" });
     load();
   };
 
@@ -362,6 +364,14 @@ export default function Payments() {
               </Select>
             </div>
             <div><Label>Payment date</Label><Input type="date" value={form.payment_date} onChange={(e) => set("payment_date", e.target.value)} /></div>
+            <div className="col-span-2">
+              <FileUpload
+                label="Payment screenshot (optional)"
+                value={form.screenshotPath}
+                onChange={(path) => set("screenshotPath", path)}
+                bucket="payment-proofs"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} className="rounded-full">Cancel</Button>
