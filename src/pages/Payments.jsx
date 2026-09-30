@@ -30,6 +30,9 @@ export default function Payments() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
+  // "all" (no filter) or a specific installment number as a string, since
+  // Select values are always strings.
+  const [installmentFilter, setInstallmentFilter] = useState("all");
   // Shared with every other admin page via the header dropdown.
   const { country: countryFilter } = useAdminCountry();
   const [form, setForm] = useState({ membership_id: "", amount: "", installment_number: "", method: "cash", payment_date: new Date().toISOString().slice(0, 10), screenshotPath: "" });
@@ -209,8 +212,14 @@ export default function Payments() {
   // Scoped to the selected country, same reasoning as Members.jsx's stats —
   // this is a summary of the current market, not of the search/filter below.
   const pendingCount = (payments || []).filter((p) => p.status === "pending" && paymentCountry(p) === countryFilter).length;
+  // Options for the month filter — only installment numbers that actually
+  // appear for this country, not a hardcoded 1..N (plans vary in length).
+  const installmentOptions = [...new Set(
+    (payments || []).filter((p) => paymentCountry(p) === countryFilter).map((p) => p.installment_number)
+  )].sort((a, b) => a - b);
   const filteredPayments = (payments || []).filter((p) => {
     if (paymentCountry(p) !== countryFilter) return false;
+    if (installmentFilter !== "all" && p.installment_number !== +installmentFilter) return false;
     if (!query.trim()) return true;
     const prof = profileOf(p.member_profile_id);
     const haystack = `${prof?.full_name || ""} ${p.transaction_id || ""} ${p.method || ""}`.toLowerCase();
@@ -230,8 +239,8 @@ export default function Payments() {
         </Button>
       </div>
 
-      <div className="bg-card rounded-2xl border border-border p-4">
-        <div className="relative">
+      <div className="bg-card rounded-2xl border border-border p-4 flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             value={query}
@@ -240,6 +249,15 @@ export default function Payments() {
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
+        <Select value={installmentFilter} onValueChange={setInstallmentFilter}>
+          <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Month" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All months</SelectItem>
+            {installmentOptions.map((n) => (
+              <SelectItem key={n} value={String(n)}>Month {n}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="bg-card rounded-2xl border border-border overflow-hidden">

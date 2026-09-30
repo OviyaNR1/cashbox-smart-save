@@ -18,6 +18,12 @@ export default function PaymentStatus() {
   const [profiles, setProfiles] = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(false);
+  // Which installment to check status for — defaults to the group's own
+  // current month (today's behavior) but lets the admin look at any past
+  // month too, e.g. "who still hasn't paid August" after September has
+  // already started. null until a group is picked and its current_month
+  // is known.
+  const [month, setMonth] = useState(null);
 
   useEffect(() => {
     base44.entities.ChitGroup.list("-created_date", 200).then(setGroups);
@@ -26,6 +32,10 @@ export default function PaymentStatus() {
 
   const group = groups.find((g) => g.id === groupId);
   const plan = plans.find((p) => p.id === group?.plan_id);
+
+  useEffect(() => {
+    setMonth(group?.current_month || 1);
+  }, [group?.id, group?.current_month]);
 
   const groupsForCountry = groups.filter((g) => {
     const p = plans.find((pl) => pl.id === g.plan_id);
@@ -56,35 +66,41 @@ export default function PaymentStatus() {
 
   const profileOf = (id) => profiles.find((p) => p?.id === id);
 
-  // "Not paid" used to mean nothing more than paid_installments < current_month
-  // — so the moment the group's cycle advanced, EVERY member who hadn't paid
-  // that instant showed as "N months behind" even if the real due date was
-  // still days away. Now checks the actual due date (same collectionDateUTC
-  // convention computePaymentReminderTargets uses in sendReminders.js) — a
-  // member isn't "behind" until that date has actually passed. "Pending
-  // review" (submitted, not yet admin-approved) still takes priority over
-  // both, same as before.
+  // Status is now checked against a specific installment number (`month`,
+  // defaulting to the group's current month but selectable to any earlier
+  // one) instead of always being "the current month." Whether that specific
+  // installment is paid comes from real Payment rows scoped to both this
+  // membership AND that installment number — not from paid_installments,
+  // which only tells you a *count*, not which months. A member who's 3
+  // behind and catches up on just the oldest one still shows every other
+  // gap correctly when stepping through months this way.
   const currency = plan?.currency || "INR";
+  const selectedMonth = month || group?.current_month || 1;
+  const currentMonth = group?.current_month || 1;
   const rows = memberships
     .map((m) => {
-      const paid = m.paid_installments || 0;
-      const currentMonth = group?.current_month || 1;
-      const unpaidCount = Math.max(0, currentMonth - paid);
-      const pendingForNext = payments.find(
-        (p) => p.membership_id === m.id && p.status === "pending" && p.installment_number === paid + 1
+      const paidThisMonth = payments.some(
+        (p) => p.membership_id === m.id && p.installment_number === selectedMonth && p.status === "success"
+      );
+      const pendingThisMonth = payments.some(
+        (p) => p.membership_id === m.id && p.installment_number === selectedMonth && p.status === "pending"
       );
       let status;
       let dueDateStr = null;
       let daysLate = 0;
-      if (unpaidCount === 0) {
+      if (paidThisMonth) {
         status = "paid";
-      } else if (pendingForNext) {
+      } else if (pendingThisMonth) {
         status = "pending_review";
+      } else if (selectedMonth > currentMonth) {
+        // The group's cycle hasn't reached this installment yet — nobody
+        // can be "late" on a month that isn't due at all.
+        status = "not_due_yet";
       } else {
-        // Installment `paid + 1` (the oldest unpaid one) is due `paid`
-        // months after start_date — same "installment N due N-1 months in"
-        // convention as everywhere else that computes this.
-        const dueDate = new Date(collectionDateUTC(group?.start_date, paid, group?.monthly_collection_date));
+        // Installment N is due N-1 months after start_date — same
+        // "installment N due N-1 months in" convention as everywhere else
+        // that computes this.
+        const dueDate = new Date(collectionDateUTC(group?.start_date, selectedMonth - 1, group?.monthly_collection_date));
         const today = todayUTC(currency);
         daysLate = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
         dueDateStr = dueDate.toLocaleDateString("en-IN", {
@@ -93,10 +109,10 @@ export default function PaymentStatus() {
         });
         status = daysLate > 0 ? "not_paid" : "upcoming";
       }
-      return { membership: m, profile: profileOf(m.member_profile_id), paid, unpaidCount, status, dueDateStr, daysLate };
+      return { membership: m, profile: profileOf(m.member_profile_id), paid: m.paid_installments || 0, status, dueDateStr, daysLate };
     })
     .sort((a, b) => {
-      const order = { not_paid: 0, pending_review: 1, upcoming: 2, paid: 3 };
+      const order = { not_paid: 0, pending_review: 1, upcoming: 2, paid: 3, not_due_yet: 4 };
       return order[a.status] - order[b.status];
     });
 
@@ -111,11 +127,11 @@ export default function PaymentStatus() {
         <p className="text-xs uppercase tracking-[0.2em] text-primary">Admin</p>
         <h1 className="text-3xl font-semibold text-foreground mt-1">Payment Status</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          See exactly who's paid this month and who's still pending, per group.
+          See exactly who's paid a given month and who's still pending, per group.
         </p>
       </div>
 
-      <div className="bg-card rounded-2xl border border-border p-4">
+      <div className="bg-card rounded-2xl border border-border p-4 flex flex-wrap gap-3">
         <Select value={groupId} onValueChange={setGroupId}>
           <SelectTrigger className="w-full sm:w-96"><SelectValue placeholder="Select a group" /></SelectTrigger>
           <SelectContent>
@@ -124,15 +140,27 @@ export default function PaymentStatus() {
             ))}
           </SelectContent>
         </Select>
+        {groupId && (
+          <Select value={String(selectedMonth)} onValueChange={(v) => setMonth(+v)}>
+            <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Month" /></SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: plan?.duration_months || currentMonth }, (_, i) => i + 1).map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  Month {n}{n === currentMonth ? " (current)" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {groupId && !loading && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <StatCard label="Not Paid" value={notPaidCount} tone="destructive" icon={AlertCircle} />
+            <StatCard label={`Not Paid (Month ${selectedMonth})`} value={notPaidCount} tone="destructive" icon={AlertCircle} />
             <StatCard label="Upcoming" value={upcomingCount} tone="blue" icon={CalendarClock} />
             <StatCard label="Pending Review" value={pendingCount} tone="amber" icon={Clock} />
-            <StatCard label="Paid Up" value={paidCount} tone="emerald" icon={CheckCircle2} />
+            <StatCard label={`Paid (Month ${selectedMonth})`} value={paidCount} tone="emerald" icon={CheckCircle2} />
           </div>
 
           <div className="bg-card rounded-2xl border border-border overflow-hidden">
@@ -142,8 +170,8 @@ export default function PaymentStatus() {
                   <tr>
                     <th className="text-left px-5 py-3">Member</th>
                     <th className="text-left px-5 py-3">Chit #</th>
-                    <th className="text-right px-5 py-3">Installments Paid</th>
-                    <th className="text-right px-5 py-3">Status</th>
+                    <th className="text-right px-5 py-3">Total Paid (all months)</th>
+                    <th className="text-right px-5 py-3">Status for Month {selectedMonth}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -173,6 +201,9 @@ export default function PaymentStatus() {
                             <span className="text-xs px-2.5 py-1 rounded-full bg-destructive/15 text-destructive">
                               {r.daysLate} day{r.daysLate === 1 ? "" : "s"} late (due {r.dueDateStr})
                             </span>
+                          )}
+                          {r.status === "not_due_yet" && (
+                            <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground">Not due yet</span>
                           )}
                         </td>
                       </tr>
