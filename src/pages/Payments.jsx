@@ -130,6 +130,56 @@ export default function Payments() {
     load();
   };
 
+  // A multi-ticket member's combined PayAllDialog submission creates one
+  // Payment row per ticket, all sharing one transaction_id stamped by that
+  // dialog — but there's no bulk-approve action here, so the admin still
+  // approves/rejects each row with its own separate click. Firing a
+  // receipt on every individual approve() would send one WhatsApp message
+  // per ticket for what the member experienced as one combined payment
+  // with one screenshot. This only sends once every row sharing that same
+  // transaction_id has reached a final state (approved or rejected), and
+  // combines whichever ones succeeded into a single message. A payment
+  // with no transaction_id (every admin-recorded one, and any legacy row
+  // from before this existed) has no batch to wait on and sends right away.
+  const maybeSendBatchReceipt = async (resolvedPayment) => {
+    const batchId = resolvedPayment.transaction_id;
+    const siblings = batchId
+      ? (payments || []).filter((x) => x.transaction_id === batchId && x.id !== resolvedPayment.id)
+      : [];
+    if (siblings.some((s) => s.status === "pending")) return;
+
+    const batchRows = [resolvedPayment, ...siblings].filter((x) => x.status === "success");
+    if (batchRows.length === 0) return;
+
+    const prof = profileOf(resolvedPayment.member_profile_id);
+    if (!prof?.mobile) return;
+
+    const totalAmount = batchRows.reduce((s, r) => s + (r.amount || 0), 0);
+    const installmentsLabel = batchRows.map((r) => `#${r.installment_number}`).join(" & ");
+    // Several tickets' worth of payments don't have one single receipt
+    // page to link to — /payments shows the member everything at once
+    // instead of picking one row's page arbitrarily.
+    const receiptUrl = batchRows.length > 1
+      ? `${window.location.origin}/payments`
+      : `${window.location.origin}/receipt/${batchRows[0].id}`;
+
+    try {
+      await sendWhatsAppMessage({
+        phone: prof.mobile,
+        templateName: "receipt_ready_v3",
+        parameters: [prof.full_name || "Member", installmentsLabel, formatMoney(totalAmount, currencyOf(resolvedPayment)), receiptUrl],
+      });
+      await Promise.all(batchRows.map((r) => base44.entities.Payment.update(r.id, { receipt_sent_at: new Date().toISOString() })));
+    } catch (err) {
+      console.error(`Failed to auto-send receipt for ${resolvedPayment.member_profile_id}:`, err);
+      toast({
+        title: "Payment approved — receipt failed to send",
+        description: `${prof.full_name || "Member"}: you can resend it from the Receipt page.`,
+        variant: "destructive",
+      });
+    }
+  };
+
   const approve = async (p) => {
     const alreadyPaid = (payments || []).find(
       (other) => other.id !== p.id && other.membership_id === p.membership_id
@@ -155,12 +205,19 @@ export default function Payments() {
       });
     }
     logAudit({ module: "Payments", action: "approve", record_id: p.id, details: `Approved payment ${p.transaction_id || p.id.slice(0, 8)}` });
+    await maybeSendBatchReceipt({ ...p, status: "success" });
     load();
   };
 
   const reject = async (p) => {
     await base44.entities.Payment.update(p.id, { status: "failed" });
     logAudit({ module: "Payments", action: "reject", record_id: p.id, details: `Rejected payment ${p.transaction_id || p.id.slice(0, 8)}` });
+    // A rejection can still be the last unresolved row in someone else's
+    // batch — e.g. one ticket's screenshot was illegible and got rejected
+    // while the other ticket in the same submission was fine — so the
+    // batch's receipt (covering just the ones that succeeded) still needs
+    // to fire now rather than never.
+    await maybeSendBatchReceipt({ ...p, status: "failed" });
     load();
   };
 
@@ -282,10 +339,25 @@ export default function Payments() {
                 <tr><td colSpan={8} className="px-5 py-8 text-center text-muted-foreground">{payments.length === 0 ? "No payments recorded." : "No payments match your search."}</td></tr>
               ) : filteredPayments.map((p) => {
                 const prof = profileOf(p.member_profile_id);
+                // Same transaction_id as another row = submitted together
+                // in one PayAllDialog batch (one screenshot, one member
+                // action) — surfaced here so approving them one at a time
+                // (there's no bulk-approve button) doesn't read as two
+                // unrelated payments that happen to match.
+                const batchSize = p.transaction_id
+                  ? (payments || []).filter((x) => x.transaction_id === p.transaction_id).length
+                  : 1;
                 return (
                   <tr key={p.id}>
                     <td className="px-5 py-3 text-foreground">{p.transaction_id || p.id.slice(0, 8)}</td>
-                    <td className="px-5 py-3 text-muted-foreground">{prof?.full_name || "—"}</td>
+                    <td className="px-5 py-3 text-muted-foreground">
+                      {prof?.full_name || "—"}
+                      {batchSize > 1 && (
+                        <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                          {batchSize} tickets
+                        </span>
+                      )}
+                    </td>
                     <td className="px-5 py-3 text-muted-foreground">#{p.installment_number || "—"}</td>
                     <td className="px-5 py-3 text-muted-foreground">{p.payment_date || "—"}</td>
                     <td className="px-5 py-3 text-muted-foreground capitalize">{(p.method || "").replace("_", " ")}</td>

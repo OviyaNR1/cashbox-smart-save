@@ -220,8 +220,17 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid, 
     setSubmitting(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
+      // One shared id stamped across every row this submission creates —
+      // the only way the admin side can tell "these N tickets were paid
+      // together as one combined submission" apart from "these just happen
+      // to be N separate payments." Without it, approving/rejecting each
+      // row individually (there's no bulk-approve UI) had no way to know
+      // not to fire a separate WhatsApp receipt per ticket for what the
+      // member experienced as one payment with one screenshot.
+      const batchId = `PAY${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
       await base44.entities.Payment.bulkCreate(
         chosen.map((i) => ({
+          transaction_id: batchId,
           user_id: user?.id,
           membership_id: i.membership.id,
           member_profile_id: i.membership.member_profile_id,
