@@ -16,10 +16,19 @@ import { Users, Send, MessageCircle, X, Mic, Square } from "lucide-react";
 const pendingLeaves = new Map();
 const LEAVE_GRACE_MS = 7000;
 
+// This feed persists every join/leave/chat/voice entry forever (see the
+// header comment below), so "9:23 AM" alone is ambiguous the moment two
+// entries from different days land next to each other with no way to tell
+// which is which — exactly what happened in the screenshot that flagged
+// this. Today's entries stay as bare time (no need to clutter the common
+// case); anything from an earlier day gets a short date prefix.
 const formatTime = (iso) => {
   if (!iso) return "";
   try {
-    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const d = new Date(iso);
+    const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (d.toDateString() === new Date().toDateString()) return time;
+    return `${d.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
   } catch {
     return "";
   }
