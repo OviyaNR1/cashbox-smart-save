@@ -37,6 +37,14 @@ export default function Payments() {
   const { country: countryFilter } = useAdminCountry();
   const [form, setForm] = useState({ membership_id: "", amount: "", installment_number: "", method: "cash", payment_date: new Date().toISOString().slice(0, 10), screenshotPath: "" });
   const [suggested, setSuggested] = useState(null);
+  // A member holding more than one ticket can pay both together with one
+  // screenshot (the member-facing PayAllDialog already supports this) —
+  // this lets the admin record that as one combined action too instead of
+  // being limited to exactly one membership per "Record payment" click.
+  // Keyed by membership_id; the primary selection above is always treated
+  // as included.
+  const [includedSiblingIds, setIncludedSiblingIds] = useState(new Set());
+  const [ticketOverrides, setTicketOverrides] = useState({});
   const { toast } = useToast();
 
   // Sorted by created_at, not payment_date — payment_date is just a
@@ -64,73 +72,143 @@ export default function Payments() {
   // Recording payment here is for a specific installment number, so pull
   // that installment's own amount out of unpaidInstallments (oldest-first)
   // instead of pairing the collapsed "next" figure with the oldest number.
-  useEffect(() => {
-    const ms = memberships.find((m) => m.id === form.membership_id);
-    if (!ms) { setSuggested(null); return; }
-    const group = groups.find((g) => g.id === ms.group_id);
-    const plan = plans.find((p) => p.id === group?.plan_id);
-    if (!group || !plan) { setSuggested(null); return; }
-    const preview = getNextPaymentPreview({ membership: ms, plan, group, auctions });
-    const oldest = preview.unpaidInstallments?.[0];
-    if (!oldest) { setSuggested(null); return; }
-    setSuggested({ number: oldest.number, amount: oldest.amount, dividend: oldest.dividend || 0, currency: plan.currency || "INR" });
-    setForm((f) => ({ ...f, installment_number: String(oldest.number), amount: String(oldest.amount) }));
-  }, [form.membership_id, memberships, groups, plans, auctions]);
-
   const profileOf = (id) => profiles.find((p) => p.id === id);
   const groupOf = (id) => groups.find((g) => g.id === id);
   const planOf = (groupId) => plans.find((p) => p.id === (groups.find((g) => g.id === groupId)?.plan_id));
   const currencyOf = (p) => p.currency || planOf(p.group_id)?.currency || "INR";
 
+  // Same source of truth MyChits.jsx shows the member — the oldest unpaid
+  // installment's own amount, not the collapsed "next" figure (see below).
+  const previewFor = (ms) => {
+    const group = groups.find((g) => g.id === ms.group_id);
+    const plan = plans.find((p) => p.id === group?.plan_id);
+    if (!group || !plan) return null;
+    const preview = getNextPaymentPreview({ membership: ms, plan, group, auctions });
+    const oldest = preview.unpaidInstallments?.[0];
+    if (!oldest) return null;
+    return { number: oldest.number, amount: oldest.amount, dividend: oldest.dividend || 0, currency: plan.currency || "INR" };
+  };
+
+  // Pre-fill the installment number and the dividend-adjusted amount the
+  // member actually owes right now, so the admin isn't expected to compute
+  // it by hand.
+  //
+  // getNextPaymentPreview's `nextInstallment` is the CURRENT month's rate
+  // (collapsed for the member-facing summary) — it does not line up with
+  // `paid_installments + 1` when a member is behind by more than one
+  // installment, since each overdue month keeps its own historical rate.
+  // Recording payment here is for a specific installment number, so pull
+  // that installment's own amount out of unpaidInstallments (oldest-first)
+  // instead of pairing the collapsed "next" figure with the oldest number.
+  useEffect(() => {
+    const ms = memberships.find((m) => m.id === form.membership_id);
+    setIncludedSiblingIds(new Set());
+    setTicketOverrides({});
+    if (!ms) { setSuggested(null); return; }
+    const p = previewFor(ms);
+    if (!p) { setSuggested(null); return; }
+    setSuggested(p);
+    setForm((f) => ({ ...f, installment_number: String(p.number), amount: String(p.amount) }));
+  }, [form.membership_id, memberships, groups, plans, auctions]);
+
+  // Other active tickets held by the same member as the primary selection
+  // above — shown as addable checkboxes so a member who paid several
+  // tickets together with one screenshot can be recorded that way too,
+  // instead of forcing one "Record payment" click per ticket.
+  const primaryMembership = memberships.find((m) => m.id === form.membership_id);
+  const siblingMemberships = primaryMembership
+    ? memberships.filter((m) => m.id !== primaryMembership.id && m.member_profile_id === primaryMembership.member_profile_id && m.status === "active")
+    : [];
+  const includedTickets = primaryMembership
+    ? [primaryMembership, ...siblingMemberships.filter((m) => includedSiblingIds.has(m.id))].map((ms) => {
+        const p = previewFor(ms);
+        const override = ticketOverrides[ms.id];
+        const isPrimary = ms.id === primaryMembership.id;
+        return {
+          membership: ms,
+          number: isPrimary ? +form.installment_number || p?.number : override?.number ?? p?.number,
+          amount: isPrimary ? +form.amount || 0 : override?.amount ?? p?.amount ?? 0,
+          preview: p,
+        };
+      })
+    : [];
+  const combinedTotal = includedTickets.reduce((s, t) => s + (t.amount || 0), 0);
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const record = async () => {
-    const ms = memberships.find((m) => m.id === form.membership_id);
-    if (!ms) return;
-    const installmentNum = +form.installment_number || 1;
-    const duplicate = (payments || []).find(
-      (p) => p.membership_id === ms.id && p.installment_number === installmentNum && p.status !== "failed"
-    );
-    if (duplicate) {
-      toast({
-        title: "Already recorded",
-        description: `Installment #${installmentNum} for this member is already ${duplicate.status} (txn ${duplicate.transaction_id || duplicate.id.slice(0, 8)}).`,
-        variant: "destructive",
-      });
-      return;
+    if (!includedTickets.length) return;
+
+    // Checked up front, across every included ticket — recording 1 of 2
+    // tickets cleanly must not silently also skip or double the other.
+    for (const t of includedTickets) {
+      const duplicate = (payments || []).find(
+        (p) => p.membership_id === t.membership.id && p.installment_number === t.number && p.status !== "failed"
+      );
+      if (duplicate) {
+        toast({
+          title: "Already recorded",
+          description: `Installment #${t.number} for ${profileOf(t.membership.member_profile_id)?.full_name || "this member"} (chit #${t.membership.chit_number || t.membership.ticket_number}) is already ${duplicate.status} (txn ${duplicate.transaction_id || duplicate.id.slice(0, 8)}).`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
+
     setSaving(true);
-    const prof = profileOf(ms.member_profile_id);
-    const txn = "TXN" + Date.now().toString().slice(-8);
-    const created = await base44.entities.Payment.create({
-      transaction_id: txn,
-      membership_id: ms.id,
-      member_profile_id: ms.member_profile_id,
-      group_id: ms.group_id,
-      user_id: ms.user_id,
-      installment_number: installmentNum,
-      amount: +form.amount,
-      payment_date: form.payment_date,
-      method: form.method,
-      currency: planOf(ms.group_id)?.currency || "INR",
-      status: "success",
-      collected_by: (await base44.auth.me().catch(() => ({}))).email || "admin",
-      etransfer_screenshot_url: form.screenshotPath || undefined,
-    });
-    // Read the membership fresh right before incrementing — `memberships`
-    // in component state is only fetched once on mount, so basing the
-    // increment on it silently under-counts when recording more than one
-    // payment for the same member in a single page session (each call
-    // would add 1 to the same stale starting value instead of stacking).
-    const freshMs = await base44.entities.GroupMembership.get(ms.id);
-    await base44.entities.GroupMembership.update(ms.id, {
-      paid_installments: (freshMs?.paid_installments || 0) + 1,
-      total_paid: (freshMs?.total_paid || 0) + +form.amount,
-    });
-    logAudit({ module: "Payments", action: "create", record_id: created.id, details: `Recorded ${form.method} payment of ${form.amount} (txn ${txn}) for ${profileOf(ms.member_profile_id)?.full_name || "member"}` });
+    const me = await base44.auth.me().catch(() => ({}));
+    // Only stamped as a shared batch id when there's actually more than one
+    // ticket — a single-ticket recording keeps today's plain "TXN..." id.
+    // Same reasoning as PayAllDialog's batchId: this is what lets
+    // maybeSendBatchReceipt (and the "N tickets" badge in the table below)
+    // recognize these rows as one combined payment instead of two
+    // unrelated ones.
+    const batchId = includedTickets.length > 1
+      ? `TXN${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase()
+      : "TXN" + Date.now().toString().slice(-8);
+
+    let firstCreated = null;
+    for (const t of includedTickets) {
+      const ms = t.membership;
+      const created = await base44.entities.Payment.create({
+        transaction_id: batchId,
+        membership_id: ms.id,
+        member_profile_id: ms.member_profile_id,
+        group_id: ms.group_id,
+        user_id: ms.user_id,
+        installment_number: t.number,
+        amount: t.amount,
+        payment_date: form.payment_date,
+        method: form.method,
+        currency: planOf(ms.group_id)?.currency || "INR",
+        status: "success",
+        collected_by: me.email || "admin",
+        etransfer_screenshot_url: form.screenshotPath || undefined,
+      });
+      // Read the membership fresh right before incrementing — `memberships`
+      // in component state is only fetched once on mount, so basing the
+      // increment on it silently under-counts when recording more than one
+      // payment for the same member in a single page session (each call
+      // would add 1 to the same stale starting value instead of stacking).
+      const freshMs = await base44.entities.GroupMembership.get(ms.id);
+      await base44.entities.GroupMembership.update(ms.id, {
+        paid_installments: (freshMs?.paid_installments || 0) + 1,
+        total_paid: (freshMs?.total_paid || 0) + t.amount,
+      });
+      logAudit({ module: "Payments", action: "create", record_id: created.id, details: `Recorded ${form.method} payment of ${t.amount} (txn ${batchId}) for ${profileOf(ms.member_profile_id)?.full_name || "member"} (chit #${ms.chit_number || ms.ticket_number})` });
+      if (!firstCreated) firstCreated = created;
+    }
+    // Every row created above is already "success" (an admin recording a
+    // payment is itself the confirmation, unlike a member's submission
+    // which starts "pending") — maybeSendBatchReceipt sees the whole batch
+    // already resolved and sends one combined receipt immediately, same as
+    // it does once an approved batch finishes resolving.
+    if (firstCreated) await maybeSendBatchReceipt(firstCreated);
     setSaving(false);
     setOpen(false);
     setForm({ membership_id: "", amount: "", installment_number: "", method: "cash", payment_date: new Date().toISOString().slice(0, 10), screenshotPath: "" });
+    setIncludedSiblingIds(new Set());
+    setTicketOverrides({});
     load();
   };
 
@@ -462,6 +540,41 @@ export default function Payments() {
                 </SelectContent>
               </Select>
             </div>
+
+            {siblingMemberships.length > 0 && (
+              <div className="col-span-2 p-3 bg-primary/5 rounded-lg border border-primary/20 space-y-2">
+                <p className="text-xs font-semibold text-foreground">
+                  This member holds {siblingMemberships.length + 1} tickets — paid together?
+                </p>
+                {siblingMemberships.map((m) => {
+                  const p = previewFor(m);
+                  const checked = includedSiblingIds.has(m.id);
+                  return (
+                    <label key={m.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setIncludedSiblingIds((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(m.id); else next.delete(m.id);
+                            return next;
+                          });
+                        }}
+                        className="accent-primary"
+                      />
+                      <span className="text-foreground">Chit #{m.chit_number || m.ticket_number}</span>
+                      {p ? (
+                        <span className="text-muted-foreground">— Installment #{p.number}, {formatMoney(p.amount, p.currency)}</span>
+                      ) : (
+                        <span className="text-muted-foreground">— fully paid up</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+
             <div><Label>Installment #</Label><Input type="number" value={form.installment_number} onChange={(e) => set("installment_number", e.target.value)} /></div>
             <div>
               <Label>Amount</Label>
@@ -473,6 +586,14 @@ export default function Payments() {
                 </p>
               )}
             </div>
+
+            {includedSiblingIds.size > 0 && (
+              <div className="col-span-2 flex items-center justify-between px-3 py-2 rounded-lg bg-muted/40 text-sm">
+                <span className="text-muted-foreground">Combined total ({includedTickets.length} tickets)</span>
+                <span className="font-semibold text-foreground">{formatMoney(combinedTotal, suggested?.currency || "INR")}</span>
+              </div>
+            )}
+
             <div>
               <Label>Method</Label>
               <Select value={form.method} onValueChange={(v) => set("method", v)}>
@@ -492,7 +613,9 @@ export default function Payments() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} className="rounded-full">Cancel</Button>
-            <Button onClick={record} disabled={saving || !form.membership_id || !form.amount} className="bg-primary hover:bg-primary/90 rounded-full">{saving ? "Saving…" : "Record"}</Button>
+            <Button onClick={record} disabled={saving || !form.membership_id || !form.amount} className="bg-primary hover:bg-primary/90 rounded-full">
+              {saving ? "Saving…" : includedTickets.length > 1 ? `Record ${includedTickets.length} Payments` : "Record"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
