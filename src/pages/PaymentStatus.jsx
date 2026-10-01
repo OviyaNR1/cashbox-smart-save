@@ -85,10 +85,19 @@ export default function PaymentStatus() {
       const pendingThisMonth = payments.some(
         (p) => p.membership_id === m.id && p.installment_number === selectedMonth && p.status === "pending"
       );
+      // Falls back to the cumulative count when no row exists for this
+      // specific month — covers a membership like CashBox's own seat,
+      // stamped with paid_installments set to the plan's full duration
+      // up front rather than backed by a real Payment row per month. A
+      // real member building up paid_installments one real payment at a
+      // time will always have this agree with paidThisMonth anyway; this
+      // only changes anything for a membership that never had per-month
+      // rows to begin with.
+      const paidByCount = (m.paid_installments || 0) >= selectedMonth;
       let status;
       let dueDateStr = null;
       let daysLate = 0;
-      if (paidThisMonth) {
+      if (paidThisMonth || paidByCount) {
         status = "paid";
       } else if (pendingThisMonth) {
         status = "pending_review";
