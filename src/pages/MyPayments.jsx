@@ -5,6 +5,7 @@ import { FileText, CreditCard } from "lucide-react";
 import { formatMoney } from "@/lib/currency";
 import { getNextPaymentPreview } from "@/lib/paymentPreview";
 import PayAllDialog from "@/components/members/PayAllDialog";
+import WhatsAppBrowserTip from "@/components/WhatsAppBrowserTip";
 
 const statusTone = (s) => s === "success" ? "bg-emerald-500/15 text-emerald-400" : s === "pending" ? "bg-amber-500/15 text-amber-400" : "bg-rose-500/15 text-rose-400";
 
@@ -82,6 +83,10 @@ export default function MyPayments() {
 
   return (
     <div className="space-y-6">
+      {/* A member who's still logged in lands directly here from a
+          reminder's link, skipping Login/AuthLayout entirely — needs the
+          same escape-WhatsApp instruction shown just as early. */}
+      <WhatsAppBrowserTip />
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-primary">My account</p>
         <h1 className="text-3xl font-semibold text-foreground mt-1">Payments & receipts</h1>
