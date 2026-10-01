@@ -39,7 +39,11 @@ export default function Payments() {
   const [suggested, setSuggested] = useState(null);
   const { toast } = useToast();
 
-  const load = () => base44.entities.Payment.list("-payment_date", 300).then(setPayments);
+  // Sorted by created_at, not payment_date — payment_date is just a
+  // calendar day (shared by every payment recorded that day, as the Date
+  // column above now makes obvious), so sorting by it left same-day rows
+  // in an arbitrary order with no real "most recent first" meaning.
+  const load = () => base44.entities.Payment.list("-created_at", 300).then(setPayments);
   useEffect(() => {
     load();
     base44.entities.GroupMembership.list("-created_date", 200).then(setMemberships);
@@ -374,7 +378,15 @@ export default function Payments() {
                       )}
                     </td>
                     <td className="px-5 py-3 text-muted-foreground">#{p.installment_number || "—"}</td>
-                    <td className="px-5 py-3 text-muted-foreground">{p.payment_date || "—"}</td>
+                    <td className="px-5 py-3 text-muted-foreground">
+                      {/* payment_date is just the calendar date (which
+                          month's installment this is) — created_at is the
+                          real timestamp of when the row was actually
+                          recorded, with full time precision, and always
+                          populated (DB default now()) regardless of what
+                          the submitting code set payment_date to. */}
+                      {p.created_at ? new Date(p.created_at).toLocaleString() : (p.payment_date || "—")}
+                    </td>
                     <td className="px-5 py-3 text-muted-foreground capitalize">{(p.method || "").replace("_", " ")}</td>
                     <td className="px-5 py-3 text-right tabular-nums text-foreground">{formatMoney(p.amount, currencyOf(p))}</td>
                     <td className="px-5 py-3 text-right">
