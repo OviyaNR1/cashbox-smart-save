@@ -16,7 +16,7 @@ import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown, CALL_DURATIONS } from "@/lib/useCountdown";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
-import { Gavel, Crown, Trophy, Building2, Phone, Radio, Eye } from "lucide-react";
+import { Gavel, Crown, Trophy, Building2, Radio, Eye } from "lucide-react";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
 import LiveActivityToasts from "@/components/auction/LiveActivityToasts";
@@ -219,6 +219,14 @@ export default function AdminLiveAuction() {
     }
   }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at, bids]);
 
+  // A real auctioneer starts calling the moment the first bid actually
+  // comes in — not on a delay, and not waiting for the admin to notice and
+  // click a button. Call 1 was the one stage that still needed a manual
+  // click (call_1->call_2->final_call already auto-advance on their own
+  // timer, see above); this closes that gap the same way bids themselves
+  // already do: react to the leading bid changing, now including the
+  // very first one.
+  //
   // A new, lower bid mid-call means the price just being called is stale —
   // restart the count at "Oru Tharam" for the new lowest bid rather than
   // continuing call 2/final call for a price nobody's actually offering
@@ -227,8 +235,10 @@ export default function AdminLiveAuction() {
   useEffect(() => {
     if (!auction) { leadingBidIdRef.current = null; return; }
     const leadingId = validBids[0]?.id || null;
+    const isFirstBidOnOpenFloor = auction.status === "open" && leadingId;
     const inCallStage = ["call_1", "call_2", "final_call"].includes(auction.status);
-    if (inCallStage && leadingBidIdRef.current && leadingId && leadingId !== leadingBidIdRef.current) {
+    const outbidMidCall = inCallStage && leadingBidIdRef.current && leadingId && leadingId !== leadingBidIdRef.current;
+    if (isFirstBidOnOpenFloor || outbidMidCall) {
       advanceCall("call_1");
     }
     leadingBidIdRef.current = leadingId;
@@ -533,14 +543,20 @@ export default function AdminLiveAuction() {
             </div>
           )}
 
+          {/* Call 1 and Call 2 are no longer buttons here — they start on
+              their own the moment a bid lands, and advance on their own
+              timer from there (see the effects above). Final Call and
+              closing the auction stay the only two manual, admin-confirmed
+              actions: skipping straight to final call is a deliberate call
+              an admin can still make at any point bidding is active, but
+              nothing before that should need a click at all. */}
           <div className="bg-card rounded-2xl border border-border p-5 flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={() => advanceCall("call_1")} disabled={busy || auction.status !== "open"} className="rounded-full">
-              <Phone className="w-4 h-4 mr-1" /> Call 1
-            </Button>
-            <Button variant="outline" onClick={() => advanceCall("call_2")} disabled={busy || auction.status !== "call_1"} className="rounded-full">
-              Call 2
-            </Button>
-            <Button variant="outline" onClick={() => advanceCall("final_call")} disabled={busy || auction.status !== "call_2"} className="rounded-full">
+            <Button
+              variant="outline"
+              onClick={() => advanceCall("final_call")}
+              disabled={busy || !["open", "call_1", "call_2"].includes(auction.status) || validBids.length === 0}
+              className="rounded-full"
+            >
               Final Call
             </Button>
             <Button onClick={() => setCloseConfirmOpen(true)} disabled={busy || validBids.length === 0} className="bg-destructive hover:bg-destructive/90 rounded-full ml-auto">
