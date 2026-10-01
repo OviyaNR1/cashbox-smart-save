@@ -143,13 +143,28 @@ export default function Payments() {
   // from before this existed) has no batch to wait on and sends right away.
   const maybeSendBatchReceipt = async (resolvedPayment) => {
     const batchId = resolvedPayment.transaction_id;
+    // Queried fresh from the database, not read from `payments` component
+    // state — that state only refreshes via load() at the end of each
+    // approve()/reject() call, so approving two rows of the same batch in
+    // quick succession could have each one see the OTHER as still
+    // "pending" from a stale snapshot taken before either write landed.
+    // That's not just a wrong read: with no retry, neither call would ever
+    // see the batch as resolved, and the receipt would silently never send
+    // for a batch that in reality finished resolving. A fresh query is
+    // immune to that regardless of how close together the clicks land.
     const siblings = batchId
-      ? (payments || []).filter((x) => x.transaction_id === batchId && x.id !== resolvedPayment.id)
+      ? (await base44.entities.Payment.filter({ transaction_id: batchId })).filter((x) => x.id !== resolvedPayment.id)
       : [];
     if (siblings.some((s) => s.status === "pending")) return;
 
     const batchRows = [resolvedPayment, ...siblings].filter((x) => x.status === "success");
     if (batchRows.length === 0) return;
+    // Belt-and-suspenders against two approve() calls resolving the same
+    // batch's last two rows close enough together that both queries land
+    // after both writes commit — vanishingly unlikely for two separate
+    // human clicks, but cheap to guard: if any row in the batch already
+    // shows a receipt went out, this isn't the call that gets to send it.
+    if (batchRows.some((r) => r.receipt_sent_at)) return;
 
     const prof = profileOf(resolvedPayment.member_profile_id);
     if (!prof?.mobile) return;
