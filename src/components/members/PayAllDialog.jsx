@@ -22,6 +22,8 @@ import { formatMoney } from "@/lib/currency";
 import FileUpload from "@/components/members/FileUpload";
 import { buildUpiPaymentLink, BUSINESS_UPI_ID, BUSINESS_UPI_NUMBER } from "@/lib/upi";
 import { BUSINESS_INTERAC_EMAIL } from "@/lib/interac";
+import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
+import { ADMIN_NOTIFY_PHONE, ADMIN_PAYMENT_NOTIFY_APPROVED } from "@/lib/adminNotify";
 import { Loader2, CreditCard, Smartphone, Copy } from "lucide-react";
 import QRCode from "qrcode";
 
@@ -248,6 +250,27 @@ export default function PayAllDialog({ open, onOpenChange, items, user, onPaid, 
         title: chosen.length > 1 ? `${chosen.length} payments submitted!` : "Payment submitted!",
         description: "An admin will confirm receipt shortly.",
       });
+
+      // Lets the admin notice a submission came in without having to
+      // remember to check the Payments page. Fire-and-forget on purpose —
+      // a failure here (or the template not being approved yet) must never
+      // block or roll back a payment the member already successfully
+      // submitted; it's purely an FYI copy to the admin's own number.
+      if (ADMIN_PAYMENT_NOTIFY_APPROVED) {
+        base44.entities.MemberProfile.get(chosen[0].membership.member_profile_id)
+          .then((prof) => sendWhatsAppMessage({
+            phone: ADMIN_NOTIFY_PHONE,
+            templateName: "admin_payment_submitted_v1",
+            parameters: [
+              prof?.full_name || "A member",
+              chosen.map((i) => `#${i.number}`).join(" & "),
+              totalDisplay,
+              method.replace("_", " "),
+            ],
+          }))
+          .catch((err) => console.error("Admin payment-submitted notification failed:", err));
+      }
+
       clearDraft();
       onOpenChange(false);
       if (onPaid) onPaid();
