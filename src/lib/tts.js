@@ -89,6 +89,23 @@ function fallbackSpeak(text, lang) {
   return new Promise((resolve) => {
     try {
       if (typeof window === "undefined" || !window.speechSynthesis) return resolve();
+      // Chrome has a long-standing bug where speechSynthesis silently pauses
+      // itself ~15s into an utterance (or a queue of them) and, on some
+      // builds, repeats the current utterance instead of just stalling —
+      // exactly the "900 dollars" firing several times in a row this was
+      // written to fix. The documented workaround is to keep kicking
+      // pause()+resume() while anything is actually speaking, which stops
+      // the engine from ever reaching that stuck/repeating state.
+      const keepAlive = setInterval(() => {
+        if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        }
+      }, 4000);
+      const finish = () => {
+        clearInterval(keepAlive);
+        resolve();
+      };
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = lang;
       utter.rate = 1.0;
@@ -96,8 +113,9 @@ function fallbackSpeak(text, lang) {
       const voices = window.speechSynthesis.getVoices();
       const preferred = voices.find((v) => /en/i.test(v.lang));
       if (preferred) utter.voice = preferred;
-      utter.onend = resolve;
-      utter.onerror = resolve;
+      utter.onend = finish;
+      utter.onerror = finish;
+      window.speechSynthesis.cancel(); // never let a prior stuck utterance linger into this one
       window.speechSynthesis.speak(utter);
     } catch {
       // Speech synthesis unavailable — fail silently, same as the rest of sound.js.
