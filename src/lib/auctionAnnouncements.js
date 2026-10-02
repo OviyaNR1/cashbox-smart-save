@@ -233,6 +233,32 @@ export function announceSilence(tier = "first", currency) {
   };
 }
 
+// Auctioneer chatter during the longer call stages — without it, a 30s
+// Call 1 or 20s Call 2 with bids already in is just silence between the
+// fixed call clips. English (Canada) only so far: there are no Tamil
+// equivalents recorded yet, so India gets nothing here rather than a
+// missing-file error. "hold" lines are interchangeable keep-it-going
+// prompts; "final-warning" and "last-seconds" are the two urgency beats.
+const STAGE_CHATTER_CLIPS_EN = {
+  hold: [1, 2, 3, 4, 5, 6].map((n) => `/audio/en/stage-hold-${n}.mp3`),
+  "final-warning": ["/audio/en/stage-urgent-1.mp3"],
+  "last-seconds": ["/audio/en/stage-urgent-2.mp3"],
+};
+const lastChatterPick = {};
+
+// kind: "hold" | "final-warning" | "last-seconds". Returns null when there's
+// nothing to play for this currency. Avoids repeating the previous hold
+// line back to back.
+export function announceStageChatter(kind, currency) {
+  if (!isCAD(currency)) return null;
+  const pool = STAGE_CHATTER_CLIPS_EN[kind];
+  if (!pool?.length) return null;
+  let i = Math.floor(Math.random() * pool.length);
+  if (pool.length > 1 && i === lastChatterPick[kind]) i = (i + 1) % pool.length;
+  lastChatterPick[kind] = i;
+  return { parts: [{ clip: pool[i] }] };
+}
+
 // Keeps one member's repeated bidding from spamming voice announcements —
 // at most one spoken "new lowest bid" call per window, shared across the
 // whole auction room (module-level, not per-component) since the throttle
