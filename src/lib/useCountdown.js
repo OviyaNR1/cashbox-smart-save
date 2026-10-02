@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
 import { playTick, playUrgentTick } from "@/lib/sound";
 
-// A real fast-moving auction doesn't leave a full minute of silence between
-// calls — bids come in back to back, and 60s/60s/30s read as the app
-// stalling rather than an actual live auction. Short enough to keep the
-// pace real, long enough that a member still has a real chance to see the
-// call and counter-bid before it locks in.
-export const CALL_DURATIONS = { call_1: 10, call_2: 10, final_call: 10 };
+// Pace of a real live auction: a relaxed first call, a tighter second, then
+// a short final call. 60s/60s/30s read as the app stalling.
+export const CALL_DURATIONS = { call_1: 30, call_2: 20, final_call: 10 };
 
 // Countdown for a live-auction call stage. Ticks audibly once per second and
 // switches to an urgent tick for the last 5 seconds.
