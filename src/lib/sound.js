@@ -1,5 +1,5 @@
 import { isSoundEnabled } from "./soundPrefs";
-import { speakAnnouncement } from "./tts";
+import { speakAnnouncement, cancelAnnouncements } from "./tts";
 import { amountToSpeechParts } from "./numberSpeech";
 
 let ctx;
@@ -267,15 +267,33 @@ const FINAL_CALL_CLIPS_EN = [
 export function speakCallAnnouncement(status, amount, currency, atFloor = false) {
   if (!isSoundEnabled()) return;
   const cad = currency === "CAD";
+  // A new call stage makes every earlier line stale — the previous call's
+  // clips, the keep-going chatter, a final-call count still mid-sentence for
+  // a price that was just outbid. Cut them (including audio already playing)
+  // instead of letting them finish behind the new call. The short bid
+  // reaction is kept: it belongs to the bid that usually triggered this.
+  cancelAnnouncements({ keepTags: ["reaction"] });
+  const opts = { tag: "call", maxAgeMs: 8000 };
   if (status === "final_call") {
     const amountParts = amount != null ? amountToSpeechParts(amount, currency) : [];
-    const rounds = cad ? FINAL_CALL_CLIPS_EN : FINAL_CALL_CLIPS;
     const parts = [];
-    rounds.forEach((round) => {
-      parts.push(...amountParts, { clip: round.clip });
-      if (round.pauseAfter) parts.push({ pause: round.pauseAfter });
-    });
-    speakAnnouncement(parts);
+    if (cad) {
+      // The final call only lasts 10s, and restating the amount before each
+      // of the three counts (the traditional Tamil format kept for India)
+      // pushed the English one to ~20s, so it was still counting after the
+      // auction had closed. Amount once, then the three counts back to back.
+      parts.push(...amountParts);
+      FINAL_CALL_CLIPS_EN.forEach((round, i, all) => {
+        parts.push({ clip: round.clip });
+        if (i < all.length - 1) parts.push({ pause: 700 });
+      });
+    } else {
+      FINAL_CALL_CLIPS.forEach((round) => {
+        parts.push(...amountParts, { clip: round.clip });
+        if (round.pauseAfter) parts.push({ pause: round.pauseAfter });
+      });
+    }
+    speakAnnouncement(parts, opts);
     return;
   }
   const lines = (cad ? CALL_AUDIO_EN : CALL_AUDIO)[status];
@@ -283,5 +301,5 @@ export function speakCallAnnouncement(status, amount, currency, atFloor = false)
   const parts = [{ clip: lines.a }];
   if (amount != null) parts.push(...amountToSpeechParts(amount, currency));
   if (!atFloor) parts.push({ clip: lines.b });
-  speakAnnouncement(parts);
+  speakAnnouncement(parts, opts);
 }

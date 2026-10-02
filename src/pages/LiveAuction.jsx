@@ -8,7 +8,7 @@ import { useCountdown, CALL_DURATIONS } from "@/lib/useCountdown";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { logAudit } from "@/lib/audit";
-import { speakAnnouncement } from "@/lib/tts";
+import { speakAnnouncement, cancelAnnouncements } from "@/lib/tts";
 import { announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { Crown, Gavel, Building2, Trophy, Radio } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,9 @@ export default function LiveAuction() {
   const [feedback, setFeedback] = useState(null);
   const [confirmingBid, setConfirmingBid] = useState(false);
   const prevStatusRef = useRef(null);
+  // Leaving the room mid-auction used to leave queued voice lines (and the
+  // clip already playing) running with nothing on screen to match.
+  useEffect(() => () => cancelAnnouncements(), []);
   const joinLoggedRef = useRef(new Set());
   const [bidFlash, setBidFlash] = useState(0);
   const { toasts, pushToast } = useLiveToasts();
@@ -193,7 +196,7 @@ export default function LiveAuction() {
               minDecrement: state.auction?.min_decrement,
               minBid: state.plan?.auction_min_bid,
               startingAmount: state.auction?.starting_amount,
-            }).parts);
+            }).parts, { tag: "reaction", maxAgeMs: 4000 });
           }
         }
         load();
@@ -223,16 +226,15 @@ export default function LiveAuction() {
     const nearEnd = 8;
     const stageKey = `${auction.id}:${auction.status}:${auction.call_stage_started_at}`;
     if (silenceStageRef.current.key !== stageKey) silenceStageRef.current = { key: stageKey, tier: 0 };
-    const hasBidSinceStage = (state.bids || []).some(
-      (b) => b.status === "valid" && new Date(b.created_at) >= new Date(auction.call_stage_started_at)
-    );
+    // Only while nobody has a leading bid at all — see AdminLiveAuction.jsx.
+    const hasBidSinceStage = (state.bids || []).some((b) => b.status === "valid");
     if (hasBidSinceStage) { silenceStageRef.current.tier = 2; return; }
     if (silenceStageRef.current.tier < 1 && countdown <= half) {
       silenceStageRef.current.tier = 1;
-      speakAnnouncement(announceSilence("first", state.plan?.currency).parts);
+      speakAnnouncement(announceSilence("first", state.plan?.currency).parts, { tag: "nudge", maxAgeMs: 3000 });
     } else if (silenceStageRef.current.tier < 2 && countdown <= nearEnd) {
       silenceStageRef.current.tier = 2;
-      speakAnnouncement(announceSilence("second", state.plan?.currency).parts);
+      speakAnnouncement(announceSilence("second", state.plan?.currency).parts, { tag: "nudge", maxAgeMs: 3000 });
     }
   }, [countdown, state.auction, state.bids]);
 
@@ -269,16 +271,21 @@ export default function LiveAuction() {
         const winnerName = state.profiles?.find((p) => p.id === auction.winner_member_profile_id)?.full_name || "Member";
         const closedLine = announceAuctionClosed(state.plan?.currency);
         pushToast(closedLine.visual, "default");
-        speakAnnouncement(closedLine.parts);
+        // Cut every call/chatter/count line still queued or playing — they
+        // describe an auction that's over — then play the closing sequence,
+        // which must never be dropped for age.
+        cancelAnnouncements();
+        const closing = { tag: "closing", maxAgeMs: Infinity };
+        speakAnnouncement(closedLine.parts, closing);
         // A brief pause before the reveal, same beat as a real auctioneer.
         setTimeout(() => {
           const winnerLine = announceWinner(iWon ? "You" : winnerName, auction.winning_bid_amount, state.plan?.currency);
           pushToast(winnerLine.visual, iWon ? "bid" : "default");
-          speakAnnouncement(winnerLine.parts);
+          speakAnnouncement(winnerLine.parts, closing);
           // A closing sign-off once the winner's named, so the room doesn't
           // just go silent — speakAnnouncement's own shared queue means
           // this naturally waits for the winner line to finish first.
-          speakAnnouncement(announceSignOff(state.plan?.currency).parts);
+          speakAnnouncement(announceSignOff(state.plan?.currency).parts, closing);
         }, 1800);
         if (iWon) {
           playFanfare();

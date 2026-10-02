@@ -8,19 +8,56 @@ import { isSoundEnabled } from "./soundPrefs";
 // falls back to the browser's own speechSynthesis so the auction is never
 // silently silent while waiting on a paid service.
 //
-// Every call goes through one shared queue so two announcements can never
-// play over each other — each one fully finishes (or times out) before the
-// next starts, instead of a `cancel()` inside a second call cutting the
-// first one off mid-sentence.
-let queue = Promise.resolve();
+// Every announcement goes through one shared queue so two can never play
+// over each other. A strict queue alone drifts out of sync with a live
+// auction though: one call is 8-15s of speech and a final-call count is
+// longer, so with bids landing every few seconds the audio ran further and
+// further behind and kept talking after the auction had closed. So each
+// queued announcement is a "job" that can be:
+//   - dropped if it waited too long to start (a "keep going" line 15s late
+//     is wrong, not just late) -- see maxAgeMs,
+//   - cancelled by tag when the auction moves on (new call stage, close),
+//     which also stops audio that is already playing, not just the queue.
 const MAX_WAIT_MS = 8000;
+const DEFAULT_MAX_AGE_MS = 6000;
 
-export function speakSmart(text, { voiceId, lang = "en-IN" } = {}) {
-  if (!isSoundEnabled() || !text) return Promise.resolve();
-  const next = queue.then(() => speakOnce(text, voiceId, lang));
+let queue = Promise.resolve();
+const jobs = new Set();
+// Set once the server says no TTS provider is configured, so every later
+// amount doesn't pay a network round trip just to be told the same thing.
+let remoteUnavailable = false;
+
+function enqueue(run, { maxAgeMs = DEFAULT_MAX_AGE_MS, tag = "general" } = {}) {
+  const job = { tag, cancelled: false, stops: new Set(), queuedAt: Date.now() };
+  jobs.add(job);
+  const next = queue
+    .then(() => {
+      if (job.cancelled || Date.now() - job.queuedAt > maxAgeMs) return undefined;
+      return run(job);
+    })
+    .finally(() => jobs.delete(job));
   // Never let one bad/stuck clip jam the queue for everything after it.
   queue = next.catch(() => {});
   return next;
+}
+
+// Stops everything queued or currently playing, except announcements whose
+// tag is in keepTags. Cancelled jobs resolve immediately, so later jobs
+// don't wait behind them.
+export function cancelAnnouncements({ keepTags = [] } = {}) {
+  jobs.forEach((job) => {
+    if (keepTags.includes(job.tag)) return;
+    job.cancelled = true;
+    job.stops.forEach((stop) => {
+      try { stop(); } catch { /* already finished */ }
+    });
+    job.stops.clear();
+  });
+}
+
+export function speakSmart(text, { voiceId, lang = "en-IN", ...opts } = {}) {
+  if (!isSoundEnabled() || !text) return Promise.resolve();
+  return enqueue((job) => speakText(text, voiceId, lang, job), opts);
 }
 
 // Plays a mixed sequence of pre-recorded clips and live-spoken text, in
@@ -28,98 +65,160 @@ export function speakSmart(text, { voiceId, lang = "en-IN" } = {}) {
 // "Call one!" followed by the live-spoken current amount, which changes
 // every bid and can't be pre-recorded. Each part is either
 // { clip: "/audio/x.wav" } or { text: "..." }.
-export function speakAnnouncement(parts) {
+// opts: { tag, maxAgeMs } — see enqueue(). Use maxAgeMs: Infinity for
+// anything that must be heard no matter how late (the closing sequence).
+export function speakAnnouncement(parts, opts) {
   if (!isSoundEnabled() || !parts?.length) return Promise.resolve();
-  const next = queue.then(() => playParts(parts));
-  queue = next.catch(() => {});
-  return next;
+  prefetchParts(parts);
+  return enqueue((job) => playParts(parts, job), opts);
 }
 
-async function playParts(parts) {
+async function playParts(parts, job) {
   for (const part of parts) {
+    if (job.cancelled) return;
     if (part.clip) {
-      await withTimeout(playClip(part.clip), MAX_WAIT_MS);
+      await playClip(part.clip, job);
     } else if (part.text) {
-      await withTimeout(speakOnce(part.text, part.voiceId, part.lang || "en-IN"), MAX_WAIT_MS);
+      await speakText(part.text, part.voiceId, part.lang || "en-IN", job);
     } else if (part.pause) {
       // A silent gap — e.g. the Final Call's "pause and wait" beats between
       // oru/rendu/moonu tharam. Without this, back-to-back clips play as one
       // continuous read instead of three distinct, suspenseful calls.
-      await new Promise((resolve) => setTimeout(resolve, part.pause));
+      await wait(part.pause, job);
     }
   }
 }
 
-function playClip(src) {
+// Registers a way to cut this step short (cancel, or the MAX_WAIT_MS
+// timeout) and guarantees the audio is actually stopped when that happens —
+// the old plain timeout let the queue move on while the clip or utterance
+// kept playing underneath whatever came next.
+function stoppable(job, ms, start) {
   return new Promise((resolve) => {
-    try {
-      const audio = new Audio(src);
-      audio.onended = resolve;
-      audio.onerror = resolve;
-      audio.play().catch(resolve);
-    } catch {
+    let finished = false;
+    let cleanup = () => {};
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      job.stops.delete(stop);
       resolve();
+    };
+    const stop = () => {
+      try { cleanup(); } catch { /* nothing playing */ }
+      finish();
+    };
+    const timer = setTimeout(stop, ms);
+    job.stops.add(stop);
+    if (job.cancelled) { stop(); return; }
+    try {
+      cleanup = start(finish) || cleanup;
+    } catch {
+      finish();
     }
   });
 }
 
-async function speakOnce(text, voiceId, lang) {
-  await withTimeout(playRemote(text, voiceId, lang).catch(() => false).then((ok) => ok || fallbackSpeak(text, lang)), MAX_WAIT_MS);
+function wait(ms, job) {
+  return stoppable(job, ms + 50, (finish) => {
+    const t = setTimeout(finish, ms);
+    return () => clearTimeout(t);
+  });
 }
 
-function withTimeout(promise, ms) {
-  return Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
+function playClip(src, job) {
+  return stoppable(job, MAX_WAIT_MS, (finish) => {
+    const audio = new Audio(src);
+    audio.onended = finish;
+    audio.onerror = finish;
+    audio.play().catch(finish);
+    return () => { audio.onended = null; audio.pause(); };
+  });
 }
 
-async function playRemote(text, voiceId, lang) {
-  const { data, error } = await supabase.functions.invoke("tts-speak", {
-    body: { text, voiceId, lang },
+async function speakText(text, voiceId, lang, job) {
+  if (!remoteUnavailable) {
+    const ok = await playRemote(text, voiceId, lang, job).catch(() => false);
+    if (ok || job.cancelled) return;
+  }
+  await fallbackSpeak(text, lang, job);
+}
+
+// Spoken text is fetched as soon as an announcement is QUEUED (not when its
+// turn comes) and kept by text, so the network round trip overlaps whatever
+// is still playing, and the same amount repeated across Call 1 / Call 2 /
+// Final Call plays instantly the second time. Before this, every amount was
+// a fresh sequential fetch (~1-3s) in the middle of every line.
+const ttsCache = new Map();
+
+function fetchTts(text, voiceId, lang) {
+  const key = `${lang}|${voiceId || ""}|${text}`;
+  if (!ttsCache.has(key)) {
+    const p = supabase.functions
+      .invoke("tts-speak", { body: { text, voiceId, lang } })
+      .then(({ data, error }) => {
+        if (data?.error === "not_configured") remoteUnavailable = true;
+        const audio = error || !data?.audioBase64 ? null : data.audioBase64;
+        if (!audio) ttsCache.delete(key);
+        return audio;
+      })
+      .catch(() => {
+        ttsCache.delete(key);
+        return null;
+      });
+    ttsCache.set(key, p);
+  }
+  return ttsCache.get(key);
+}
+
+function prefetchParts(parts) {
+  if (remoteUnavailable) return;
+  parts.forEach((part) => {
+    if (part.text) fetchTts(part.text, part.voiceId, part.lang || "en-IN");
   });
-  if (error || !data?.audioBase64) return false;
-  await new Promise((resolve) => {
-    const audio = new Audio(`data:audio/mpeg;base64,${data.audioBase64}`);
-    audio.onended = resolve;
-    audio.onerror = resolve;
-    audio.play().catch(resolve);
-  });
+}
+
+async function playRemote(text, voiceId, lang, job) {
+  const audioBase64 = await fetchTts(text, voiceId, lang);
+  if (!audioBase64) return false;
+  if (job.cancelled) return true;
+  await playClip(`data:audio/mpeg;base64,${audioBase64}`, job);
   return true;
 }
 
-function fallbackSpeak(text, lang) {
-  return new Promise((resolve) => {
-    try {
-      if (typeof window === "undefined" || !window.speechSynthesis) return resolve();
-      // Chrome has a long-standing bug where speechSynthesis silently pauses
-      // itself ~15s into an utterance (or a queue of them) and, on some
-      // builds, repeats the current utterance instead of just stalling —
-      // exactly the "900 dollars" firing several times in a row this was
-      // written to fix. The documented workaround is to keep kicking
-      // pause()+resume() while anything is actually speaking, which stops
-      // the engine from ever reaching that stuck/repeating state.
-      const keepAlive = setInterval(() => {
-        if (window.speechSynthesis.speaking) {
-          window.speechSynthesis.pause();
-          window.speechSynthesis.resume();
-        }
-      }, 4000);
-      const finish = () => {
-        clearInterval(keepAlive);
-        resolve();
-      };
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = lang;
-      utter.rate = 1.0;
-      utter.pitch = 1.0;
-      const voices = window.speechSynthesis.getVoices();
-      const preferred = voices.find((v) => /en/i.test(v.lang));
-      if (preferred) utter.voice = preferred;
-      utter.onend = finish;
-      utter.onerror = finish;
-      window.speechSynthesis.cancel(); // never let a prior stuck utterance linger into this one
-      window.speechSynthesis.speak(utter);
-    } catch {
-      // Speech synthesis unavailable — fail silently, same as the rest of sound.js.
-      resolve();
-    }
+function fallbackSpeak(text, lang, job) {
+  if (typeof window === "undefined" || !window.speechSynthesis) return Promise.resolve();
+  return stoppable(job, MAX_WAIT_MS, (finish) => {
+    // Chrome has a long-standing bug where speechSynthesis silently pauses
+    // itself ~15s into an utterance (or a queue of them) and, on some
+    // builds, repeats the current utterance instead of just stalling —
+    // exactly the "900 dollars" firing several times in a row this was
+    // written to fix. The documented workaround is to keep kicking
+    // pause()+resume() while anything is actually speaking, which stops
+    // the engine from ever reaching that stuck/repeating state.
+    const keepAlive = setInterval(() => {
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      }
+    }, 4000);
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = lang;
+    utter.rate = 1.0;
+    utter.pitch = 1.0;
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find((v) => /en/i.test(v.lang));
+    if (preferred) utter.voice = preferred;
+    const done = () => { clearInterval(keepAlive); finish(); };
+    utter.onend = done;
+    utter.onerror = done;
+    window.speechSynthesis.cancel(); // never let a prior stuck utterance linger into this one
+    window.speechSynthesis.speak(utter);
+    return () => {
+      clearInterval(keepAlive);
+      utter.onend = null;
+      utter.onerror = null;
+      window.speechSynthesis.cancel();
+    };
   });
 }

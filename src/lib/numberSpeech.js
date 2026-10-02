@@ -53,6 +53,10 @@ export function amountToWords(amount) {
 // utterance. Non-INR amounts get the same live-text treatment (currency
 // code read out) since there's no separate tile set to fall back to.
 export function amountToSpeechParts(amount, currency) {
+  if (currency === "CAD") {
+    // "1400 CAD" got read out as letters; "dollars" is what a person says.
+    return [{ text: `${amount} dollars`, lang: "en-IN" }];
+  }
   if (currency && currency !== "INR") {
     return [{ text: `${amount} ${currency}`, lang: "en-IN" }];
   }

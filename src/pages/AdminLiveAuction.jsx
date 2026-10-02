@@ -9,7 +9,7 @@ import { formatMoney } from "@/lib/currency";
 import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
 import { playCallBell, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
-import { speakAnnouncement } from "@/lib/tts";
+import { speakAnnouncement, cancelAnnouncements } from "@/lib/tts";
 import { announceAuctionStart, announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceSilence, announceStageChatter, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
@@ -152,7 +152,10 @@ export default function AdminLiveAuction() {
               minDecrement: auction?.min_decrement,
               minBid: plan?.auction_min_bid,
               startingAmount: auction?.starting_amount,
-            }).parts);
+            // Just the short reaction clip: on this screen a new lowest bid
+            // always restarts the call (see below), whose own line states
+            // the amount — saying it here too put it twice back to back.
+            }).parts.slice(0, 1), { tag: "reaction", maxAgeMs: 4000 });
           }
         }
         loadAuction();
@@ -180,6 +183,10 @@ export default function AdminLiveAuction() {
   // final call: closing the auction stays a manual, confirmed action (see
   // closeAuction) since real bids can still be happening by phone/in person
   // alongside the app.
+  // Navigating away mid-auction used to leave the queued voice lines (and
+  // whatever clip was playing) running with nothing on screen to match.
+  useEffect(() => () => cancelAnnouncements(), []);
+
   const autoAdvancedKeyRef = useRef(null);
   useEffect(() => {
     if (countdown === null || countdown > 0 || !auction) return;
@@ -206,16 +213,20 @@ export default function AdminLiveAuction() {
     const nearEnd = 8;
     const stageKey = `${auction.id}:${auction.status}:${auction.call_stage_started_at}`;
     if (silenceStageRef.current.key !== stageKey) silenceStageRef.current = { key: stageKey, tier: 0 };
-    const hasBidSinceStage = bids.some(
-      (b) => b.status === "valid" && new Date(b.created_at) >= new Date(auction.call_stage_started_at)
-    );
+    // "Nobody has bid" nudges only make sense while there is no leading bid
+    // at all. A call stage now starts the moment a bid lands (which is
+    // always a hair BEFORE the stage's own start time), so the old
+    // "no bid since this stage began" check was always true and the room
+    // got told "no bids yet" right on top of a leading bid — and doubled up
+    // with the stage chatter below.
+    const hasBidSinceStage = bids.some((b) => b.status === "valid");
     if (hasBidSinceStage) { silenceStageRef.current.tier = 2; return; }
     if (silenceStageRef.current.tier < 1 && countdown <= half) {
       silenceStageRef.current.tier = 1;
-      speakAnnouncement(announceSilence("first", plan?.currency).parts);
+      speakAnnouncement(announceSilence("first", plan?.currency).parts, { tag: "nudge", maxAgeMs: 3000 });
     } else if (silenceStageRef.current.tier < 2 && countdown <= nearEnd) {
       silenceStageRef.current.tier = 2;
-      speakAnnouncement(announceSilence("second", plan?.currency).parts);
+      speakAnnouncement(announceSilence("second", plan?.currency).parts, { tag: "nudge", maxAgeMs: 3000 });
     }
   }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at, bids]);
 
@@ -225,8 +236,12 @@ export default function AdminLiveAuction() {
   // per stage; the window check stops a stale line playing if the admin
   // page is opened with a stage already well past that point.
   const STAGE_CHATTER = {
-    call_1: [{ at: 24, kind: "hold" }, { at: 12, kind: "hold" }],
-    call_2: [{ at: 15, kind: "final-warning" }, { at: 5, kind: "last-seconds" }],
+    // Timed to land AFTER the stage's own call line (~7s of clip + amount
+    // + clip) has finished, not on top of it: Call 1 line 30s-23s, chatter
+    // at 17s and 8s; Call 2 line 20s-13s, warning at 9s (~4s long), last
+    // push at 3s (~3s long) so it ends as the stage does.
+    call_1: [{ at: 17, kind: "hold" }, { at: 8, kind: "hold" }],
+    call_2: [{ at: 9, kind: "final-warning" }, { at: 3, kind: "last-seconds" }],
   };
   const chatterFiredRef = useRef({ key: null, fired: new Set() });
   useEffect(() => {
@@ -238,7 +253,7 @@ export default function AdminLiveAuction() {
       if (chatterFiredRef.current.fired.has(at) || countdown > at || countdown < at - 2) return;
       chatterFiredRef.current.fired.add(at);
       const line = announceStageChatter(kind, plan?.currency);
-      if (line) speakAnnouncement(line.parts);
+      if (line) speakAnnouncement(line.parts, { tag: "chatter", maxAgeMs: 3000 });
     });
   }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at]);
 
@@ -300,7 +315,8 @@ export default function AdminLiveAuction() {
     logAudit({ module: "Live Auction", action: "start", record_id: created.id, details: `Started Month ${targetMonth} auction for group ${group.group_code} (starting ${startingAmount})` });
     const { parts, visual } = announceAuctionStart(startingAmount, plan.currency);
     pushToast(visual, "default");
-    speakAnnouncement(parts);
+    cancelAnnouncements();
+    speakAnnouncement(parts, { tag: "call", maxAgeMs: 8000 });
     setBusy(false);
     loadAuction();
   };
@@ -372,15 +388,21 @@ export default function AdminLiveAuction() {
     fireConfetti();
     const closedLine = announceAuctionClosed(plan.currency);
     pushToast(closedLine.visual, "default");
-    speakAnnouncement(closedLine.parts);
+    // Everything still queued or playing (call clips, chatter, a final-call
+    // count mid-sentence) is about an auction that no longer exists — cut it
+    // so the closing sequence is the next thing heard, not the end of a
+    // backlog. The closing lines themselves must never be dropped for age.
+    cancelAnnouncements();
+    const closing = { tag: "closing", maxAgeMs: Infinity };
+    speakAnnouncement(closedLine.parts, closing);
     setTimeout(() => {
       const winnerLine = announceWinner(winnerProf?.full_name || "Member", winningAmount, plan.currency);
       pushToast(winnerLine.visual, "bid");
-      speakAnnouncement(winnerLine.parts);
+      speakAnnouncement(winnerLine.parts, closing);
       // A closing sign-off once the winner's named, so the room doesn't
       // just go silent — speakAnnouncement's own shared queue means this
       // naturally waits for the winner line to finish first.
-      speakAnnouncement(announceSignOff(plan.currency).parts);
+      speakAnnouncement(announceSignOff(plan.currency).parts, closing);
     }, 1800);
     setBusy(false);
     setCloseConfirmOpen(false);
