@@ -514,7 +514,7 @@ export default function AdminLiveAuction() {
             return (
               <div
                 key={auction.status}
-                className={`rounded-2xl p-6 text-center border transition-colors motion-reduce:animate-none animate-in fade-in zoom-in-95 duration-500 ${look.card}`}
+                className={`rounded-2xl p-6 text-center border transition-colors ${look.card}`}
               >
                 <p className={`text-sm font-semibold mb-1 tracking-wide ${look.label}`}>
                   {look.icon} {formatMoney(calledAmount, plan.currency)} — {CALL_TERMS[auction.status]}

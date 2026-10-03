@@ -522,7 +522,7 @@ export default function LiveAuction() {
   const rowFor = (b, i) => (
     <div
       key={i === 0 ? `${b.id}-${bidFlash}` : b.id}
-      className={`flex items-center gap-3 px-3 py-2 rounded-xl border transition-colors ${i === 0 ? "border-emerald-500/40 bg-emerald-500/5 animate-in fade-in zoom-in-95 duration-500" : b.member_profile_id === myMembership?.member_profile_id ? "border-primary/50 bg-primary/5" : "border-border"}`}
+      className={`flex items-center gap-3 px-3 py-2 rounded-xl border transition-colors ${i === 0 ? "border-emerald-500/40 bg-emerald-500/5" : b.member_profile_id === myMembership?.member_profile_id ? "border-primary/50 bg-primary/5" : "border-border"}`}
     >
       <span className="w-6 text-center text-sm">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
       <p className="flex-1 min-w-0 text-sm text-foreground truncate">
@@ -546,7 +546,7 @@ export default function LiveAuction() {
           <h1 className="text-xl font-semibold text-foreground truncate">Month {auction.month_number} · {group.group_name || group.group_code}</h1>
         </div>
         <span className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 font-medium tabular-nums text-xs">
-          <Radio className="w-3 h-3 animate-pulse" /> LIVE {elapsed}
+          <Radio className="w-3 h-3" /> LIVE {elapsed}
         </span>
       </div>
 
@@ -586,7 +586,7 @@ export default function LiveAuction() {
         return (
           <div
             key={auction.status}
-            className={`rounded-2xl p-4 text-center border transition-colors motion-reduce:animate-none animate-in fade-in zoom-in-95 duration-500 ${look.card}`}
+            className={`rounded-2xl p-4 text-center border transition-colors ${look.card}`}
           >
             <p className={`text-sm font-semibold tracking-wide ${look.label}`}>{look.icon} {CALL_TERMS[auction.status]}</p>
             <p className={`font-bold text-foreground tabular-nums transition-all ${look.number}`}>{countdown}</p>
@@ -623,10 +623,7 @@ export default function LiveAuction() {
                 // Hides the native up/down spinner — a tiny, easy-to-mis-tap
                 // touch target that serves no purpose on a currency field
                 // where you're typing a specific amount, not incrementing.
-                // The glow only runs while empty — once someone's typed an
-                // amount it's obviously found, and a pulsing focused input
-                // would just be distracting rather than helpful.
-                className={`h-14 pl-9 text-2xl font-semibold border-2 border-primary/50 focus-visible:border-primary rounded-xl [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${!bidAmount ? "bid-input-glow" : ""}`}
+                className={`h-14 pl-9 text-2xl font-semibold border-2 border-primary/50 focus-visible:border-primary rounded-xl [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
               />
             </div>
             <Button
