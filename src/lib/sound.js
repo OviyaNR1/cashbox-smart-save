@@ -1,6 +1,7 @@
 import { isSoundEnabled } from "./soundPrefs";
 import { speakAnnouncement, cancelAnnouncements } from "./tts";
 import { amountToSpeechParts } from "./numberSpeech";
+import { CA_VOICE_V2, nextTailClip } from "./auctionAnnouncements";
 
 let ctx;
 
@@ -302,8 +303,19 @@ const CALL_AUDIO = {
 };
 const CALL_AUDIO_EN = {
   call_1: { a: "/audio/en/call-1-a.mp3", b: "/audio/en/call-1-b.mp3" },
-  call_2: { a: "/audio/en/call-2-a.mp3", b: "/audio/en/call-2-b.mp3" },
+  // "Going twice… last chance, everyone…" [amount] — no closing question.
+  call_2: CA_VOICE_V2
+    ? { a: "/audio/en/v2/call-2-a.mp3", b: null }
+    : { a: "/audio/en/call-2-a.mp3", b: "/audio/en/call-2-b.mp3" },
 };
+
+// Canada: a bid announcement that already named the bidder and said the new
+// amount (announceNamedBid) is the whole call line, so the Call 1 line the
+// same bid triggers must not repeat the amount a second time.
+let namedBidAt = 0;
+export function markNamedBid(at = Date.now()) {
+  namedBidAt = at;
+}
 // Pause after each round — "Pause and wait" / "Longer pause" / "Short
 // dramatic pause" per spec — so oru/rendu/moonu tharam (or, for Canada,
 // "Going once/twice/three times") land as three distinct suspenseful calls
@@ -376,6 +388,13 @@ export function speakCallAnnouncement(status, amount, currency, atFloor = false,
   }
   const lines = (cad ? CALL_AUDIO_EN : CALL_AUDIO)[status];
   if (!lines) return;
+  if (status === "call_1" && cad && CA_VOICE_V2) {
+    if (Date.now() - namedBidAt < 5000) return;
+    // Every Call 1 in Canada is "$3,800… <closing question>" — the room has
+    // already had the bidder's name from the reaction line.
+    speakAnnouncement([...(amount != null ? amountToSpeechParts(amount, currency) : []), ...(atFloor ? [] : [{ clip: nextTailClip() }])], opts);
+    return;
+  }
   if (status === "call_1" && auctionId) {
     const seen = call1Spoken.get(auctionId) || 0;
     call1Spoken.set(auctionId, seen + 1);
@@ -390,6 +409,6 @@ export function speakCallAnnouncement(status, amount, currency, atFloor = false,
   }
   const parts = [{ clip: lines.a }];
   if (amount != null) parts.push(...amountToSpeechParts(amount, currency));
-  if (!atFloor) parts.push({ clip: lines.b });
+  if (!atFloor && lines.b) parts.push({ clip: lines.b });
   speakAnnouncement(parts, opts);
 }

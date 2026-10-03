@@ -28,8 +28,23 @@ import { amountToSpeechParts } from "./numberSpeech";
 
 const isCAD = (currency) => currency === "CAD";
 
+// Canada's livelier auctioneer (opening, bidder names, new keep-going lines,
+// "going twice", winner line). Everything new lives in public/audio/en/v2 and
+// is only reached through this flag, so setting it to false puts the previous
+// English voice back exactly as it was. India never reads it.
+export const CA_VOICE_V2 = true;
+const V2 = "/audio/en/v2";
+const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
 export function announceAuctionStart(startingAmount, currency) {
-  const parts = isCAD(currency)
+  const v2 = isCAD(currency) && CA_VOICE_V2 ? pickOne(["1", "2"]) : null;
+  const parts = v2
+    ? [
+        { clip: `${V2}/open-${v2}-a.mp3` },
+        ...amountToSpeechParts(startingAmount, currency),
+        { clip: `${V2}/open-${v2}-b.mp3` },
+      ]
+    : isCAD(currency)
     ? [
         { clip: "/audio/en/auction-start-a.mp3" },
         ...amountToSpeechParts(startingAmount, currency),
@@ -104,6 +119,15 @@ export function announceAuctionClosed(currency) {
 // one part still spoken live, sandwiched between the real recorded clips.
 export function announceWinner(memberName, amount, currency) {
   const cad = isCAD(currency);
+  if (cad && CA_VOICE_V2) {
+    const you = memberName === "You";
+    return {
+      parts: you
+        ? [{ clip: `${V2}/win-you.mp3` }, ...amountToSpeechParts(amount, currency)]
+        : [{ clip: `${V2}/win-a.mp3` }, { text: spokenName(memberName) }, { clip: `${V2}/win-b.mp3` }, ...amountToSpeechParts(amount, currency)],
+      visual: `🏆 Winner: ${memberName} — ${formatMoney(amount, currency)}. Congrats!`,
+    };
+  }
   const parts = [
     { clip: cad ? "/audio/en/winner-prefix.mp3" : "/audio/winner-prefix.mp3" },
     { text: memberName },
@@ -232,9 +256,63 @@ export function announceNewLowestBid(amount, currency, context = {}) {
   return {
     // No reaction clip available (India's generic pool is empty): say nothing
     // here rather than speak the bare amount — callers play parts[0] only.
+    special: Boolean(special),
     parts: reaction ? [{ clip: reaction }, ...amountToSpeechParts(amount, currency)] : [],
     visual: `📉 New lowest bid: ${formatMoney(amount, currency)}`,
   };
+}
+
+
+// "Meena just brought it down to $3,800. Who's answering that?" — Canada only.
+// The bidder's first name is spoken live (the same live voice as the amounts),
+// sandwiched between recorded lead-ins, then the amount, then a short tail.
+// One line carries the whole bid announcement, so the Call 1 line that
+// normally follows a bid stays quiet (see markNamedBid in sound.js).
+// "Meena R" -> "Meena": a trailing one- or two-letter initial isn't spoken.
+export function spokenName(fullName) {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length > 1 && parts[parts.length - 1].replace(/\./g, "").length <= 2) parts.pop();
+  return parts.join(" ");
+}
+
+const NAMED_LEADS = [
+  { pre: null, post: "nm-1-post" },
+  { pre: "nm-2-pre", post: "nm-2-post" },
+  { pre: null, post: "nm-4-post" },
+];
+let lastNamedLead = -1;
+const TAILS = ["tail-1", "tail-2", "tail-3"];
+let lastTail = -1;
+
+// A shuffled-without-immediate-repeat pick, for the closing question after an amount.
+export function nextTailClip() {
+  let i = Math.floor(Math.random() * TAILS.length);
+  if (i === lastTail) i = (i + 1) % TAILS.length;
+  lastTail = i;
+  return `${V2}/${TAILS[i]}.mp3`;
+}
+
+// sameBidder: this member already bid earlier in this auction and is back
+// after being outbid ("Meena is back again!"). The app never lets the current
+// lowest bidder bid again, so it can only be someone who was overtaken.
+// atFloor: nothing lower is allowed, so no "can anyone beat that?" tail.
+export function announceNamedBid(fullName, amount, currency, { sameBidder = false, atFloor = false } = {}) {
+  const name = spokenName(fullName);
+  if (!CA_VOICE_V2 || !isCAD(currency) || !name) return null;
+  const parts = [];
+  if (sameBidder) {
+    parts.push({ text: name }, { clip: `${V2}/nm-3-post.mp3` });
+  } else {
+    let i = Math.floor(Math.random() * NAMED_LEADS.length);
+    if (i === lastNamedLead) i = (i + 1) % NAMED_LEADS.length;
+    lastNamedLead = i;
+    const lead = NAMED_LEADS[i];
+    if (lead.pre) parts.push({ clip: `${V2}/${lead.pre}.mp3` });
+    parts.push({ text: name }, { clip: `${V2}/${lead.post}.mp3` });
+  }
+  parts.push(...amountToSpeechParts(amount, currency));
+  if (!atFloor) parts.push({ clip: sameBidder ? `${V2}/tail-b2b.mp3` : nextTailClip() });
+  return { parts };
 }
 
 // Nudges the room when a call stage has gone quiet for a while with no new
@@ -269,7 +347,9 @@ const STAGE_CHATTER_CLIPS = {
   "last-seconds": ["/audio/stage-urgent-2.mp3"],
 };
 const STAGE_CHATTER_CLIPS_EN = {
-  hold: [1, 2, 3, 4, 5, 6].map((n) => `/audio/en/stage-hold-${n}.mp3`),
+  hold: CA_VOICE_V2
+    ? [1, 2, 3, 4, 5, 6].map((n) => `${V2}/hold-${n}.mp3`)
+    : [1, 2, 3, 4, 5, 6].map((n) => `/audio/en/stage-hold-${n}.mp3`),
   "final-warning": ["/audio/en/stage-urgent-1.mp3"],
   "last-seconds": ["/audio/en/stage-urgent-2.mp3"],
 };

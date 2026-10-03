@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { base44, supabase } from "@/api/base44Client";
 import { formatMoney } from "@/lib/currency";
 import { calcAuctionOutcome } from "@/lib/liveAuctionEngine";
-import { playStageChange, playFanfare, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
+import { playStageChange, playFanfare, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement, markNamedBid } from "@/lib/sound";
 import { fireConfetti, fireWinnerConfetti } from "@/lib/confetti";
 import { useCountdown, CALL_DURATIONS } from "@/lib/useCountdown";
 import { useStageChatter } from "@/lib/useStageChatter";
@@ -10,7 +10,7 @@ import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { logAudit } from "@/lib/audit";
 import { speakAnnouncement, cancelAnnouncements } from "@/lib/tts";
-import { announceAuctionStart, announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
+import { announceAuctionStart, announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceNamedBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { Crown, Gavel, Building2, Trophy, Radio } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -193,7 +193,7 @@ export default function LiveAuction() {
           if (shouldAnnounceBid()) {
             const prevValidBids = bidsRef.current.filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
             const prevLowest = prevValidBids[0];
-            speakAnnouncement(announceNewLowestBid(payload.new.amount, state.plan?.currency, {
+            const reaction = announceNewLowestBid(payload.new.amount, state.plan?.currency, {
               previousAmount: prevLowest ? prevLowest.amount : state.auction?.starting_amount,
               isFirstBid: !prevLowest,
               previousBidAt: prevLowest?.created_at,
@@ -202,10 +202,41 @@ export default function LiveAuction() {
               minDecrement: state.auction?.min_decrement,
               minBid: state.plan?.auction_min_bid,
               startingAmount: state.auction?.starting_amount,
-            // Just the short reaction clip, same as the admin screen: a new
-            // lowest bid always restarts the call, whose own line states the
-            // amount — saying it here too put it twice back to back.
-            }).parts.slice(0, 1), { tag: "reaction", maxAgeMs: 4000 });
+            });
+            // Canada: a plain bid names the bidder and states the new amount in
+            // one line (the Call 1 line after it stays quiet). Special
+            // reactions (last-second, big drop, near the floor…) keep their
+            // own clip. Everything else: just the short reaction clip, since
+            // the Call 1 line states the amount.
+            // This callback only sees the profiles loaded when it subscribed, so a
+            // first-time bidder isn't in them yet — ask for just that name.
+            const amountNow = Number(payload.new.amount);
+            const atFloorNow = reachedFloor(amountNow, state.plan?.auction_min_bid, state.auction?.min_decrement);
+            if (state.plan?.currency === "CAD" && !reaction.special) {
+              // Marked right away so the Call 1 line below stays quiet while the
+              // name is fetched; see markNamedBid.
+              markNamedBid();
+              const nameP = bidderName
+                ? Promise.resolve(bidderName)
+                : supabase.rpc("get_member_names", { ids: [payload.new.member_profile_id] })
+                    .then(({ data }) => data?.[0]?.full_name || null)
+                    .catch(() => null);
+              nameP.then((name) => {
+                const named = announceNamedBid(name, amountNow, state.plan?.currency, {
+                  sameBidder: prevValidBids.some((b) => b.member_profile_id === payload.new.member_profile_id),
+                  atFloor: atFloorNow,
+                });
+                if (named) {
+                  speakAnnouncement(named.parts, { tag: "reaction", maxAgeMs: 6000 });
+                } else {
+                  speakAnnouncement(reaction.parts.slice(0, 1), { tag: "reaction", maxAgeMs: 4000 });
+                  markNamedBid(0);
+                  if (!atFloorNow) speakCallAnnouncement("call_1", amountNow, state.plan?.currency, false, state.auction.id);
+                }
+              });
+            } else {
+              speakAnnouncement(reaction.parts.slice(0, 1), { tag: "reaction", maxAgeMs: 4000 });
+            }
           }
           // The spoken call line (with the new amount) comes from the bid
           // itself, NOT from noticing the status change. A new bid makes the

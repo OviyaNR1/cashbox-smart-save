@@ -8,9 +8,9 @@ import {
 import { formatMoney } from "@/lib/currency";
 import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
-import { playStageChange, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
+import { playStageChange, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement, markNamedBid } from "@/lib/sound";
 import { speakAnnouncement, cancelAnnouncements } from "@/lib/tts";
-import { announceAuctionStart, announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
+import { announceAuctionStart, announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceNamedBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown, CALL_DURATIONS } from "@/lib/useCountdown";
@@ -146,15 +146,16 @@ export default function AdminLiveAuction() {
           // first-time bidder in this auction wouldn't be in that list yet,
           // since it's only populated from bids loadAuction already knows
           // about, and this event can arrive before that re-fetch finishes.
-          base44.entities.MemberProfile.get(payload.new.member_profile_id)
-            .then((p) => pushToast(`${p?.full_name || "A member"} sent the lowest bid`, "bid"))
-            .catch(() => pushToast("A member sent the lowest bid", "bid"));
+          const bidderNameP = base44.entities.MemberProfile.get(payload.new.member_profile_id)
+            .then((p) => p?.full_name || null)
+            .catch(() => null);
+          bidderNameP.then((name) => pushToast(`${name || "A member"} sent the lowest bid`, "bid"));
           // Throttled — a burst of bids only gets one excited reaction, not
           // one stacked announcement per bid.
           if (shouldAnnounceBid()) {
             const prevValidBids = bidsRef.current.filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
             const prevLowest = prevValidBids[0];
-            speakAnnouncement(announceNewLowestBid(payload.new.amount, plan?.currency, {
+            const reaction = announceNewLowestBid(payload.new.amount, plan?.currency, {
               previousAmount: prevLowest ? prevLowest.amount : auction?.starting_amount,
               isFirstBid: !prevLowest,
               previousBidAt: prevLowest?.created_at,
@@ -163,10 +164,32 @@ export default function AdminLiveAuction() {
               minDecrement: auction?.min_decrement,
               minBid: plan?.auction_min_bid,
               startingAmount: auction?.starting_amount,
-            // Just the short reaction clip: on this screen a new lowest bid
-            // always restarts the call (see below), whose own line states
-            // the amount — saying it here too put it twice back to back.
-            }).parts.slice(0, 1), { tag: "reaction", maxAgeMs: 4000 });
+            });
+            // Canada: a plain bid names the bidder and states the new amount in
+            // one line (see LiveAuction.jsx); the Call 1 line after it stays
+            // quiet, so the bid is marked before the name arrives to keep that
+            // line from jumping the queue.
+            const isCad = plan?.currency === "CAD";
+            if (isCad && !reaction.special) {
+              markNamedBid();
+              bidderNameP.then((name) => {
+                const named = announceNamedBid(name, Number(payload.new.amount), plan?.currency, {
+                  sameBidder: prevValidBids.some((b) => b.member_profile_id === payload.new.member_profile_id),
+                  atFloor: reachedFloor(Number(payload.new.amount), plan?.auction_min_bid, auction?.min_decrement),
+                });
+                if (named) {
+                  speakAnnouncement(named.parts, { tag: "reaction", maxAgeMs: 6000 });
+                } else {
+                  // Name couldn't be fetched: the short reaction, then the usual
+                  // Call 1 line (amount + question) after all.
+                  speakAnnouncement(reaction.parts.slice(0, 1), { tag: "reaction", maxAgeMs: 4000 });
+                  markNamedBid(0);
+                  speakCallAnnouncement("call_1", Number(payload.new.amount), plan?.currency, false, auction.id);
+                }
+              });
+            } else {
+              speakAnnouncement(reaction.parts.slice(0, 1), { tag: "reaction", maxAgeMs: 4000 });
+            }
           }
         }
         loadAuction();
