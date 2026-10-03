@@ -172,6 +172,16 @@ function fetchTts(text, voiceId, lang) {
 }
 
 function prefetchParts(parts) {
+  // Canada's recorded name/amount/lead-in clips are tiny; warming them as
+  // the line is queued keeps the joins between them tight.
+  parts.forEach((part) => {
+    if (part.clip?.startsWith("/audio/en/v2/")) {
+      try {
+        const warm = new Audio(part.clip);
+        warm.preload = "auto";
+      } catch { /* just means no warm-up */ }
+    }
+  });
   if (remoteUnavailable) return;
   parts.forEach((part) => {
     if (part.text) fetchTts(part.text, part.voiceId, part.lang || "en-IN");

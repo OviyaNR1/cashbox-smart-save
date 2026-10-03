@@ -25,6 +25,7 @@
 
 import { formatMoney } from "@/lib/currency";
 import { amountToSpeechParts } from "./numberSpeech";
+import { CA_VOICE_V2, V2, nameClip } from "./caVoice";
 
 const isCAD = (currency) => currency === "CAD";
 
@@ -32,8 +33,12 @@ const isCAD = (currency) => currency === "CAD";
 // "going twice", winner line). Everything new lives in public/audio/en/v2 and
 // is only reached through this flag, so setting it to false puts the previous
 // English voice back exactly as it was. India never reads it.
-export const CA_VOICE_V2 = true;
-const V2 = "/audio/en/v2";
+export { CA_VOICE_V2 };
+// A recorded Dylan clip for a known first name, else the live-spoken name.
+const namePart = (name) => {
+  const clip = nameClip(name);
+  return clip ? { clip } : { text: name };
+};
 const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 export function announceAuctionStart(startingAmount, currency) {
@@ -124,7 +129,7 @@ export function announceWinner(memberName, amount, currency) {
     return {
       parts: you
         ? [{ clip: `${V2}/win-you.mp3` }, ...amountToSpeechParts(amount, currency)]
-        : [{ clip: `${V2}/win-a.mp3` }, { text: spokenName(memberName) }, { clip: `${V2}/win-b.mp3` }, ...amountToSpeechParts(amount, currency)],
+        : [{ clip: `${V2}/win-a.mp3` }, namePart(spokenName(memberName)), { clip: `${V2}/win-b.mp3` }, ...amountToSpeechParts(amount, currency)],
       visual: `🏆 Winner: ${memberName} — ${formatMoney(amount, currency)}. Congrats!`,
     };
   }
@@ -300,14 +305,14 @@ export function announceNamedBid(fullName, amount, currency, { sameBidder = fals
   if (!CA_VOICE_V2 || !isCAD(currency) || !name) return null;
   const parts = [];
   if (sameBidder) {
-    parts.push({ text: name }, { clip: `${V2}/nm-3-post.mp3` });
+    parts.push(namePart(name), { clip: `${V2}/nm-3-post.mp3` });
   } else {
     let i = Math.floor(Math.random() * NAMED_LEADS.length);
     if (i === lastNamedLead) i = (i + 1) % NAMED_LEADS.length;
     lastNamedLead = i;
     const lead = NAMED_LEADS[i];
     if (lead.pre) parts.push({ clip: `${V2}/${lead.pre}.mp3` });
-    parts.push({ text: name }, { clip: `${V2}/${lead.post}.mp3` });
+    parts.push(namePart(name), { clip: `${V2}/${lead.post}.mp3` });
   }
   parts.push(...amountToSpeechParts(amount, currency));
   if (!atFloor) parts.push({ clip: sameBidder ? `${V2}/tail-b2b.mp3` : nextTailClip() });

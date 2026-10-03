@@ -8,6 +8,8 @@
 // pre-recorded whole, so this is the one part of the announcement script
 // that's genuinely spoken live rather than played from a fixed clip.
 
+import { amountClip } from "./caVoice";
+
 const ONES = [
   "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
   "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
@@ -54,6 +56,8 @@ export function amountToWords(amount) {
 // code read out) since there's no separate tile set to fall back to.
 export function amountToSpeechParts(amount, currency) {
   if (currency === "CAD") {
+    const clip = amountClip(amount);
+    if (clip) return [{ clip }];
     // "1400 CAD" got read out as letters; "dollars" is what a person says.
     return [{ text: `${amount} dollars`, lang: "en-IN" }];
   }
