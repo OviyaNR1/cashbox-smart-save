@@ -281,7 +281,8 @@ export function spokenName(fullName) {
 
 const NAMED_LEADS = [
   { pre: null, post: "nm-1-post" },
-  { pre: "nm-2-pre", post: "nm-2-post" },
+  // The "Oh!" lead-in (nm-2-pre) was too theatrical and is no longer used.
+  { pre: null, post: "nm-2-post" },
   { pre: null, post: "nm-4-post" },
 ];
 let lastNamedLead = -1;

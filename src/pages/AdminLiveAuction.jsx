@@ -172,7 +172,7 @@ export default function AdminLiveAuction() {
             // quiet, so the bid is marked before the name arrives to keep that
             // line from jumping the queue.
             const isCad = plan?.currency === "CAD";
-            if (isCad && !reaction.special) {
+            if (isCad) {
               markNamedBid();
               bidderNameP.then((name) => {
                 const named = announceNamedBid(name, Number(payload.new.amount), plan?.currency, {

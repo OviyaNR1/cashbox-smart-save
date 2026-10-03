@@ -203,16 +203,16 @@ export default function LiveAuction() {
               minBid: state.plan?.auction_min_bid,
               startingAmount: state.auction?.starting_amount,
             });
-            // Canada: a plain bid names the bidder and states the new amount in
-            // one line (the Call 1 line after it stays quiet). Special
-            // reactions (last-second, big drop, near the floor…) keep their
-            // own clip. Everything else: just the short reaction clip, since
-            // the Call 1 line states the amount.
+            // Canada: every bid names the bidder and states the new amount in one
+            // line (the Call 1 line after it stays quiet) — this takes priority
+            // over the special reaction clips (close range, big drop…), which
+            // matched most bids and kept the name from ever being said. They
+            // still play when no name is available, and everywhere outside Canada.
             // This callback only sees the profiles loaded when it subscribed, so a
             // first-time bidder isn't in them yet — ask for just that name.
             const amountNow = Number(payload.new.amount);
             const atFloorNow = reachedFloor(amountNow, state.plan?.auction_min_bid, state.auction?.min_decrement);
-            if (state.plan?.currency === "CAD" && !reaction.special) {
+            if (state.plan?.currency === "CAD") {
               // Marked right away so the Call 1 line below stays quiet while the
               // name is fetched; see markNamedBid.
               markNamedBid();
