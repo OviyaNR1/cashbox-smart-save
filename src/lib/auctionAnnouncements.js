@@ -245,10 +245,15 @@ export function announceSilence(tier = "first", currency) {
 
 // Auctioneer chatter during the longer call stages — without it, a 30s
 // Call 1 or 20s Call 2 with bids already in is just silence between the
-// fixed call clips. English (Canada) only so far: there are no Tamil
-// equivalents recorded yet, so India gets nothing here rather than a
-// missing-file error. "hold" lines are interchangeable keep-it-going
-// prompts; "final-warning" and "last-seconds" are the two urgency beats.
+// fixed call clips. "hold" lines are interchangeable keep-it-going prompts;
+// "final-warning" and "last-seconds" are the two urgency beats. India's are
+// spoken, colloquial Tamil (with the English words people actually use at an
+// auction: bid, final call, chance), not formal written Tamil.
+const STAGE_CHATTER_CLIPS = {
+  hold: [1, 2, 3, 4, 5, 6].map((n) => `/audio/stage-hold-${n}.mp3`),
+  "final-warning": ["/audio/stage-urgent-1.mp3"],
+  "last-seconds": ["/audio/stage-urgent-2.mp3"],
+};
 const STAGE_CHATTER_CLIPS_EN = {
   hold: [1, 2, 3, 4, 5, 6].map((n) => `/audio/en/stage-hold-${n}.mp3`),
   "final-warning": ["/audio/en/stage-urgent-1.mp3"],
@@ -256,12 +261,10 @@ const STAGE_CHATTER_CLIPS_EN = {
 };
 const lastChatterPick = {};
 
-// kind: "hold" | "final-warning" | "last-seconds". Returns null when there's
-// nothing to play for this currency. Avoids repeating the previous hold
-// line back to back.
+// kind: "hold" | "final-warning" | "last-seconds". Avoids repeating the
+// previous hold line back to back.
 export function announceStageChatter(kind, currency) {
-  if (!isCAD(currency)) return null;
-  const pool = STAGE_CHATTER_CLIPS_EN[kind];
+  const pool = (isCAD(currency) ? STAGE_CHATTER_CLIPS_EN : STAGE_CHATTER_CLIPS)[kind];
   if (!pool?.length) return null;
   let i = Math.floor(Math.random() * pool.length);
   if (pool.length > 1 && i === lastChatterPick[kind]) i = (i + 1) % pool.length;
