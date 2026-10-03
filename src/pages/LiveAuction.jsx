@@ -5,11 +5,12 @@ import { calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { playCallBell, playFanfare, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
 import { fireConfetti, fireWinnerConfetti } from "@/lib/confetti";
 import { useCountdown, CALL_DURATIONS } from "@/lib/useCountdown";
+import { useStageChatter } from "@/lib/useStageChatter";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { logAudit } from "@/lib/audit";
 import { speakAnnouncement, cancelAnnouncements } from "@/lib/tts";
-import { announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
+import { announceAuctionStart, announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { Crown, Gavel, Building2, Trophy, Radio } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,7 @@ export default function LiveAuction() {
   const [feedback, setFeedback] = useState(null);
   const [confirmingBid, setConfirmingBid] = useState(false);
   const prevStatusRef = useRef(null);
+  const startAnnouncedRef = useRef(new Set());
   // Leaving the room mid-auction used to leave queued voice lines (and the
   // clip already playing) running with nothing on screen to match.
   useEffect(() => () => cancelAnnouncements(), []);
@@ -198,7 +200,10 @@ export default function LiveAuction() {
               minDecrement: state.auction?.min_decrement,
               minBid: state.plan?.auction_min_bid,
               startingAmount: state.auction?.starting_amount,
-            }).parts, { tag: "reaction", maxAgeMs: 4000 });
+            // Just the short reaction clip, same as the admin screen: a new
+            // lowest bid always restarts the call, whose own line states the
+            // amount — saying it here too put it twice back to back.
+            }).parts.slice(0, 1), { tag: "reaction", maxAgeMs: 4000 });
           }
         }
         load();
@@ -208,10 +213,43 @@ export default function LiveAuction() {
     return () => { supabase.removeChannel(channel); };
   }, [state.auction?.id, load]);
 
+  // The channel above only watches the auction that was loaded when the page
+  // opened. A member already sitting on last month's result (or the waiting
+  // room) never heard about the NEXT auction starting and needed a manual
+  // refresh — missing the opening and the first bids. Watch the group for new
+  // auctions and reload when one is created.
+  const watchedGroupId = state.group?.id;
+  useEffect(() => {
+    if (!watchedGroupId) return;
+    const channel = supabase
+      .channel(`member-group-auctions-${watchedGroupId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "auctions", filter: `group_id=eq.${watchedGroupId}` }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [watchedGroupId, load]);
+
   const countdown = useCountdown(state.auction?.call_stage_started_at, state.auction?.status, state.plan?.currency);
   const countdownRef = useRef(null);
   useEffect(() => { countdownRef.current = countdown; }, [countdown]);
   const elapsed = useElapsedTime(state.auction?.status !== "closed" ? state.auction?.created_at : null);
+
+  useStageChatter(state.auction, countdown, state.plan?.currency);
+
+  // The opening line ("ready ah? start panniralaama…") was only ever played
+  // by the admin's screen. Members on their own phones heard nothing until
+  // the first bid, so the room's own device says it too when the auction
+  // opens right in front of them. Once per auction, and only if it just
+  // opened — someone joining a half-finished auction shouldn't hear it.
+  useEffect(() => {
+    const auction = state.auction;
+    if (!auction || auction.status !== "open" || startAnnouncedRef.current.has(auction.id)) return;
+    if ((state.bids || []).some((b) => b.status === "valid")) return;
+    const openedAgo = Date.now() - new Date(auction.opened_at || auction.created_at).getTime();
+    if (openedAgo > 20000) return;
+    startAnnouncedRef.current.add(auction.id);
+    const { parts } = announceAuctionStart(auction.starting_amount, state.plan?.currency);
+    speakAnnouncement(parts, { tag: "opening", maxAgeMs: 8000 });
+  }, [state.auction, state.bids, state.plan?.currency]);
 
   // A real auctioneer doesn't stay quiet while nobody bids — nudge the room
   // once at the stage's halfway point, and again (firmer) near the end if
@@ -263,7 +301,11 @@ export default function LiveAuction() {
     const prev = prevStatusRef.current;
     if (prev !== null && prev !== auction.status) {
       if (["call_1", "call_2", "final_call"].includes(auction.status)) {
-        playCallBell();
+        // Call 1 only ever starts because a bid just landed, and that bid
+        // already beeped (playBidPlaced). The bell a beat later — after this
+        // screen reloads the auction — made it "beep, beep" on phones. The
+        // bell stays for the timer-driven Call 2 / Final Call.
+        if (auction.status !== "call_1") playCallBell();
         const validBidsNow = (state.bids || []).filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
         const calledAmount = validBidsNow[0]?.amount ?? auction.starting_amount;
         const atFloor = reachedFloor(validBidsNow[0]?.amount, state.plan?.auction_min_bid, auction.min_decrement);

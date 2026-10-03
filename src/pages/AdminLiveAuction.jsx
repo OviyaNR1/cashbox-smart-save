@@ -10,10 +10,11 @@ import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
 import { playCallBell, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
 import { speakAnnouncement, cancelAnnouncements } from "@/lib/tts";
-import { announceAuctionStart, announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceSilence, announceStageChatter, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
+import { announceAuctionStart, announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown, CALL_DURATIONS } from "@/lib/useCountdown";
+import { useStageChatter } from "@/lib/useStageChatter";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { Gavel, Crown, Trophy, Building2, Radio, Eye } from "lucide-react";
@@ -232,32 +233,7 @@ export default function AdminLiveAuction() {
     }
   }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at, bids]);
 
-  // Auctioneer chatter at fixed points inside the longer call stages (seconds
-  // remaining -> which kind of line), so a 30s/20s stage with bids in it
-  // isn't just silence between the fixed call clips. Each point fires once
-  // per stage; the window check stops a stale line playing if the admin
-  // page is opened with a stage already well past that point.
-  const STAGE_CHATTER = {
-    // Timed to land AFTER the stage's own call line (~7s of clip + amount
-    // + clip) has finished, not on top of it: Call 1 line 30s-23s, chatter
-    // at 17s and 8s; Call 2 line 20s-13s, warning at 9s (~4s long), last
-    // push at 3s (~3s long) so it ends as the stage does.
-    call_1: [{ at: 17, kind: "hold" }, { at: 8, kind: "hold" }],
-    call_2: [{ at: 9, kind: "final-warning" }, { at: 3, kind: "last-seconds" }],
-  };
-  const chatterFiredRef = useRef({ key: null, fired: new Set() });
-  useEffect(() => {
-    const points = STAGE_CHATTER[auction?.status];
-    if (countdown === null || !auction || !points) return;
-    const stageKey = `${auction.id}:${auction.status}:${auction.call_stage_started_at}`;
-    if (chatterFiredRef.current.key !== stageKey) chatterFiredRef.current = { key: stageKey, fired: new Set() };
-    points.forEach(({ at, kind }) => {
-      if (chatterFiredRef.current.fired.has(at) || countdown > at || countdown < at - 2) return;
-      chatterFiredRef.current.fired.add(at);
-      const line = announceStageChatter(kind, plan?.currency);
-      if (line) speakAnnouncement(line.parts, { tag: "chatter", maxAgeMs: 3000 });
-    });
-  }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at]);
+  useStageChatter(auction, countdown, plan?.currency);
 
   // A real auctioneer starts calling the moment the first bid actually
   // comes in — not on a delay, and not waiting for the admin to notice and
