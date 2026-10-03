@@ -11,7 +11,7 @@ import { formatMoney } from "@/lib/currency";
 import { logAudit } from "@/lib/audit";
 import { getSignedUrl } from "@/lib/storage";
 import FileUpload from "@/components/members/FileUpload";
-import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
+import { sendInstallmentReceiptById } from "@/lib/sendReceipts";
 import { useToast } from "@/components/ui/use-toast";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
 import { getNextPaymentPreview } from "@/lib/paymentPreview";
@@ -251,22 +251,18 @@ export default function Payments() {
     const prof = profileOf(resolvedPayment.member_profile_id);
     if (!prof?.mobile) return;
 
-    const totalAmount = batchRows.reduce((s, r) => s + (r.amount || 0), 0);
-    const installmentsLabel = batchRows.map((r) => `#${r.installment_number}`).join(" & ");
-    // Several tickets' worth of payments don't have one single receipt
-    // page to link to — /payments shows the member everything at once
-    // instead of picking one row's page arbitrarily.
-    const receiptUrl = batchRows.length > 1
-      ? `${window.location.origin}/payments`
-      : `${window.location.origin}/receipt/${batchRows[0].id}`;
-
+    // One PDF per payment row (a member paying several tickets in one batch
+    // has one row per ticket), each attached to its own WhatsApp message.
     try {
-      await sendWhatsAppMessage({
-        phone: prof.mobile,
-        templateName: "receipt_ready_v3",
-        parameters: [prof.full_name || "Member", installmentsLabel, formatMoney(totalAmount, currencyOf(resolvedPayment)), receiptUrl],
-      });
-      await Promise.all(batchRows.map((r) => base44.entities.Payment.update(r.id, { receipt_sent_at: new Date().toISOString() })));
+      let anyLink = false;
+      for (const r of batchRows) {
+        const sentAs = await sendInstallmentReceiptById(r.id, prof);
+        if (sentAs === "link") anyLink = true;
+        await base44.entities.Payment.update(r.id, { receipt_sent_at: new Date().toISOString() });
+      }
+      if (anyLink) {
+        toast({ title: "Receipt sent as a link", description: "The PDF template is still waiting for Meta approval." });
+      }
     } catch (err) {
       console.error(`Failed to auto-send receipt for ${resolvedPayment.member_profile_id}:`, err);
       toast({
@@ -332,12 +328,7 @@ export default function Payments() {
     let sent = 0;
     for (const p of targets) {
       try {
-        const receiptUrl = `${window.location.origin}/receipt/${p.id}`;
-        await sendWhatsAppMessage({
-          phone: prof.mobile,
-          templateName: "receipt_ready_v3",
-          parameters: [prof.full_name || "Member", String(p.installment_number || "—"), formatMoney(p.amount, currencyOf(p)), receiptUrl],
-        });
+        await sendInstallmentReceiptById(p.id, prof);
         await base44.entities.Payment.update(p.id, { receipt_sent_at: new Date().toISOString() });
         sent++;
       } catch (err) {

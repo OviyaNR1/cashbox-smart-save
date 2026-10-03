@@ -4,16 +4,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Link } from "react-router-dom";
-import { Trophy, Crown, Megaphone, Check, Building2, Gavel } from "lucide-react";
+import { Trophy, Crown, Megaphone, Check, Building2, Gavel, MessageCircle } from "lucide-react";
 import { formatMoney } from "@/lib/currency";
 import { generateLakhBoxPlan } from "@/lib/lakhboxEngine";
 import { logAudit } from "@/lib/audit";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
+import { useToast } from "@/components/ui/use-toast";
+import { sendPayoutReceipt } from "@/lib/sendReceipts";
 
 const statusTone = (s) => s === "paid" ? "bg-emerald-500/15 text-emerald-400" : s === "announced" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground";
 
 export default function Winners() {
   const { country: countryFilter } = useAdminCountry();
+  const { toast } = useToast();
   const [groups, setGroups] = useState([]);
   const [plans, setPlans] = useState([]);
   const [groupId, setGroupId] = useState("");
@@ -148,10 +151,29 @@ export default function Winners() {
     setWinners(ws);
   };
 
+  // The company's own month has no member to receive a receipt, and practice
+  // groups never message anyone.
+  const canSendReceipt = (w) => !!w.member_profile_id && !group?.is_demo;
+
+  // Sends the winner their payout receipt as a PDF over WhatsApp.
+  const sendReceipt = async (w) => {
+    try {
+      const me = await base44.auth.me().catch(() => ({}));
+      await sendPayoutReceipt({ winner: w, prof: profileOf(w.member_profile_id), group, plan, paidBy: me.email || "CashBox admin" });
+      const sentAt = new Date().toISOString();
+      await base44.entities.Winner.update(w.id, { receipt_sent_at: sentAt });
+      setWinners((ws) => ws.map((x) => (x.id === w.id ? { ...x, receipt_sent_at: sentAt } : x)));
+      toast({ title: "Payout receipt sent", description: `${w.member_name} got the PDF on WhatsApp.` });
+    } catch (e) {
+      toast({ title: "Marked paid, but the receipt wasn't sent", description: `${e.message || e} — use "Send receipt" to retry.`, variant: "destructive" });
+    }
+  };
+
   const markPaid = async (w) => {
     await base44.entities.Winner.update(w.id, { status: "paid" });
     logAudit({ module: "Winners", action: "mark-paid", record_id: w.id, details: `Marked Month ${w.month_number} winner "${w.member_name}" as paid` });
     setWinners((ws) => ws.map((x) => (x.id === w.id ? { ...x, status: "paid" } : x)));
+    if (canSendReceipt(w)) await sendReceipt({ ...w, status: "paid" });
   };
 
   return (
@@ -295,7 +317,18 @@ export default function Winners() {
                     <td className="px-5 py-3 text-right tabular-nums text-foreground">{formatMoney(w.prize_amount, plan?.currency)}</td>
                     <td className="px-5 py-3 text-right">
                       {w.status === "paid" ? (
-                        <span className={`text-xs px-2.5 py-1 rounded-full ${statusTone(w.status)}`}>{w.status}</span>
+                        <span className="inline-flex items-center gap-2 justify-end">
+                          {canSendReceipt(w) && (
+                            <button
+                              onClick={() => sendReceipt(w)}
+                              title={w.receipt_sent_at ? `Receipt sent ${new Date(w.receipt_sent_at).toLocaleString()}` : "Send the payout receipt PDF on WhatsApp"}
+                              className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground hover:bg-muted/70 flex items-center gap-1"
+                            >
+                              <MessageCircle className="w-3 h-3" /> {w.receipt_sent_at ? "Resend receipt" : "Send receipt"}
+                            </button>
+                          )}
+                          <span className={`text-xs px-2.5 py-1 rounded-full ${statusTone(w.status)}`}>{w.status}</span>
+                        </span>
                       ) : (
                         <button onClick={() => markPaid(w)} className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 flex items-center gap-1 ml-auto">
                           <Check className="w-3 h-3" /> Mark paid

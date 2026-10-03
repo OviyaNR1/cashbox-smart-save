@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { ArrowLeft, Printer, Download, MessageCircle } from "lucide-react";
 import { formatMoney } from "@/lib/currency";
 import { generateInvoicePdf, buildInvoiceNumber } from "@/lib/pdf";
-import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
+import { sendInstallmentReceipt } from "@/lib/sendReceipts";
 
 export default function Receipt() {
   const { id } = useParams();
@@ -69,44 +69,10 @@ export default function Receipt() {
     setSending("");
   };
 
-  const blobToBase64 = (blob) => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1]);
-    reader.onerror = () => reject(new Error("Could not read the PDF"));
-    reader.readAsDataURL(blob);
-  });
-
   const sendViaWhatsApp = async () => {
     setSending("whatsapp");
     try {
-      if (!prof?.mobile) throw new Error("This member has no phone number on file.");
-      const memberName = prof?.full_name || "Member";
-      const installment = String(p.installment_number || "—");
-      // The receipt goes out as the PDF itself, attached to the message. Plain
-      // free-form text only reaches members who messaged the business within
-      // the last 24 hours, so this is an approved template with a PDF header.
-      const { blob, filename } = await generateInvoicePdf({ payment: p, member: prof, group: grp, membership, plan, dividendAmount, remainingBalance, returnFile: true });
-      const base64 = await blobToBase64(blob);
-      let sentAs = "pdf";
-      try {
-        await sendWhatsAppMessage({
-          phone: prof.mobile,
-          templateName: "receipt_pdf_v1",
-          parameters: [memberName, installment, formatMoney(p.amount, cur)],
-          document: { base64, filename },
-        });
-      } catch (pdfErr) {
-        // Only until Meta approves the PDF template: the template isn't
-        // usable yet, so fall back to the earlier link message rather than
-        // leave the receipt unsent. Any other failure is reported as is.
-        if (!/template|132001|132000|does not exist|not approved/i.test(String(pdfErr.message || pdfErr))) throw pdfErr;
-        await sendWhatsAppMessage({
-          phone: prof.mobile,
-          templateName: "receipt_ready_v3",
-          parameters: [memberName, installment, formatMoney(p.amount, cur), `${window.location.origin}/receipt/${p.id}`],
-        });
-        sentAs = "link";
-      }
+      const sentAs = await sendInstallmentReceipt({ payment: p, prof, grp, membership, plan, dividendAmount, remainingBalance });
       const sentAt = new Date().toISOString();
       await base44.entities.Payment.update(p.id, { receipt_sent_at: sentAt });
       setData((d) => ({ ...d, payment: { ...d.payment, receipt_sent_at: sentAt } }));

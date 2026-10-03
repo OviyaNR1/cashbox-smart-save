@@ -2,6 +2,11 @@ import { jsPDF } from "jspdf";
 import QRCode from "qrcode";
 import { formatMoney } from "@/lib/currency";
 
+// The PDF's built-in font has no rupee sign (it prints as a stray superscript
+// 1), so amounts and any text containing one are written with "Rs." instead.
+const pdfSafe = (t) => String(t ?? "-").replaceAll("\u20B9", "Rs. ");
+const pdfMoney = (n, currency) => pdfSafe(formatMoney(n, currency));
+
 export function buildInvoiceNumber({ group, payment }) {
   const groupCode = group?.group_code || "GRP";
   const installment = payment.installment_number || "0";
@@ -63,7 +68,7 @@ export async function generateInvoicePdf({ payment, member, group, membership, p
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(20, 20, 25);
-    doc.text(String(value ?? "—"), x, y + 15);
+    doc.text(pdfSafe(value ?? "—"), x, y + 15);
   };
 
   const col1 = marginX;
@@ -91,7 +96,7 @@ export async function generateInvoicePdf({ payment, member, group, membership, p
     doc.setFontSize(bold ? 12 : 10);
     doc.setTextColor(bold ? 20 : 90, bold ? 20 : 90, bold ? 25 : 100);
     doc.text(label, col1, y);
-    doc.text(formatMoney(value, cur), pageWidth - marginX, y, { align: "right" });
+    doc.text(pdfMoney(value, cur), pageWidth - marginX, y, { align: "right" });
     y += 22;
   };
 
@@ -121,5 +126,91 @@ export async function generateInvoicePdf({ payment, member, group, membership, p
 
   if (returnFile) return { blob: doc.output("blob"), filename: `${invoiceNumber}.pdf` };
   doc.save(`${invoiceNumber}.pdf`);
+  return null;
+}
+
+export function buildPayoutNumber({ group, winner }) {
+  return `PAY-${group?.group_code || "GRP"}-M${winner.month_number}-${String(winner.id).slice(-6).toUpperCase()}`;
+}
+
+/**
+ * Prize payout receipt for a chit winner — given to the winner once the admin
+ * marks the prize as paid. Same look as the installment receipt.
+ * returnFile: hand back { blob, filename } instead of downloading it.
+ */
+export async function generatePayoutReceiptPdf({ winner, member, group, plan, paidDate, paidBy, returnFile = false }) {
+  const cur = plan?.currency || "INR";
+  const number = buildPayoutNumber({ group, winner });
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const marginX = 48;
+  let y = 56;
+
+  doc.setFillColor(255, 184, 51);
+  doc.roundedRect(marginX, y - 20, 32, 32, 6, 6, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(20, 20, 25);
+  doc.text("CB", marginX + 7, y + 2);
+  doc.setFontSize(18);
+  doc.text("CashBox", marginX + 44, y - 4);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(110, 110, 120);
+  doc.text("Digital Chit Management", marginX + 44, y + 10);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(20, 20, 25);
+  doc.text("PRIZE PAYOUT RECEIPT", pageWidth - marginX, y - 10, { align: "right" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(110, 110, 120);
+  doc.text(number, pageWidth - marginX, y + 4, { align: "right" });
+
+  y += 40;
+  doc.setDrawColor(225, 225, 230);
+  doc.line(marginX, y, pageWidth - marginX, y);
+  y += 28;
+
+  const field = (label, value, x) => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(130, 130, 140);
+    doc.text(label.toUpperCase(), x, y);
+    doc.setFontSize(11);
+    doc.setTextColor(20, 20, 25);
+    doc.text(pdfSafe(value), x, y + 15);
+  };
+  const colB = marginX + (pageWidth - marginX * 2) / 2;
+  field("Winner", member?.full_name || winner.member_name, marginX);
+  field("Member code", member?.member_code || "-", colB);
+  y += 44;
+  field("Group", group?.group_name || group?.group_code, marginX);
+  field("Plan", plan?.plan_name, colB);
+  y += 44;
+  field("Month won", `Month ${winner.month_number}`, marginX);
+  field("Announced on", winner.announcement_date, colB);
+  y += 44;
+  field("Paid on", paidDate, marginX);
+  field("Paid by", paidBy || "CashBox admin", colB);
+  y += 52;
+
+  doc.line(marginX, y, pageWidth - marginX, y);
+  y += 30;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(20, 20, 25);
+  doc.text("Prize amount paid", marginX, y);
+  doc.text(pdfMoney(winner.prize_amount, cur), pageWidth - marginX, y, { align: "right" });
+  y += 36;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(110, 110, 120);
+  doc.text("This is a system-generated receipt confirming the prize payout for the month above.", marginX, y);
+
+  const filename = `${number}.pdf`;
+  if (returnFile) return { blob: doc.output("blob"), filename };
+  doc.save(filename);
   return null;
 }
