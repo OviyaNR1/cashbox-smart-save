@@ -10,6 +10,16 @@ function getCtx() {
   return ctx;
 }
 
+// True once the browser has allowed audio on this page (the AudioContext is
+// running). Used to show a "tap to turn on sound" prompt to members.
+export function isAudioUnlocked() {
+  try {
+    return getCtx().state === "running";
+  } catch {
+    return false;
+  }
+}
+
 // Browsers refuse to actually produce sound from an AudioContext until it's
 // been resumed from inside a real user gesture (click/tap/key) at least
 // once on the page. On the admin's own Live Auction page, Call1/Sold work

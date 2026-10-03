@@ -15,6 +15,7 @@ import { Crown, Gavel, Building2, Trophy, Radio } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
+import SoundUnlockBanner from "@/components/auction/SoundUnlockBanner";
 import LiveActivityToasts from "@/components/auction/LiveActivityToasts";
 import { reachedFloor } from "@/lib/auctionFloor";
 import { callStageStyle } from "@/lib/callStageStyle";
@@ -421,6 +422,7 @@ export default function LiveAuction() {
             </p>
           )}
         </div>
+        {state.group && <SoundUnlockBanner />}
         {state.group && (
           <AuctionPresenceChat
             auctionId={null}
@@ -527,6 +529,7 @@ export default function LiveAuction() {
           <h1 className="text-xl font-semibold text-foreground">Month {auction.month_number} · {group.group_name || group.group_code}</h1>
           <p className="text-sm text-muted-foreground mt-1">Waiting for the admin to start — chat with your group while everyone joins.</p>
         </div>
+        <SoundUnlockBanner />
         <AuctionPresenceChat
           auctionId={auction.id}
           groupId={group.id}
@@ -578,6 +581,8 @@ export default function LiveAuction() {
           <Radio className="w-3 h-3" /> LIVE {elapsed}
         </span>
       </div>
+
+      <SoundUnlockBanner />
 
       <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-2 border-primary/30 rounded-2xl p-5 text-center">
         <p className="text-xs uppercase tracking-widest text-muted-foreground">Current lowest bid</p>
