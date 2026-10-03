@@ -326,6 +326,13 @@ const FINAL_CALL_CLIPS = [
   { clip: "/audio/final-rendu-tharam.mp3", pauseAfter: 2200 },
   { clip: "/audio/final-moonu-tharam.mp3", pauseAfter: 0 },
 ];
+// At the plan's minimum the counts must not ask for more bids ("yaarum bidding
+// pannalaya?") — nobody can bid lower — so these are the plain counts.
+const FINAL_CALL_CLIPS_AT_FLOOR = [
+  { clip: "/audio/final-floor-oru-tharam.mp3" },
+  { clip: "/audio/final-floor-rendu-tharam.mp3" },
+  { clip: "/audio/final-floor-moonu-tharam.mp3" },
+];
 const FINAL_CALL_CLIPS_EN = [
   { clip: "/audio/en/final-once.mp3", pauseAfter: 1500 },
   { clip: "/audio/en/final-twice.mp3", pauseAfter: 2200 },
@@ -378,7 +385,7 @@ export function speakCallAnnouncement(status, amount, currency, atFloor = false,
       // count was still going after the screen said bidding had closed.
       // Amount once, then oru / rendu / moonu tharam with short beats (~15s).
       parts.push(...amountParts);
-      FINAL_CALL_CLIPS.forEach((round, i, all) => {
+      (atFloor ? FINAL_CALL_CLIPS_AT_FLOOR : FINAL_CALL_CLIPS).forEach((round, i, all) => {
         parts.push({ clip: round.clip });
         if (i < all.length - 1) parts.push({ pause: 700 });
       });

@@ -12,15 +12,21 @@ export const CALL_DURATIONS = { call_1: 30, call_2: 20, final_call: 10 };
 // server's bid window for India (place_bid) matches this.
 const FINAL_CALL_SECONDS_INR = 16;
 
-export function callDuration(status, currency) {
+// At the plan's minimum nobody can bid lower, so the final call is just the
+// count (amount + oru / rendu / moonu tharam, ~9s) and the auction closes right
+// after — not 16s of waiting for a bid that cannot be placed. India only.
+const FINAL_CALL_SECONDS_INR_AT_FLOOR = 11;
+
+export function callDuration(status, currency, atFloor = false) {
+  if (status === "final_call" && atFloor && currency && currency !== "CAD") return FINAL_CALL_SECONDS_INR_AT_FLOOR;
   if (status === "final_call" && currency && currency !== "CAD") return FINAL_CALL_SECONDS_INR;
   return CALL_DURATIONS[status];
 }
 
 // Countdown for a live-auction call stage. Ticks audibly once per second and
 // switches to an urgent tick for the last 5 seconds.
-export function useCountdown(callStageStartedAt, status, currency) {
-  const duration = callDuration(status, currency);
+export function useCountdown(callStageStartedAt, status, currency, atFloor = false) {
+  const duration = callDuration(status, currency, atFloor);
   // The value is stored with the stage it was computed for. When a stage
   // changes, `remaining` from the PREVIOUS stage (0, if it just expired)
   // used to be returned for one render before the effect below recomputed

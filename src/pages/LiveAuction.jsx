@@ -277,7 +277,11 @@ export default function LiveAuction() {
     return () => { channels.forEach((c) => supabase.removeChannel(c)); };
   }, [watchKey, load]);
 
-  const countdown = useCountdown(state.auction?.call_stage_started_at, state.auction?.status, state.plan?.currency);
+  const lowestValidNow = (state.bids || []).filter((b) => b.status === "valid").reduce((m, b) => (m == null || b.amount < m ? b.amount : m), null);
+  const countdown = useCountdown(
+    state.auction?.call_stage_started_at, state.auction?.status, state.plan?.currency,
+    reachedFloor(lowestValidNow, state.plan?.auction_min_bid, state.auction?.min_decrement),
+  );
   const countdownRef = useRef(null);
   useEffect(() => { countdownRef.current = countdown; }, [countdown]);
   const elapsed = useElapsedTime(state.auction?.status !== "closed" ? state.auction?.created_at : null);
@@ -675,7 +679,7 @@ export default function LiveAuction() {
           return (
             <div className="rounded-2xl p-4 text-center border bg-rose-500/10 border-rose-500/25">
               <p className="text-sm font-semibold text-rose-400">🔒 Bidding closed</p>
-              <p className="text-xs text-muted-foreground mt-1">Waiting for the admin to close the auction.</p>
+              <p className="text-xs text-muted-foreground mt-1">{atFloorNow ? "Closing the auction and announcing the winner…" : "Waiting for the admin to close the auction."}</p>
             </div>
           );
         }
@@ -687,7 +691,7 @@ export default function LiveAuction() {
           >
             <p className={`text-sm font-semibold tracking-wide ${look.label}`}>{look.icon} {CALL_TERMS[auction.status]}</p>
             <p className={`font-bold text-foreground tabular-nums transition-all ${look.number}`}>{countdown}</p>
-            {look.hint && <p className="text-xs text-rose-300">{look.hint}</p>}
+            {look.hint && !atFloorNow && <p className="text-xs text-rose-300">{look.hint}</p>}
           </div>
         );
       })()}
@@ -705,11 +709,12 @@ export default function LiveAuction() {
               : "Bidding is open to members whose installments are paid up. Yours isn't yet — once your payment is approved you can bid in the next auction."}
           </p>
         </div>
-      ) : finalCallEnded ? null : atFloorNow ? (
+      ) : finalCallEnded && !atFloorNow ? null : atFloorNow ? (
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 text-sm">
           <p className="font-medium text-emerald-400 flex items-center gap-2"><Gavel className="w-4 h-4" /> Minimum reached</p>
           <p className="text-xs text-muted-foreground mt-1">
             {formatMoney(plan.auction_min_bid, plan.currency)} is the lowest allowed — no lower bid is possible.
+            {" "}{finalCallEnded ? "Closing the auction now — the winner will be announced in a moment." : "Final count, then the winner is announced."}
             {iAmWinning ? " You're the winning bidder." : ""}
           </p>
         </div>

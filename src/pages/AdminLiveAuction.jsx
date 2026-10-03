@@ -202,7 +202,10 @@ export default function AdminLiveAuction() {
   const profileOf = (id) => profiles.find((p) => p.id === id);
   const validBids = bids.filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
   const rejectedBids = bids.filter((b) => b.status === "rejected");
-  const countdown = useCountdown(auction?.call_stage_started_at, auction?.status, plan?.currency);
+  // At the plan's minimum nobody can bid lower: the final call is just the
+  // count, then the auction closes (see useCountdown).
+  const atFloorNow = reachedFloor(validBids[0]?.amount, plan?.auction_min_bid, auction?.min_decrement);
+  const countdown = useCountdown(auction?.call_stage_started_at, auction?.status, plan?.currency, atFloorNow);
   useEffect(() => { countdownRef.current = countdown; }, [countdown]);
   const elapsed = useElapsedTime(auction?.status !== "closed" ? auction?.created_at : null);
 
@@ -230,7 +233,7 @@ export default function AdminLiveAuction() {
 
   // Longer than the server's bid window after Final Call (client clock + 2s
   // slack, see place_bid), so no late bid can slip in after the auto-close.
-  const AUTO_CLOSE_GRACE_S = 5;
+  const AUTO_CLOSE_GRACE_S = atFloorNow && plan?.currency !== "CAD" ? 1 : 5; // no bid is possible at the floor, so nothing to wait for
   const autoClosedRef = useRef(null);
   const closeAuctionRef = useRef(null);
   useEffect(() => {
@@ -637,14 +640,19 @@ export default function AdminLiveAuction() {
                   {look.icon} {formatMoney(calledAmount, plan.currency)} — {CALL_TERMS[auction.status]}
                 </p>
                 <p className={`font-bold text-foreground tabular-nums transition-all ${look.number}`}>{countdown}</p>
-                {look.hint && <p className="text-xs text-rose-300 mt-1">{look.hint}</p>}
+                {look.hint && !atFloorNow && <p className="text-xs text-rose-300 mt-1">{look.hint}</p>}
+                {atFloorNow && (
+                  <p className="text-xs text-emerald-300 mt-2">
+                    Minimum bid reached — no lower bid is possible. Final count, then the auction closes and the winner is announced automatically.
+                  </p>
+                )}
               </div>
             );
           })()}
 
           {closingIn !== null && (
             <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 flex items-center justify-between gap-3 flex-wrap">
-              <p className="text-sm font-medium text-amber-200">Final call is over — closing the auction automatically in {closingIn}s</p>
+              <p className="text-sm font-medium text-amber-200">{atFloorNow ? "Minimum bid reached — closing the auction and announcing the winner in" : "Final call is over — closing the auction automatically in"} {closingIn}s</p>
               <Button variant="outline" onClick={() => setAutoClose(false)} className="rounded-full">Hold — I'll close it myself</Button>
             </div>
           )}
