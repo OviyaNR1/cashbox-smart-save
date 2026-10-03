@@ -83,13 +83,20 @@ export default function LiveAuction() {
       const me = await base44.auth.me();
       const memberships = await base44.entities.GroupMembership.filter({ user_id: me.id });
       const groupIds = memberships.map((m) => m.group_id);
+      // Groups this person only WATCHES (a reminder-only observer such as an admin
+      // following the auction): no ticket, so no bidding, but the room is visible.
+      const myProfiles = await base44.entities.MemberProfile.filter({ user_id: me.id }).catch(() => []);
+      const myProfileIds = myProfiles.map((p) => p.id);
       const [groups, plans] = await Promise.all([
-        groupIds.length ? base44.entities.ChitGroup.list("-created_date", 200) : Promise.resolve([]),
+        base44.entities.ChitGroup.list("-created_date", 200),
         base44.entities.ChitPlan.list("-created_date", 200),
       ]);
+      const watchedIds = groups
+        .filter((g) => (g.reminder_observers || []).some((id) => myProfileIds.includes(id)))
+        .map((g) => g.id);
 
       const liveGroups = groups.filter(
-        (g) => groupIds.includes(g.id) && plans.find((p) => p.id === g.plan_id)?.model === "live_auction"
+        (g) => (groupIds.includes(g.id) || watchedIds.includes(g.id)) && plans.find((p) => p.id === g.plan_id)?.model === "live_auction"
       );
 
       // For each group, find its most recent auction (any status), in
@@ -699,6 +706,11 @@ export default function LiveAuction() {
       {myMembership?.has_won ? (
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 text-sm text-emerald-400 flex items-center gap-2">
           <Building2 className="w-4 h-4" /> You've already won this group — bidding is closed for you.
+        </div>
+      ) : !myMembership ? (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-sm">
+          <p className="font-medium text-amber-300">You're watching this auction</p>
+          <p className="text-xs text-muted-foreground mt-1">Bidding is only for members of this group.</p>
         </div>
       ) : behindOnPayment || membershipInactive ? (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-sm">
