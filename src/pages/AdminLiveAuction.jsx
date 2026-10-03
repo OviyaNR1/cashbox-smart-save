@@ -147,6 +147,7 @@ export default function AdminLiveAuction() {
             const prevLowest = prevValidBids[0];
             speakAnnouncement(announceNewLowestBid(payload.new.amount, plan?.currency, {
               previousAmount: prevLowest ? prevLowest.amount : auction?.starting_amount,
+              isFirstBid: !prevLowest,
               previousBidAt: prevLowest?.created_at,
               newBidAt: payload.new.created_at,
               countdownRemaining: countdownRef.current,

@@ -170,6 +170,14 @@ const BID_REACTION_CLIPS_EN = [
 //   startingAmount    - auction.starting_amount
 const SPECIAL_REACTIONS = [
   {
+    // The very first bid of an auction. The generic pool has "innum kammi…"
+    // ("an even lower one") lines that only make sense after an earlier bid.
+    // India only for now — Canada's pool has no such lines.
+    clips: ["/audio/reaction-first-bid.mp3"],
+    clipsEn: [],
+    matches: (ctx) => ctx.isFirstBid && !ctx.isCad,
+  },
+  {
     clips: ["/audio/reaction-back-to-back.mp3"],
     clipsEn: ["/audio/en/reaction-back-to-back.mp3"],
     matches: (ctx) =>
