@@ -261,7 +261,8 @@ export function announceSilence(tier = "first", currency) {
 // spoken, colloquial Tamil (with the English words people actually use at an
 // auction: bid, final call, chance), not formal written Tamil.
 const STAGE_CHATTER_CLIPS = {
-  hold: [1, 2, 3, 4, 5, 6].map((n) => `/audio/stage-hold-${n}.mp3`),
+  // 3 was dropped ("kammi bid vandhiruku…" didn't sound right to a Tamil ear).
+  hold: [1, 2, 4, 5, 6].map((n) => `/audio/stage-hold-${n}.mp3`),
   "final-warning": ["/audio/stage-urgent-1.mp3"],
   "last-seconds": ["/audio/stage-urgent-2.mp3"],
 };
@@ -270,16 +271,32 @@ const STAGE_CHATTER_CLIPS_EN = {
   "final-warning": ["/audio/en/stage-urgent-1.mp3"],
   "last-seconds": ["/audio/en/stage-urgent-2.mp3"],
 };
+// Each kind is played through a shuffled "bag": every line is used once
+// before any repeats, and the first line of a refill never equals the last
+// one played. Picking at random each time put the same line (e.g. hold-6)
+// three times in one auction while others never played.
+const chatterBag = {};
 const lastChatterPick = {};
 
-// kind: "hold" | "final-warning" | "last-seconds". Avoids repeating the
-// previous hold line back to back.
+// kind: "hold" | "final-warning" | "last-seconds".
 export function announceStageChatter(kind, currency) {
   const pool = (isCAD(currency) ? STAGE_CHATTER_CLIPS_EN : STAGE_CHATTER_CLIPS)[kind];
   if (!pool?.length) return null;
-  let i = Math.floor(Math.random() * pool.length);
-  if (pool.length > 1 && i === lastChatterPick[kind]) i = (i + 1) % pool.length;
-  lastChatterPick[kind] = i;
+  const bagKey = `${isCAD(currency) ? "en" : "in"}:${kind}`;
+  if (!chatterBag[bagKey]?.length) {
+    const bag = pool.map((_, i) => i);
+    for (let k = bag.length - 1; k > 0; k--) {
+      const r = Math.floor(Math.random() * (k + 1));
+      [bag[k], bag[r]] = [bag[r], bag[k]];
+    }
+    // Don't open a new round with the line that just played.
+    if (bag.length > 1 && bag[bag.length - 1] === lastChatterPick[bagKey]) {
+      [bag[0], bag[bag.length - 1]] = [bag[bag.length - 1], bag[0]];
+    }
+    chatterBag[bagKey] = bag;
+  }
+  const i = chatterBag[bagKey].pop();
+  lastChatterPick[bagKey] = i;
   return { parts: [{ clip: pool[i] }] };
 }
 
