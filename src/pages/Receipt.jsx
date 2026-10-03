@@ -69,24 +69,51 @@ export default function Receipt() {
     setSending("");
   };
 
+  const blobToBase64 = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = () => reject(new Error("Could not read the PDF"));
+    reader.readAsDataURL(blob);
+  });
+
   const sendViaWhatsApp = async () => {
     setSending("whatsapp");
     try {
-      const receiptUrl = `${window.location.origin}/receipt/${p.id}`;
       if (!prof?.mobile) throw new Error("This member has no phone number on file.");
-      // Plain free-form text only reaches members who messaged the business
-      // within the last 24 hours — an admin sending a receipt on demand has
-      // no such guarantee, so this has to be an approved template like every
-      // other admin-triggered notification in the app.
-      await sendWhatsAppMessage({
-        phone: prof.mobile,
-        templateName: "receipt_ready_v3",
-        parameters: [prof?.full_name || "Member", String(p.installment_number || "—"), formatMoney(p.amount, cur), receiptUrl],
-      });
+      const memberName = prof?.full_name || "Member";
+      const installment = String(p.installment_number || "—");
+      // The receipt goes out as the PDF itself, attached to the message. Plain
+      // free-form text only reaches members who messaged the business within
+      // the last 24 hours, so this is an approved template with a PDF header.
+      const { blob, filename } = await generateInvoicePdf({ payment: p, member: prof, group: grp, membership, plan, dividendAmount, remainingBalance, returnFile: true });
+      const base64 = await blobToBase64(blob);
+      let sentAs = "pdf";
+      try {
+        await sendWhatsAppMessage({
+          phone: prof.mobile,
+          templateName: "receipt_pdf_v1",
+          parameters: [memberName, installment, formatMoney(p.amount, cur)],
+          document: { base64, filename },
+        });
+      } catch (pdfErr) {
+        // Only until Meta approves the PDF template: the template isn't
+        // usable yet, so fall back to the earlier link message rather than
+        // leave the receipt unsent. Any other failure is reported as is.
+        if (!/template|132001|132000|does not exist|not approved/i.test(String(pdfErr.message || pdfErr))) throw pdfErr;
+        await sendWhatsAppMessage({
+          phone: prof.mobile,
+          templateName: "receipt_ready_v3",
+          parameters: [memberName, installment, formatMoney(p.amount, cur), `${window.location.origin}/receipt/${p.id}`],
+        });
+        sentAs = "link";
+      }
       const sentAt = new Date().toISOString();
       await base44.entities.Payment.update(p.id, { receipt_sent_at: sentAt });
       setData((d) => ({ ...d, payment: { ...d.payment, receipt_sent_at: sentAt } }));
-      toast({ title: "Sent via WhatsApp" });
+      toast({
+        title: sentAs === "pdf" ? "Receipt PDF sent via WhatsApp" : "Sent as a link",
+        description: sentAs === "pdf" ? undefined : "The PDF template is still waiting for Meta approval, so the link version went out.",
+      });
     } catch (e) {
       toast({ title: "Could not send", description: e.message, variant: "destructive" });
     }

@@ -34,7 +34,7 @@ const handler = async (event) => {
   }
 
   try {
-    const { phone, message, templateName, parameters, memberProfileId, purpose } = JSON.parse(event.body);
+    const { phone, message, templateName, parameters, memberProfileId, purpose, document } = JSON.parse(event.body);
 
     if (!phone) {
       return {
@@ -61,19 +61,49 @@ const handler = async (event) => {
     };
 
     if (templateName && parameters) {
+      const components = [];
+      // A PDF goes out as the template's document header. It is uploaded to
+      // WhatsApp first and referenced by id, so no public link to the file
+      // exists anywhere.
+      if (document?.base64) {
+        const form = new FormData();
+        form.append("messaging_product", "whatsapp");
+        form.append("type", "application/pdf");
+        form.append(
+          "file",
+          new Blob([Buffer.from(document.base64, "base64")], { type: "application/pdf" }),
+          document.filename || "document.pdf"
+        );
+        const upload = await fetch(`https://graph.facebook.com/v20.0/${businessPhoneNumberId}/media`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}` },
+          body: form,
+        });
+        const uploaded = await upload.json();
+        if (!upload.ok || !uploaded.id) {
+          console.error("WhatsApp media upload error:", uploaded);
+          return {
+            statusCode: upload.status || 500,
+            body: JSON.stringify({ error: uploaded.error?.message || "Could not upload the PDF", details: uploaded }),
+          };
+        }
+        components.push({
+          type: "header",
+          parameters: [{ type: "document", document: { id: uploaded.id, filename: document.filename || "document.pdf" } }],
+        });
+      }
+      components.push({
+        type: "body",
+        parameters: parameters.map((param) => ({
+          type: "text",
+          text: param,
+        })),
+      });
       payload.type = "template";
       payload.template = {
         name: templateName,
         language: { code: "en" },
-        components: [
-          {
-            type: "body",
-            parameters: parameters.map((param) => ({
-              type: "text",
-              text: param,
-            })),
-          },
-        ],
+        components,
       };
     } else if (message) {
       payload.type = "text";

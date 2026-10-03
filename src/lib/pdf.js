@@ -13,7 +13,9 @@ export function buildInvoiceNumber({ group, payment }) {
  * Generates and downloads a CashBox invoice/receipt PDF with an embedded
  * QR code linking back to the in-app receipt.
  */
-export async function generateInvoicePdf({ payment, member, group, membership, plan, dividendAmount = 0, remainingBalance = null }) {
+// returnFile: hand back { blob, filename } (for attaching to a WhatsApp message)
+// instead of downloading it in the browser.
+export async function generateInvoicePdf({ payment, member, group, membership, plan, dividendAmount = 0, remainingBalance = null, returnFile = false }) {
   const cur = payment.currency || plan?.currency || "INR";
   const invoiceNumber = buildInvoiceNumber({ group, payment });
   const receiptUrl = `${window.location.origin}/receipt/${payment.id}`;
@@ -117,5 +119,7 @@ export async function generateInvoicePdf({ payment, member, group, membership, p
     y + 16 + qrSize + 12
   );
 
+  if (returnFile) return { blob: doc.output("blob"), filename: `${invoiceNumber}.pdf` };
   doc.save(`${invoiceNumber}.pdf`);
+  return null;
 }
