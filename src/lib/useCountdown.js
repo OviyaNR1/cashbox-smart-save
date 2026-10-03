@@ -12,10 +12,10 @@ export const CALL_DURATIONS = { call_1: 30, call_2: 20, final_call: 10 };
 // server's bid window for India (place_bid) matches this.
 const FINAL_CALL_SECONDS_INR = 16;
 
-// At the plan's minimum nobody can bid lower, so the final call is just the
-// count (amount + oru / rendu / moonu tharam, ~9s) and the auction closes right
-// after — not 16s of waiting for a bid that cannot be placed. India only.
-const FINAL_CALL_SECONDS_INR_AT_FLOOR = 11;
+// At the plan's minimum nobody can bid lower, so once the count (bid reaction +
+// amount + oru / rendu / moonu tharam, ~15s) has finished there is nothing to
+// wait for. India only.
+const FINAL_CALL_SECONDS_INR_AT_FLOOR = 15;
 
 export function callDuration(status, currency, atFloor = false) {
   if (status === "final_call" && atFloor && currency && currency !== "CAD") return FINAL_CALL_SECONDS_INR_AT_FLOOR;
