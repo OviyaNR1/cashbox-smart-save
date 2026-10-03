@@ -741,12 +741,12 @@ function Stat({ label, value }) {
   );
 }
 
-// Pre-start waiting message. Pops in and keeps a soft pulse + bouncing dots so
-// it's obvious the room is live and waiting — safe to animate here because
+// Pre-start waiting message. Pops in and shows bouncing dots so it's obvious
+// the room is live and waiting — safe to animate here because
 // there's no bidding on screen yet (the bidding screen itself stays still).
 function WaitingBanner({ children }) {
   return (
-    <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-4 animate-in fade-in zoom-in-95 duration-500 animate-pulse">
+    <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-4 animate-in fade-in zoom-in-95 duration-500">
       <div className="flex items-start gap-3">
         <span className="mt-1.5 flex gap-1 shrink-0" aria-hidden="true">
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" />
