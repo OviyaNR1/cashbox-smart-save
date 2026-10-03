@@ -775,9 +775,9 @@ export default function LiveAuction() {
 
 function Stat({ label, value }) {
   return (
-    <div className="bg-card rounded-2xl border border-border p-5">
-      <p className="text-xs uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-foreground truncate">{value}</p>
+    <div className="bg-card rounded-2xl border border-border p-4 sm:p-5 min-w-0">
+      <p className="text-[11px] sm:text-xs uppercase tracking-wider sm:tracking-widest text-muted-foreground break-words">{label}</p>
+      <p className="mt-2 text-xl sm:text-2xl font-semibold text-foreground tabular-nums break-words">{value}</p>
     </div>
   );
 }
