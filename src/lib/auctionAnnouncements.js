@@ -132,13 +132,11 @@ export function announceSignOff(currency) {
 // fallback once none of SPECIAL_REACTIONS below match. The English pool
 // mirrors it 1:1 (same size, same character) so "variety, not repetition"
 // carries over identically for Canada.
-// The old generic Tamil reaction pool (bid-reaction-1..7.mp3) is switched off:
-// several of those clips are "innum kammi vandhuchu…" lines the room doesn't
-// want, and they played after almost every bid. Until a new set is recorded,
-// India gets no generic reaction — only the special ones below (back-to-back,
-// first bid, last second, big drop, very low, close range) — and the call
-// line that follows still speaks the amount. The files stay in public/audio.
-const BID_REACTION_CLIPS = [];
+// Generic Tamil bid reactions. Two clips were taken out because the room asked
+// for them to go (transcribed to check): bid-reaction-2 ("Oh ho, innum kammi
+// vandhuchu") and bid-reaction-5 ("Aamaam, kammi bid vandhuchu"). The files
+// stay in public/audio. Kept: 1, 3, 4, 6, 7.
+const BID_REACTION_CLIPS = [1, 3, 4, 6, 7].map((n) => `/audio/bid-reaction-${n}.mp3`);
 const BID_REACTION_CLIPS_EN = [
   "/audio/en/bid-reaction-1.mp3",
   "/audio/en/bid-reaction-2.mp3",

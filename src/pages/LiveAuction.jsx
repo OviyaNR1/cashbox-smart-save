@@ -474,6 +474,10 @@ export default function LiveAuction() {
     !!myMembership && myMembership.status === "active" && !myMembership.has_won &&
     (myMembership.paid_installments || 0) < (group.current_month || 1) - 1;
   const membershipInactive = !!myMembership && myMembership.status !== "active";
+  // Final call has run its clock out: the server refuses new bids from here
+  // (place_bid), so the bid box goes away too — the card above already says
+  // "Bidding closed".
+  const finalCallEnded = auction.status === "final_call" && countdown === 0;
   // The member's own best (lowest) valid bid, if any — validBids is already
   // sorted ascending, so filtering it keeps that order.
   const myBestBid = validBids.find((b) => b.member_profile_id === myMembership?.member_profile_id);
@@ -667,7 +671,7 @@ export default function LiveAuction() {
               : "Bidding is open to members whose installments are paid up. Yours isn't yet — once your payment is approved you can bid in the next auction."}
           </p>
         </div>
-      ) : atFloorNow ? (
+      ) : finalCallEnded ? null : atFloorNow ? (
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 text-sm">
           <p className="font-medium text-emerald-400 flex items-center gap-2"><Gavel className="w-4 h-4" /> Minimum reached</p>
           <p className="text-xs text-muted-foreground mt-1">
