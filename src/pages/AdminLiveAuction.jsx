@@ -39,6 +39,13 @@ export default function AdminLiveAuction() {
   const [profiles, setProfiles] = useState([]);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // After Start Auction nothing else should need a click: once Final Call has
+  // run out with at least one bid, the auction closes itself (winner is picked
+  // server-side, the winner announcement and WhatsApp messages go out exactly
+  // as with the manual Close). A short visible countdown and a Hold button
+  // keep the admin in control.
+  const [autoClose, setAutoClose] = useState(true);
+  const [closingIn, setClosingIn] = useState(null);
   const [companyMonthRecorded, setCompanyMonthRecorded] = useState(false);
   const [me, setMe] = useState(null);
   const [watchingCount, setWatchingCount] = useState(0);
@@ -197,6 +204,32 @@ export default function AdminLiveAuction() {
   // below think a bid had just landed and start Call 1 -> Call 2 -> Final Call
   // inside the empty lobby. Every call-sequence effect checks this.
   const biddingLive = !!auction?.bidding_started_at;
+
+  // Longer than the server's bid window after Final Call (client clock + 2s
+  // slack, see place_bid), so no late bid can slip in after the auto-close.
+  const AUTO_CLOSE_GRACE_S = 5;
+  const autoClosedRef = useRef(null);
+  const closeAuctionRef = useRef(null);
+  useEffect(() => {
+    const ready =
+      biddingLive && autoClose && auction && auction.status === "final_call" &&
+      countdown === 0 && validBids.length > 0 && !busy && autoClosedRef.current !== auction.id;
+    if (!ready) { setClosingIn(null); return undefined; }
+    let left = AUTO_CLOSE_GRACE_S;
+    setClosingIn(left);
+    const id = setInterval(() => {
+      left -= 1;
+      if (left <= 0) {
+        clearInterval(id);
+        setClosingIn(null);
+        autoClosedRef.current = auction.id; // one attempt per auction, no retry loop
+        closeAuctionRef.current?.();
+      } else {
+        setClosingIn(left);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [biddingLive, autoClose, auction?.id, auction?.status, countdown, validBids.length, busy]);
 
   const autoAdvancedKeyRef = useRef(null);
   useEffect(() => {
@@ -428,6 +461,8 @@ export default function AdminLiveAuction() {
     loadAuction();
   };
 
+  closeAuctionRef.current = closeAuction;
+
   return (
     <div className="space-y-6">
       <LiveActivityToasts toasts={toasts} />
@@ -581,6 +616,13 @@ export default function AdminLiveAuction() {
             );
           })()}
 
+          {closingIn !== null && (
+            <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-sm font-medium text-amber-200">Final call is over — closing the auction automatically in {closingIn}s</p>
+              <Button variant="outline" onClick={() => setAutoClose(false)} className="rounded-full">Hold — I'll close it myself</Button>
+            </div>
+          )}
+
           <div className="bg-card rounded-2xl border border-border p-5">
             <p className="text-sm font-medium text-foreground flex items-center gap-2 mb-4"><Crown className="w-4 h-4 text-primary" /> Leaderboard</p>
             {validBids.length === 0 ? (
@@ -631,6 +673,10 @@ export default function AdminLiveAuction() {
               an admin can still make at any point bidding is active, but
               nothing before that should need a click at all. */}
           <div className="bg-card rounded-2xl border border-border p-5 flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none w-full">
+              <input type="checkbox" checked={autoClose} onChange={(e) => setAutoClose(e.target.checked)} className="w-4 h-4 accent-primary" />
+              Close automatically after Final Call ends (winner announced for you)
+            </label>
             <Button
               variant="outline"
               onClick={() => advanceCall("final_call")}
