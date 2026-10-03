@@ -238,15 +238,16 @@ export default function LiveAuction() {
 
   // The opening line ("ready ah? start panniralaama…") was only ever played
   // by the admin's screen. Members on their own phones heard nothing until
-  // the first bid, so the room's own device says it too when the auction
-  // opens right in front of them. Once per auction, and only if it just
-  // opened — someone joining a half-finished auction shouldn't hear it.
+  // the first bid, so the room's own device says it too the moment the admin
+  // presses Start Auction (bidding_started_at gets set). Once per auction, and
+  // only if it just started — someone joining a half-finished auction, or
+  // sitting in the lobby, shouldn't hear it.
   useEffect(() => {
     const auction = state.auction;
-    if (!auction || auction.status !== "open" || startAnnouncedRef.current.has(auction.id)) return;
+    if (!auction || auction.status !== "open" || !auction.bidding_started_at || startAnnouncedRef.current.has(auction.id)) return;
     if ((state.bids || []).some((b) => b.status === "valid")) return;
-    const openedAgo = Date.now() - new Date(auction.opened_at || auction.created_at).getTime();
-    if (openedAgo > 20000) return;
+    const startedAgo = Date.now() - new Date(auction.bidding_started_at).getTime();
+    if (startedAgo > 20000) return;
     startAnnouncedRef.current.add(auction.id);
     const { parts } = announceAuctionStart(auction.starting_amount, state.plan?.currency);
     speakAnnouncement(parts, { tag: "opening", maxAgeMs: 8000 });
@@ -429,6 +430,7 @@ export default function LiveAuction() {
             memberProfileId={state.myMembership?.member_profile_id}
             senderName={state.myName}
             onJoin={(name) => pushToast(`${name} joined`, "join")}
+            defaultOpen
           />
         )}
       </div>
@@ -507,6 +509,33 @@ export default function LiveAuction() {
           userId={state.me?.id}
           memberProfileId={myMembership?.member_profile_id}
           senderName={myName}
+        />
+      </div>
+    );
+  }
+
+  // The admin has opened the room but not pressed Start yet: members see only
+  // the chat (who has joined/left, who's online, with times) — no auction
+  // page, no voice, and place_bid refuses bids until bidding_started_at is
+  // set. The auction screen appears the moment the admin presses Start.
+  if (auction.status === "open" && !auction.bidding_started_at) {
+    return (
+      <div className="space-y-4">
+        <LiveActivityToasts toasts={toasts} />
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-primary">Live auction</p>
+          <h1 className="text-xl font-semibold text-foreground">Month {auction.month_number} · {group.group_name || group.group_code}</h1>
+          <p className="text-sm text-muted-foreground mt-1">Waiting for the admin to start — chat with your group while everyone joins.</p>
+        </div>
+        <AuctionPresenceChat
+          auctionId={auction.id}
+          groupId={group.id}
+          monthNumber={auction.month_number}
+          userId={state.me?.id}
+          memberProfileId={myMembership?.member_profile_id}
+          senderName={myName}
+          onJoin={(name) => pushToast(`${name} joined`, "join")}
+          defaultOpen
         />
       </div>
     );

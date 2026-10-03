@@ -286,7 +286,12 @@ export default function AdminLiveAuction() {
     setCompanyMonthRecorded(true);
   };
 
-  const startAuction = async () => {
+  // Two-step start. Step 1 opens the room: the auction row exists, so
+  // members' screens switch over and they can join and chat, but
+  // bidding_started_at stays NULL — nothing is spoken and place_bid refuses
+  // bids. Step 2 (startBidding) is the only thing that starts the AI voice
+  // and lets bids in, once the admin has given members time to join.
+  const openRoom = async () => {
     setBusy(true);
     const created = await base44.entities.Auction.create({
       group_id: group.id,
@@ -294,12 +299,35 @@ export default function AdminLiveAuction() {
       status: "open",
       starting_amount: startingAmount,
       min_decrement: plan.auction_min_decrement || 25,
+      bidding_started_at: null,
     });
-    logAudit({ module: "Live Auction", action: "start", record_id: created.id, details: `Started Month ${targetMonth} auction for group ${group.group_code} (starting ${startingAmount})` });
-    const { parts, visual } = announceAuctionStart(startingAmount, plan.currency);
+    logAudit({ module: "Live Auction", action: "open-room", record_id: created.id, details: `Opened the Month ${targetMonth} auction room for group ${group.group_code} (starting ${startingAmount})` });
+    setBusy(false);
+    loadAuction();
+  };
+
+  const startBidding = async () => {
+    setBusy(true);
+    await base44.entities.Auction.update(auction.id, { bidding_started_at: new Date().toISOString() });
+    logAudit({ module: "Live Auction", action: "start", record_id: auction.id, details: `Started Month ${auction.month_number} auction for group ${group.group_code} (starting ${auction.starting_amount})` });
+    const { parts, visual } = announceAuctionStart(auction.starting_amount, plan.currency);
     pushToast(visual, "default");
     cancelAnnouncements();
     speakAnnouncement(parts, { tag: "call", maxAgeMs: 8000 });
+    setBusy(false);
+    loadAuction();
+  };
+
+  // Backs out of an opened room before anything has started (opened by
+  // mistake, or the session is postponed).
+  const cancelRoom = async () => {
+    setBusy(true);
+    try {
+      await base44.entities.Auction.delete(auction.id);
+      logAudit({ module: "Live Auction", action: "cancel-room", record_id: auction.id, details: `Cancelled the Month ${auction.month_number} auction room for group ${group.group_code} before it started` });
+    } catch (err) {
+      alert(`Couldn't cancel the room: ${err.message || err}`);
+    }
     setBusy(false);
     loadAuction();
   };
@@ -447,9 +475,30 @@ export default function AdminLiveAuction() {
               <Eye className="w-3.5 h-3.5" /> {watchingCount} member{watchingCount === 1 ? "" : "s"} already waiting in the room
             </p>
           )}
-          <Button onClick={startAuction} disabled={busy} className="bg-primary hover:bg-primary/90 rounded-full">
-            <Gavel className="w-4 h-4 mr-1" /> {busy ? "Starting…" : `Start Auction for Month ${targetMonth}`}
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Opening the room lets members join and chat. Nothing is spoken and no bids are accepted until you press Start Auction.
+          </p>
+          <Button onClick={openRoom} disabled={busy} className="bg-primary hover:bg-primary/90 rounded-full">
+            <Gavel className="w-4 h-4 mr-1" /> {busy ? "Opening…" : `Open Auction Room for Month ${targetMonth}`}
           </Button>
+        </div>
+      )}
+
+      {groupId && plan && !isCompanyMonth && auction && auction.status !== "closed" && !auction.bidding_started_at && (
+        <div className="bg-card rounded-2xl border border-border p-8 text-center space-y-4">
+          <p className="text-sm font-semibold text-foreground">Month {auction.month_number} room is open</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Members can join and chat now. When you press Start Auction the AI voice begins and bidding opens at {formatMoney(auction.starting_amount, plan.currency)}.
+          </p>
+          <p className="flex items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Eye className="w-3.5 h-3.5" /> {watchingCount} member{watchingCount === 1 ? "" : "s"} in the room
+          </p>
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <Button onClick={startBidding} disabled={busy} className="bg-primary hover:bg-primary/90 rounded-full">
+              <Gavel className="w-4 h-4 mr-1" /> {busy ? "Starting…" : "Start Auction"}
+            </Button>
+            <Button variant="outline" onClick={cancelRoom} disabled={busy} className="rounded-full">Cancel room</Button>
+          </div>
         </div>
       )}
 
@@ -479,7 +528,7 @@ export default function AdminLiveAuction() {
         />
       )}
 
-      {groupId && plan && !isCompanyMonth && auction && auction.status !== "closed" && (
+      {groupId && plan && !isCompanyMonth && auction && auction.status !== "closed" && auction.bidding_started_at && (
         <>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 text-xs font-medium tabular-nums">

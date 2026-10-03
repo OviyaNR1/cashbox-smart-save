@@ -49,13 +49,15 @@ const formatTime = (iso) => {
 // passed once it's known and gets attached to new messages/logged events
 // from then on, but is never required for the room itself to work; the same
 // room (and its history) carries straight through into the actual auction.
-export default function AuctionPresenceChat({ auctionId, groupId, monthNumber, userId, memberProfileId, senderName, onJoin, onPresenceChange }) {
+export default function AuctionPresenceChat({ auctionId, groupId, monthNumber, userId, memberProfileId, senderName, onJoin, onPresenceChange, defaultOpen }) {
   // Starts open, not collapsed to the floating bubble — during a live
   // session (and the pre-start waiting room) the chat is the main point of
   // coordination, not a secondary panel someone has to remember to click open.
   // Except on a phone: there the open panel sits over the bid box and
   // leaderboard, so it starts as the floating bubble and opens on tap.
-  const [open, setOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 640);
+  // defaultOpen: the waiting room / pre-start lobby passes true — there the
+  // chat IS the screen, nothing is hidden behind it.
+  const [open, setOpen] = useState(() => defaultOpen ?? (typeof window === "undefined" || window.innerWidth >= 640));
   const [present, setPresent] = useState([]);
   const [messages, setMessages] = useState([]);
   const [audioUrls, setAudioUrls] = useState({});
