@@ -410,18 +410,18 @@ export default function LiveAuction() {
             {state.group ? `${state.group.group_name || state.group.group_code} — Month ${state.monthNumber}` : "Bid Now"}
           </h1>
         </div>
-        <div className="bg-card rounded-2xl border border-border p-12 text-center text-sm text-muted-foreground space-y-3">
-          <p>
-            {state.group
-              ? "Waiting for your group's admin to start this month's auction — join the chat below while you wait."
-              : "No open auction right now. Check back once your group's admin starts this month's auction."}
-          </p>
-          {state.group && (
-            <p className="flex items-center justify-center gap-1.5 text-xs font-medium tabular-nums">
-              <Radio className="w-3 h-3 animate-pulse text-rose-400" /> Waiting {waitingElapsed}
+        {state.group ? (
+          <div className="space-y-2">
+            <WaitingBanner>Waiting for your group's admin to start this month's auction — join the chat below while you wait.</WaitingBanner>
+            <p className="flex items-center justify-center gap-1.5 text-xs font-medium tabular-nums text-muted-foreground">
+              <Radio className="w-3 h-3 text-rose-400" /> Waiting {waitingElapsed}
             </p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="bg-card rounded-2xl border border-border p-12 text-center text-sm text-muted-foreground">
+            <p>No open auction right now. Check back once your group's admin starts this month's auction.</p>
+          </div>
+        )}
         {state.group && <SoundUnlockBanner />}
         {state.group && (
           <AuctionPresenceChat
@@ -527,8 +527,8 @@ export default function LiveAuction() {
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-primary">Live auction</p>
           <h1 className="text-xl font-semibold text-foreground">Month {auction.month_number} · {group.group_name || group.group_code}</h1>
-          <p className="text-sm text-muted-foreground mt-1">Waiting for the admin to start — chat with your group while everyone joins.</p>
         </div>
+        <WaitingBanner>Waiting for the admin to start — chat with your group while everyone joins.</WaitingBanner>
         <SoundUnlockBanner />
         <AuctionPresenceChat
           auctionId={auction.id}
@@ -737,6 +737,24 @@ function Stat({ label, value }) {
     <div className="bg-card rounded-2xl border border-border p-5">
       <p className="text-xs uppercase tracking-widest text-muted-foreground">{label}</p>
       <p className="mt-2 text-2xl font-semibold text-foreground truncate">{value}</p>
+    </div>
+  );
+}
+
+// Pre-start waiting message. Pops in and keeps a soft pulse + bouncing dots so
+// it's obvious the room is live and waiting — safe to animate here because
+// there's no bidding on screen yet (the bidding screen itself stays still).
+function WaitingBanner({ children }) {
+  return (
+    <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-4 animate-in fade-in zoom-in-95 duration-500 animate-pulse">
+      <div className="flex items-start gap-3">
+        <span className="mt-1.5 flex gap-1 shrink-0" aria-hidden="true">
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" />
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-bounce [animation-delay:150ms]" />
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-bounce [animation-delay:300ms]" />
+        </span>
+        <p className="text-sm font-medium text-amber-200">{children}</p>
+      </div>
     </div>
   );
 }
