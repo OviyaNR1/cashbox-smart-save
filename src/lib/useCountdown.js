@@ -5,12 +5,12 @@ import { playTick, playUrgentTick } from "@/lib/sound";
 // a short final call. 60s/60s/30s read as the app stalling.
 export const CALL_DURATIONS = { call_1: 30, call_2: 20, final_call: 10 };
 
-// The Tamil final count is made of recorded clips that add up to ~11s on
-// their own (oru + rendu + moonu tharam), so with the amount and pauses it
-// needs ~15s; 18s leaves a little slack. A 10s stage cut the count off
-// mid-line and showed "bidding closed" while the voice was still counting.
-// The server's bid window for India (place_bid) matches this.
-const FINAL_CALL_SECONDS_INR = 18;
+// The Tamil final count is made of recorded clips (oru + rendu + moonu
+// tharam) that, with the amount, run ~13s, plus the bid reaction that can
+// play just before it. A 10s stage cut the count off mid-line and showed
+// "bidding closed" while the voice was still counting; 16s fits it. The
+// server's bid window for India (place_bid) matches this.
+const FINAL_CALL_SECONDS_INR = 16;
 
 export function callDuration(status, currency) {
   if (status === "final_call" && currency && currency !== "CAD") return FINAL_CALL_SECONDS_INR;

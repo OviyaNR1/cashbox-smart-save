@@ -300,7 +300,7 @@ export function speakCallAnnouncement(status, amount, currency, atFloor = false,
       });
     } else {
       // Same fix as the English one: the amount before every count plus the
-      // long pauses made this ~22s for a final call that lasts 18s, so the
+      // long pauses made this ~22s for a final call that lasts 16s, so the
       // count was still going after the screen said bidding had closed.
       // Amount once, then oru / rendu / moonu tharam with short beats (~15s).
       parts.push(...amountParts);
