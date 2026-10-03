@@ -1,11 +1,15 @@
 import { jsPDF } from "jspdf";
 import QRCode from "qrcode";
-import { formatMoney } from "@/lib/currency";
 
 // The PDF's built-in font has no rupee sign (it prints as a stray superscript
-// 1), so amounts and any text containing one are written with "Rs." instead.
-const pdfSafe = (t) => String(t ?? "-").replaceAll("\u20B9", "Rs. ");
-const pdfMoney = (n, currency) => pdfSafe(formatMoney(n, currency));
+// 1), so text containing one is written with "INR" instead, and amounts are
+// shown as "INR 70,500" / "CAD 5,000.00".
+const pdfSafe = (t) => String(t ?? "-").replaceAll("\u20B9", "INR ");
+const pdfMoney = (n, currency) => {
+  const num = Number(n || 0);
+  if (currency === "CAD") return `CAD ${num.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `INR ${num.toLocaleString("en-IN")}`;
+};
 
 export function buildInvoiceNumber({ group, payment }) {
   const groupCode = group?.group_code || "GRP";
