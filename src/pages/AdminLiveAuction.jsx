@@ -191,9 +191,16 @@ export default function AdminLiveAuction() {
   // whatever clip was playing) running with nothing on screen to match.
   useEffect(() => () => cancelAnnouncements(), []);
 
+  // While the room is open but Start hasn't been pressed (bidding_started_at is
+  // null) nothing about the call sequence may run. The page still holds the
+  // previous month's bids in memory right after a close, which made the effects
+  // below think a bid had just landed and start Call 1 -> Call 2 -> Final Call
+  // inside the empty lobby. Every call-sequence effect checks this.
+  const biddingLive = !!auction?.bidding_started_at;
+
   const autoAdvancedKeyRef = useRef(null);
   useEffect(() => {
-    if (countdown === null || countdown > 0 || !auction) return;
+    if (!biddingLive || countdown === null || countdown > 0 || !auction) return;
     const stageKey = `${auction.id}-${auction.status}-${auction.call_stage_started_at}`;
     if (autoAdvancedKeyRef.current === stageKey) return;
     if (auction.status === "call_1") {
@@ -212,7 +219,7 @@ export default function AdminLiveAuction() {
   // further nudge for that stage.
   const silenceStageRef = useRef({ key: null, tier: 0 });
   useEffect(() => {
-    if (countdown === null || !auction || !["call_1", "call_2"].includes(auction.status)) return;
+    if (!biddingLive || countdown === null || !auction || !["call_1", "call_2"].includes(auction.status)) return;
     const half = Math.floor(CALL_DURATIONS[auction.status] / 2);
     const nearEnd = 8;
     const stageKey = `${auction.id}:${auction.status}:${auction.call_stage_started_at}`;
@@ -234,7 +241,7 @@ export default function AdminLiveAuction() {
     }
   }, [countdown, auction?.id, auction?.status, auction?.call_stage_started_at, bids]);
 
-  useStageChatter(auction, countdown, plan?.currency);
+  useStageChatter(biddingLive ? auction : null, countdown, plan?.currency);
 
   // A real auctioneer starts calling the moment the first bid actually
   // comes in — not on a delay, and not waiting for the admin to notice and
@@ -250,7 +257,7 @@ export default function AdminLiveAuction() {
   // anymore.
   const leadingBidIdRef = useRef(null);
   useEffect(() => {
-    if (!auction) { leadingBidIdRef.current = null; return; }
+    if (!auction || !biddingLive) { leadingBidIdRef.current = null; return; }
     const leadingId = validBids[0]?.id || null;
     const isFirstBidOnOpenFloor = auction.status === "open" && leadingId;
     const inCallStage = ["call_1", "call_2", "final_call"].includes(auction.status);
