@@ -38,7 +38,7 @@ export default function AdminDashboard() {
         base44.entities.MemberProfile.list("-created_date", 500),
         base44.entities.ChitGroup.list("-created_date", 200),
         base44.entities.Payment.list("-payment_date", 500),
-        base44.entities.Winner.list("-announcement_date", 20),
+        base44.entities.Winner.list("-announcement_date", 60),
         base44.entities.ChitPlan.list("-created_date", 200),
       ]);
       setState({ profiles, groups, payments, winners, plans });
@@ -56,7 +56,8 @@ export default function AdminDashboard() {
   const filterCurrency = countryFilter === "Canada" ? "CAD" : "INR";
   const plans = allPlans.filter((p) => (p.currency || "INR") === filterCurrency);
   const planIds = new Set(plans.map((p) => p.id));
-  const groups = allGroups.filter((g) => planIds.has(g.plan_id));
+  // Practice and demo groups are test data: they stay out of every dashboard number and list.
+  const groups = allGroups.filter((g) => planIds.has(g.plan_id) && !g.is_demo);
   const groupIds = new Set(groups.map((g) => g.id));
   const profiles = allProfiles.filter((p) => (p.country || "India") === countryFilter);
   const payments = allPayments.filter((p) => groupIds.has(p.group_id));
