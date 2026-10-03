@@ -124,8 +124,16 @@ export function playFanfare() {
 // A bright, quick three-note "coin drop" — a new bid was placed. Distinct
 // from playCallBell (call-stage change) and playNewMessage (chat) so it
 // reads unmistakably as "someone bid," not just generic activity.
+// When the last bid chime played. The countdown from the stage that the bid
+// just interrupted can still fire one more tick a beat after the chime (the
+// page only learns the stage restarted after a reload), which sounded like a
+// second beep right behind it — so ticks stay silent briefly after a chime.
+let lastBidChimeAt = 0;
+const TICK_QUIET_AFTER_BID_MS = 1500;
+
 export function playBidPlaced() {
   if (!isSoundEnabled()) return;
+  lastBidChimeAt = Date.now();
   try {
     tone(1318.51, 0, 0.09, "square", 0.18);
     tone(1567.98, 0.07, 0.09, "square", 0.18);
@@ -226,6 +234,7 @@ export function playStageChange(status) {
 // whole way through. The last 5 seconds of Call 1/2 keep the sharp urgent tick.
 export function playStageTick(status, secondsLeft) {
   if (!isSoundEnabled()) return;
+  if (Date.now() - lastBidChimeAt < TICK_QUIET_AFTER_BID_MS) return;
   try {
     if (status === "final_call") {
       tone(1568, 0, 0.06, "square", 0.22);

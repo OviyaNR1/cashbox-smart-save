@@ -265,7 +265,8 @@ const STAGE_CHATTER_CLIPS = {
   // a second dividend line — two of five keep-going lines about the dividend
   // made it repeat too often, so only hold-2 ("Dividend kammi aagum pa…")
   // stays.
-  hold: [1, 2, 4, 5, 7, 8, 9, 10].map((n) => `/audio/stage-hold-${n}.mp3`),
+  // 9 ("pa pa pa bid podunga…") was rejected as not sounding right.
+  hold: [1, 2, 4, 5, 7, 8, 10].map((n) => `/audio/stage-hold-${n}.mp3`),
   "final-warning": ["/audio/stage-urgent-1.mp3"],
   "last-seconds": ["/audio/stage-urgent-2.mp3"],
 };
