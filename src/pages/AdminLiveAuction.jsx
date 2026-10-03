@@ -68,6 +68,8 @@ export default function AdminLiveAuction() {
 
   const liveAuctionGroups = useMemo(
     () => groups.filter((g) => {
+      // Cancelled/completed groups (e.g. the hidden practice and demo groups) don't belong in the list.
+      if (g.status !== "active") return false;
       const plan = plans.find((p) => p.id === g.plan_id);
       if (plan?.model !== "live_auction") return false;
       return ((plan.currency || "INR") === "CAD" ? "Canada" : "India") === countryFilter;
