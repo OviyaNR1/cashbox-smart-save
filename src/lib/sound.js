@@ -199,6 +199,49 @@ export function playUrgentTick() {
   }
 }
 
+// A distinct cue for each stage change, so moving from Call 1 to Call 2 to
+// Final Call is heard and not just seen: Call 1 keeps the plain bell, Call 2
+// gets a rising three-note chime, Final Call a low drum hit followed by an
+// urgent rising alarm.
+export function playStageChange(status) {
+  if (!isSoundEnabled()) return;
+  try {
+    if (status === "call_2") {
+      [784, 1046.5, 1318.5].forEach((freq, i) => tone(freq, i * 0.13, 0.28, "triangle", 0.28));
+    } else if (status === "final_call") {
+      tone(110, 0, 0.5, "sine", 0.5);
+      noiseBurst(0, 0.18, 0.5);
+      [1046.5, 1318.5, 1760].forEach((freq, i) => tone(freq, 0.22 + i * 0.11, 0.1, "square", 0.22));
+      tone(2093, 0.58, 0.35, "square", 0.22);
+    } else {
+      playCallBell();
+    }
+  } catch {
+    // ignore
+  }
+}
+
+// Per-second tick, different for each stage: a soft tick in Call 1, a
+// brighter one in Call 2, and in Final Call a double tick every second the
+// whole way through. The last 5 seconds of Call 1/2 keep the sharp urgent tick.
+export function playStageTick(status, secondsLeft) {
+  if (!isSoundEnabled()) return;
+  try {
+    if (status === "final_call") {
+      tone(1568, 0, 0.06, "square", 0.22);
+      tone(1568, 0.14, 0.06, "square", 0.22);
+    } else if (secondsLeft <= 5) {
+      playUrgentTick();
+    } else if (status === "call_2") {
+      tone(1175, 0, 0.06, "triangle", 0.16);
+    } else {
+      playTick();
+    }
+  } catch {
+    // ignore
+  }
+}
+
 // The call-stage label — called out against the current lowest bid before
 // it's sold, instead of a generic "any lower bids?". Shared between the
 // admin's calling screen and members' live view so both sides announce and

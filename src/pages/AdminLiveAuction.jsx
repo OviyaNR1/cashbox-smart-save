@@ -8,13 +8,14 @@ import {
 import { formatMoney } from "@/lib/currency";
 import { getStartingAmount, calcAuctionOutcome } from "@/lib/liveAuctionEngine";
 import { logAudit } from "@/lib/audit";
-import { playCallBell, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
+import { playStageChange, playGavel, playBidPlaced, CALL_TERMS, speakCallAnnouncement } from "@/lib/sound";
 import { speakAnnouncement, cancelAnnouncements } from "@/lib/tts";
 import { announceAuctionStart, announceAuctionClosed, announceWinner, announceSignOff, announceNewLowestBid, announceSilence, shouldAnnounceBid } from "@/lib/auctionAnnouncements";
 import { fireConfetti } from "@/lib/confetti";
 import { sendWhatsAppMessage } from "@/lib/sendWhatsAppMessage";
 import { useCountdown, CALL_DURATIONS } from "@/lib/useCountdown";
 import { useStageChatter } from "@/lib/useStageChatter";
+import { callStageStyle } from "@/lib/callStageStyle";
 import { useElapsedTime } from "@/lib/useElapsedTime";
 import { useLiveToasts } from "@/lib/useLiveToasts";
 import { Gavel, Crown, Trophy, Building2, Radio, Eye } from "lucide-react";
@@ -307,7 +308,7 @@ export default function AdminLiveAuction() {
     setBusy(true);
     await base44.entities.Auction.update(auction.id, { status: nextStatus, call_stage_started_at: new Date().toISOString() });
     logAudit({ module: "Live Auction", action: nextStatus, record_id: auction.id, details: `${CALL_LABELS[nextStatus]} (${CALL_TERMS[nextStatus]}) started for group ${group.group_code} at ${formatMoney(calledAmount, plan.currency)}` });
-    playCallBell();
+    playStageChange(nextStatus);
     const atFloor = reachedFloor(validBids[0]?.amount, plan.auction_min_bid, auction.min_decrement);
     speakCallAnnouncement(nextStatus, calledAmount, plan.currency, atFloor, auction.id);
     setBusy(false);
@@ -509,21 +510,17 @@ export default function AdminLiveAuction() {
                 </div>
               );
             }
-            const tier = countdown <= 10 ? "dramatic" : countdown <= 30 ? "elevated" : "normal";
+            const look = callStageStyle(auction.status, countdown);
             return (
               <div
-                className={`rounded-2xl p-6 text-center border transition-colors motion-reduce:animate-none ${
-                  tier === "dramatic"
-                    ? "bg-rose-500/20 border-rose-500/40 animate-pulse"
-                    : tier === "elevated"
-                    ? "bg-rose-500/10 border-rose-500/25"
-                    : "bg-amber-500/10 border-amber-500/20"
-                }`}
+                key={auction.status}
+                className={`rounded-2xl p-6 text-center border transition-colors motion-reduce:animate-none animate-in fade-in zoom-in-95 duration-500 ${look.card}`}
               >
-                <p className={`text-sm font-semibold mb-1 tracking-wide ${tier === "normal" ? "text-amber-400" : "text-rose-400"}`}>
-                  {formatMoney(calledAmount, plan.currency)} — {CALL_TERMS[auction.status]}
+                <p className={`text-sm font-semibold mb-1 tracking-wide ${look.label}`}>
+                  {look.icon} {formatMoney(calledAmount, plan.currency)} — {CALL_TERMS[auction.status]}
                 </p>
-                <p className={`font-bold text-foreground tabular-nums transition-all ${tier === "dramatic" ? "text-7xl" : "text-5xl"}`}>{countdown}</p>
+                <p className={`font-bold text-foreground tabular-nums transition-all ${look.number}`}>{countdown}</p>
+                {look.hint && <p className="text-xs text-rose-300 mt-1">{look.hint}</p>}
               </div>
             );
           })()}

@@ -53,7 +53,9 @@ export default function AuctionPresenceChat({ auctionId, groupId, monthNumber, u
   // Starts open, not collapsed to the floating bubble — during a live
   // session (and the pre-start waiting room) the chat is the main point of
   // coordination, not a secondary panel someone has to remember to click open.
-  const [open, setOpen] = useState(true);
+  // Except on a phone: there the open panel sits over the bid box and
+  // leaderboard, so it starts as the floating bubble and opens on tap.
+  const [open, setOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 640);
   const [present, setPresent] = useState([]);
   const [messages, setMessages] = useState([]);
   const [audioUrls, setAudioUrls] = useState({});

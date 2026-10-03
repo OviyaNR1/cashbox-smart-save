@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { playTick, playUrgentTick } from "@/lib/sound";
+import { playStageTick } from "@/lib/sound";
 
 // Pace of a real live auction: a relaxed first call, a tighter second, then
 // a short final call. 60s/60s/30s read as the app stalling.
@@ -39,10 +39,7 @@ export function useCountdown(callStageStartedAt, status, currency) {
       const elapsed = (Date.now() - new Date(callStageStartedAt).getTime()) / 1000;
       const next = Math.max(0, Math.ceil(duration - elapsed));
       setState({ key: stageKey, remaining: next });
-      if (!isFirst && next > 0) {
-        if (next <= 5) playUrgentTick();
-        else playTick();
-      }
+      if (!isFirst && next > 0) playStageTick(status, next);
     };
     tick(true);
     const id = setInterval(() => tick(false), 1000);
