@@ -170,10 +170,11 @@ export default function Winners() {
   };
 
   const markPaid = async (w) => {
-    await base44.entities.Winner.update(w.id, { status: "paid" });
+    const paidAt = new Date().toISOString();
+    await base44.entities.Winner.update(w.id, { status: "paid", paid_at: paidAt });
     logAudit({ module: "Winners", action: "mark-paid", record_id: w.id, details: `Marked Month ${w.month_number} winner "${w.member_name}" as paid` });
-    setWinners((ws) => ws.map((x) => (x.id === w.id ? { ...x, status: "paid" } : x)));
-    if (canSendReceipt(w)) await sendReceipt({ ...w, status: "paid" });
+    setWinners((ws) => ws.map((x) => (x.id === w.id ? { ...x, status: "paid", paid_at: paidAt } : x)));
+    if (canSendReceipt(w)) await sendReceipt({ ...w, status: "paid", paid_at: paidAt });
   };
 
   return (

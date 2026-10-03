@@ -133,6 +133,13 @@ export async function generateInvoicePdf({ payment, member, group, membership, p
   return null;
 }
 
+// "2026-09-05" -> "5 Sep 2026" (parsed by hand so the date never shifts with the timezone)
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const pdfDate = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : String(iso || "-");
+};
+
 export function buildPayoutNumber({ group, winner }) {
   return `PAY-${group?.group_code || "GRP"}-M${winner.month_number}-${String(winner.id).slice(-6).toUpperCase()}`;
 }
@@ -194,9 +201,9 @@ export async function generatePayoutReceiptPdf({ winner, member, group, plan, pa
   field("Plan", plan?.plan_name, colB);
   y += 44;
   field("Month won", `Month ${winner.month_number}`, marginX);
-  field("Announced on", winner.announcement_date, colB);
+  field("Announced on", pdfDate(winner.announcement_date), colB);
   y += 44;
-  field("Paid on", paidDate, marginX);
+  field("Paid on", pdfDate(paidDate), marginX);
   field("Paid by", paidBy || "CashBox admin", colB);
   y += 52;
 

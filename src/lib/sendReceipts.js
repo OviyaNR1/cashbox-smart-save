@@ -74,7 +74,9 @@ export async function sendInstallmentReceiptById(paymentId, prof) {
 // The prize payout receipt, sent when the admin marks a winner as paid.
 export async function sendPayoutReceipt({ winner, prof, group, plan, paidBy }) {
   if (!prof?.mobile) throw new Error("The winner has no phone number on file.");
-  const paidDate = new Date().toISOString().slice(0, 10);
+  // The day the admin clicked Mark paid (stored on the winner), so a receipt that
+  // is sent or resent later still carries the real payment date.
+  const paidDate = new Date(winner.paid_at || Date.now()).toLocaleDateString("en-CA");
   const { blob, filename } = await generatePayoutReceiptPdf({ winner, member: prof, group, plan, paidDate, paidBy, returnFile: true });
   const base64 = await blobToBase64(blob);
   await sendWhatsAppMessage({
