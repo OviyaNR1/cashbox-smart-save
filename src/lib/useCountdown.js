@@ -5,10 +5,22 @@ import { playTick, playUrgentTick } from "@/lib/sound";
 // a short final call. 60s/60s/30s read as the app stalling.
 export const CALL_DURATIONS = { call_1: 30, call_2: 20, final_call: 10 };
 
+// The Tamil final count is made of recorded clips that add up to ~11s on
+// their own (oru + rendu + moonu tharam), so with the amount and pauses it
+// needs ~15s; 18s leaves a little slack. A 10s stage cut the count off
+// mid-line and showed "bidding closed" while the voice was still counting.
+// The server's bid window for India (place_bid) matches this.
+const FINAL_CALL_SECONDS_INR = 18;
+
+export function callDuration(status, currency) {
+  if (status === "final_call" && currency && currency !== "CAD") return FINAL_CALL_SECONDS_INR;
+  return CALL_DURATIONS[status];
+}
+
 // Countdown for a live-auction call stage. Ticks audibly once per second and
 // switches to an urgent tick for the last 5 seconds.
-export function useCountdown(callStageStartedAt, status) {
-  const duration = CALL_DURATIONS[status];
+export function useCountdown(callStageStartedAt, status, currency) {
+  const duration = callDuration(status, currency);
   // The value is stored with the stage it was computed for. When a stage
   // changes, `remaining` from the PREVIOUS stage (0, if it just expired)
   // used to be returned for one render before the effect below recomputed

@@ -20,6 +20,7 @@ import { Gavel, Crown, Trophy, Building2, Radio, Eye } from "lucide-react";
 import { useAdminCountry } from "@/lib/AdminCountryContext";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
 import LiveActivityToasts from "@/components/auction/LiveActivityToasts";
+import { reachedFloor } from "@/lib/auctionFloor";
 
 const CALL_LABELS = { call_1: "Call 1", call_2: "Call 2", final_call: "Final Call" };
 
@@ -168,7 +169,7 @@ export default function AdminLiveAuction() {
   const profileOf = (id) => profiles.find((p) => p.id === id);
   const validBids = bids.filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
   const rejectedBids = bids.filter((b) => b.status === "rejected");
-  const countdown = useCountdown(auction?.call_stage_started_at, auction?.status);
+  const countdown = useCountdown(auction?.call_stage_started_at, auction?.status, plan?.currency);
   useEffect(() => { countdownRef.current = countdown; }, [countdown]);
   const elapsed = useElapsedTime(auction?.status !== "closed" ? auction?.created_at : null);
 
@@ -277,7 +278,11 @@ export default function AdminLiveAuction() {
     const inCallStage = ["call_1", "call_2", "final_call"].includes(auction.status);
     const outbidMidCall = inCallStage && leadingBidIdRef.current && leadingId && leadingId !== leadingBidIdRef.current;
     if (isFirstBidOnOpenFloor || outbidMidCall) {
-      advanceCall("call_1");
+      // A bid that reaches the plan's minimum can't be undercut, so there is
+      // nothing left to wait for: go straight to Final Call instead of
+      // spending 50s of Call 1/Call 2 asking for bids nobody can place.
+      const atFloorNow = reachedFloor(validBids[0].amount, plan?.auction_min_bid, auction.min_decrement);
+      advanceCall(atFloorNow ? "final_call" : "call_1");
     }
     leadingBidIdRef.current = leadingId;
   }, [validBids[0]?.id, auction?.status]);
@@ -326,8 +331,8 @@ export default function AdminLiveAuction() {
     await base44.entities.Auction.update(auction.id, { status: nextStatus, call_stage_started_at: new Date().toISOString() });
     logAudit({ module: "Live Auction", action: nextStatus, record_id: auction.id, details: `${CALL_LABELS[nextStatus]} (${CALL_TERMS[nextStatus]}) started for group ${group.group_code} at ${formatMoney(calledAmount, plan.currency)}` });
     playCallBell();
-    const atFloor = plan.auction_min_bid > 0 && calledAmount <= plan.auction_min_bid;
-    speakCallAnnouncement(nextStatus, calledAmount, plan.currency, atFloor);
+    const atFloor = reachedFloor(validBids[0]?.amount, plan.auction_min_bid, auction.min_decrement);
+    speakCallAnnouncement(nextStatus, calledAmount, plan.currency, atFloor, auction.id);
     setBusy(false);
     loadAuction();
   };

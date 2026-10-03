@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import AuctionPresenceChat from "@/components/auction/AuctionPresenceChat";
 import LiveActivityToasts from "@/components/auction/LiveActivityToasts";
+import { reachedFloor } from "@/lib/auctionFloor";
 
 // place_bid()'s rejection_reason is written for the audit log, not for a
 // member reading it mid-auction — translate the handful of fixed strings it
@@ -206,7 +207,7 @@ export default function LiveAuction() {
     return () => { supabase.removeChannel(channel); };
   }, [state.auction?.id, load]);
 
-  const countdown = useCountdown(state.auction?.call_stage_started_at, state.auction?.status);
+  const countdown = useCountdown(state.auction?.call_stage_started_at, state.auction?.status, state.plan?.currency);
   const countdownRef = useRef(null);
   useEffect(() => { countdownRef.current = countdown; }, [countdown]);
   const elapsed = useElapsedTime(state.auction?.status !== "closed" ? state.auction?.created_at : null);
@@ -264,8 +265,8 @@ export default function LiveAuction() {
         playCallBell();
         const validBidsNow = (state.bids || []).filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
         const calledAmount = validBidsNow[0]?.amount ?? auction.starting_amount;
-        const atFloor = state.plan?.auction_min_bid > 0 && calledAmount <= state.plan.auction_min_bid;
-        speakCallAnnouncement(auction.status, calledAmount, state.plan?.currency, atFloor);
+        const atFloor = reachedFloor(validBidsNow[0]?.amount, state.plan?.auction_min_bid, auction.min_decrement);
+        speakCallAnnouncement(auction.status, calledAmount, state.plan?.currency, atFloor, auction.id);
       } else if (auction.status === "closed") {
         const iWon = state.myMembership && auction.winner_member_profile_id === state.myMembership.member_profile_id;
         const winnerName = state.profiles?.find((p) => p.id === auction.winner_member_profile_id)?.full_name || "Member";
@@ -395,6 +396,10 @@ export default function LiveAuction() {
   const validBids = bids.filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
   const myBids = bids.filter((b) => b.member_profile_id === myMembership?.member_profile_id);
   const lowest = validBids[0];
+  // Once the next valid bid would fall under the plan's minimum, nobody can
+  // bid lower: asking for "an amount between $3,500 and $3,400" is
+  // impossible, so the bid box is replaced by a plain "minimum reached".
+  const atFloorNow = reachedFloor(lowest?.amount, plan.auction_min_bid, auction.min_decrement);
   const iAmWinning = lowest && myMembership && lowest.member_profile_id === myMembership.member_profile_id;
   // The member's own best (lowest) valid bid, if any — validBids is already
   // sorted ascending, so filtering it keeps that order.
@@ -568,6 +573,14 @@ export default function LiveAuction() {
       {myMembership?.has_won ? (
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5 text-sm text-emerald-400 flex items-center gap-2">
           <Building2 className="w-4 h-4" /> You've already won this group — bidding is closed for you.
+        </div>
+      ) : atFloorNow ? (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-5 text-sm">
+          <p className="font-medium text-emerald-400 flex items-center gap-2"><Gavel className="w-4 h-4" /> Minimum reached</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {formatMoney(plan.auction_min_bid, plan.currency)} is the lowest this plan allows, so no lower bid is possible.
+            {iAmWinning ? " You are the winning bidder — the auction closes shortly." : " The auction closes shortly."}
+          </p>
         </div>
       ) : (
         <div className="bg-primary/5 rounded-2xl border-2 border-primary/40 p-5">

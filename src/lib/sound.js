@@ -258,13 +258,23 @@ const FINAL_CALL_CLIPS_EN = [
   { clip: "/audio/en/final-three-times.mp3", pauseAfter: 0 },
 ];
 
+// How many Call 1 lines each auction has already had. Every new bid restarts
+// Call 1, and replaying the full "okay members, current lowest <amount>,
+// anyone going lower?" speech after every single bid (right after the bid
+// reaction has already said the new amount) is what made the room sound
+// like a loop. The first Call 1 of an auction gets the full line; restarts
+// after that say just the new amount, plus the invitation line every third
+// time. India only: the English (Canada) flow has more varied lines and
+// plays as-is.
+const call1Spoken = new Map();
+
 // atFloor: the current lowest bid has already hit the plan's minimum
 // allowed bid — no lower bid can legally be accepted from here. Call 1/2's
 // "b" line is specifically the "yaaraavadhu kammiya bidding panreengala" /
 // "can anyone go lower" invitation to bid even lower, which would be
 // actively misleading at that point, so it's dropped — just the amount is
 // announced, no invitation.
-export function speakCallAnnouncement(status, amount, currency, atFloor = false) {
+export function speakCallAnnouncement(status, amount, currency, atFloor = false, auctionId = null) {
   if (!isSoundEnabled()) return;
   const cad = currency === "CAD";
   // A new call stage makes every earlier line stale — the previous call's
@@ -288,9 +298,14 @@ export function speakCallAnnouncement(status, amount, currency, atFloor = false)
         if (i < all.length - 1) parts.push({ pause: 700 });
       });
     } else {
-      FINAL_CALL_CLIPS.forEach((round) => {
-        parts.push(...amountParts, { clip: round.clip });
-        if (round.pauseAfter) parts.push({ pause: round.pauseAfter });
+      // Same fix as the English one: the amount before every count plus the
+      // long pauses made this ~22s for a final call that lasts 18s, so the
+      // count was still going after the screen said bidding had closed.
+      // Amount once, then oru / rendu / moonu tharam with short beats (~15s).
+      parts.push(...amountParts);
+      FINAL_CALL_CLIPS.forEach((round, i, all) => {
+        parts.push({ clip: round.clip });
+        if (i < all.length - 1) parts.push({ pause: 700 });
       });
     }
     speakAnnouncement(parts, opts);
@@ -298,6 +313,19 @@ export function speakCallAnnouncement(status, amount, currency, atFloor = false)
   }
   const lines = (cad ? CALL_AUDIO_EN : CALL_AUDIO)[status];
   if (!lines) return;
+  if (!cad && status === "call_1" && auctionId) {
+    const seen = call1Spoken.get(auctionId) || 0;
+    call1Spoken.set(auctionId, seen + 1);
+    if (seen > 0) {
+      // The bid reaction is just a clip, so the amount still has to be said
+      // once — only the repeated "okay members…" intro and the invitation
+      // line are dropped.
+      const restartParts = amount != null ? amountToSpeechParts(amount, currency) : [];
+      if (!atFloor && seen % 3 === 0) restartParts.push({ clip: lines.b });
+      speakAnnouncement(restartParts, opts);
+      return;
+    }
+  }
   const parts = [{ clip: lines.a }];
   if (amount != null) parts.push(...amountToSpeechParts(amount, currency));
   if (!atFloor) parts.push({ clip: lines.b });

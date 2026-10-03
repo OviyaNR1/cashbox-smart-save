@@ -205,13 +205,23 @@ const SPECIAL_REACTIONS = [
   },
 ];
 
+let lastReactionClip = null;
+
 export function announceNewLowestBid(amount, currency, context = {}) {
   const dropSize = context.previousAmount != null ? context.previousAmount - amount : null;
   const ctx = { ...context, amount, dropSize };
   const special = SPECIAL_REACTIONS.find((r) => r.matches(ctx));
   const cad = isCAD(currency);
-  const pool = special ? (cad ? special.clipsEn : special.clips) : (cad ? BID_REACTION_CLIPS_EN : BID_REACTION_CLIPS);
-  const reaction = pool[Math.floor(Math.random() * pool.length)];
+  const generic = cad ? BID_REACTION_CLIPS_EN : BID_REACTION_CLIPS;
+  let pool = special ? (cad ? special.clipsEn : special.clips) : generic;
+  // A special reaction with a single clip (e.g. "big drop") fires on every
+  // bid in a run of large drops and played verbatim each time; fall back to
+  // the generic pool rather than repeat the clip that just played.
+  if (pool.length === 1 && pool[0] === lastReactionClip) pool = generic;
+  const fresh = pool.filter((c) => c !== lastReactionClip);
+  const choices = fresh.length ? fresh : pool;
+  const reaction = choices[Math.floor(Math.random() * choices.length)];
+  lastReactionClip = reaction;
   return {
     parts: [{ clip: reaction }, ...amountToSpeechParts(amount, currency)],
     visual: `📉 New lowest bid: ${formatMoney(amount, currency)}`,
