@@ -353,7 +353,8 @@ const STAGE_CHATTER_CLIPS = {
 };
 const STAGE_CHATTER_CLIPS_EN = {
   hold: CA_VOICE_V2
-    ? [1, 2, 3, 4, 5, 6].map((n) => `${V2}/hold-${n}.mp3`)
+    // hold-3 ("Don't be shy, folks…") was dropped — it didn't sound right.
+    ? [1, 2, 4, 5, 6].map((n) => `${V2}/hold-${n}.mp3`)
     : [1, 2, 3, 4, 5, 6].map((n) => `/audio/en/stage-hold-${n}.mp3`),
   "final-warning": ["/audio/en/stage-urgent-1.mp3"],
   "last-seconds": ["/audio/en/stage-urgent-2.mp3"],

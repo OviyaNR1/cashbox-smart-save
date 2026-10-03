@@ -17,7 +17,12 @@ const FINAL_CALL_SECONDS_INR = 16;
 // wait for. India only.
 const FINAL_CALL_SECONDS_INR_AT_FLOOR = 15;
 
+// Canada at the floor: the bid line (name + amount, ~5s) then the three counts
+// (~7s) — 12s, instead of the plain 10s that ended before the voice did.
+const FINAL_CALL_SECONDS_CAD_AT_FLOOR = 12;
+
 export function callDuration(status, currency, atFloor = false) {
+  if (status === "final_call" && atFloor && currency === "CAD") return FINAL_CALL_SECONDS_CAD_AT_FLOOR;
   if (status === "final_call" && atFloor && currency && currency !== "CAD") return FINAL_CALL_SECONDS_INR_AT_FLOOR;
   if (status === "final_call" && currency && currency !== "CAD") return FINAL_CALL_SECONDS_INR;
   return CALL_DURATIONS[status];

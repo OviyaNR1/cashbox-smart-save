@@ -367,7 +367,10 @@ export function speakCallAnnouncement(status, amount, currency, atFloor = false,
       // of the three counts (the traditional Tamil format kept for India)
       // pushed the English one to ~20s, so it was still counting after the
       // auction had closed. Amount once, then the three counts back to back.
-      parts.push(...amountParts);
+      // When the bid line that just played already said the amount (a bid at the
+      // floor goes straight to Final Call), it isn't repeated — that doubled the
+      // amount and pushed the count past the end of the Final Call.
+      if (!(CA_VOICE_V2 && Date.now() - namedBidAt < 15000)) parts.push(...amountParts);
       FINAL_CALL_CLIPS_EN.forEach((round, i, all) => {
         parts.push({ clip: round.clip });
         if (i < all.length - 1) parts.push({ pause: 700 });

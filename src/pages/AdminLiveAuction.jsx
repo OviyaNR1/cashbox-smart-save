@@ -235,7 +235,7 @@ export default function AdminLiveAuction() {
 
   // Longer than the server's bid window after Final Call (client clock + 2s
   // slack, see place_bid), so no late bid can slip in after the auto-close.
-  const AUTO_CLOSE_GRACE_S = atFloorNow && plan?.currency !== "CAD" ? 1 : 5; // no bid is possible at the floor, so nothing to wait for
+  const AUTO_CLOSE_GRACE_S = atFloorNow ? 1 : 5; // no bid is possible at the floor, so nothing to wait for
   const autoClosedRef = useRef(null);
   const closeAuctionRef = useRef(null);
   useEffect(() => {
