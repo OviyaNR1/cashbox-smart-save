@@ -268,11 +268,10 @@ export function announceNewLowestBid(amount, currency, context = {}) {
 // sandwiched between recorded lead-ins, then the amount, then a short tail.
 // One line carries the whole bid announcement, so the Call 1 line that
 // normally follows a bid stays quiet (see markNamedBid in sound.js).
-// "Meena R" -> "Meena": a trailing one- or two-letter initial isn't spoken.
+// First name only: "Manu Tom Varghese" -> "Manu". Long full names are a
+// mouthful on every bid, and a first name is what a real auctioneer says.
 export function spokenName(fullName) {
-  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length > 1 && parts[parts.length - 1].replace(/\./g, "").length <= 2) parts.pop();
-  return parts.join(" ");
+  return String(fullName || "").trim().split(/\s+/)[0] || "";
 }
 
 const NAMED_LEADS = [
