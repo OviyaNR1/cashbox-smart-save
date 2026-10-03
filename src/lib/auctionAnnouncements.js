@@ -183,7 +183,10 @@ const SPECIAL_REACTIONS = [
   {
     clips: ["/audio/reaction-big-drop.mp3"],
     clipsEn: ["/audio/en/reaction-big-drop.mp3"],
-    matches: (ctx) => ctx.dropSize != null && ctx.minDecrement > 0 && ctx.dropSize >= ctx.minDecrement * 3,
+    // ₹ plans drop in multiples of a 500 step, so a 3x drop is just a normal
+    // bid there and "big drop" played on nearly every one; it needs to be a
+    // genuinely large jump (5x) to count as one. Canada keeps 3x.
+    matches: (ctx) => ctx.dropSize != null && ctx.minDecrement > 0 && ctx.dropSize >= ctx.minDecrement * (ctx.isCad ? 3 : 5),
   },
   {
     // A cluster of small bids near the plan's floor triggers this on every
@@ -209,7 +212,7 @@ let lastReactionClip = null;
 
 export function announceNewLowestBid(amount, currency, context = {}) {
   const dropSize = context.previousAmount != null ? context.previousAmount - amount : null;
-  const ctx = { ...context, amount, dropSize };
+  const ctx = { ...context, amount, dropSize, isCad: isCAD(currency) };
   const special = SPECIAL_REACTIONS.find((r) => r.matches(ctx));
   const cad = isCAD(currency);
   const generic = cad ? BID_REACTION_CLIPS_EN : BID_REACTION_CLIPS;
