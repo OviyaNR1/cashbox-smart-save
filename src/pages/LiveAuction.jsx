@@ -117,7 +117,13 @@ export default function LiveAuction() {
       const closedPick = candidates
         .filter((c) => c.auction.status === "closed")
         .sort((a, b) => new Date(b.auction.closed_at) - new Date(a.auction.closed_at))[0];
-      const picked = openPick || closedPick;
+      // A watcher with nothing live: show the room of a group they watch that hasn't
+      // opened an auction yet (its waiting room) rather than another group's old
+      // finished result — so someone following Canada isn't shown India's last auction.
+      const watchedWaiting = openPick
+        ? null
+        : liveGroups.find((g) => watchedIds.includes(g.id) && g.status === "active" && !candidates.some((c) => c.group.id === g.id));
+      const picked = openPick || (watchedWaiting ? null : closedPick);
       const auction = picked?.auction || null;
       // No Auction row exists yet for any candidate group (e.g. the admin
       // hasn't clicked Start Auction this month) — fall back to the first
@@ -125,7 +131,7 @@ export default function LiveAuction() {
       // room (chat + presence) still has somewhere to attach to instead of
       // showing a dead end. monthNumber is what WOULD be the next auction's
       // month, used to key the chat room before that auction actually exists.
-      const group = picked?.group || liveGroups[0] || null;
+      const group = picked?.group || watchedWaiting || liveGroups[0] || null;
       const plan = picked?.plan || (group ? plans.find((p) => p.id === group.plan_id) : null);
       const monthNumber = auction?.month_number ?? (group ? (group.current_month || 1) + 1 : null);
       // A person can hold multiple tickets (memberships) in the same
@@ -492,6 +498,7 @@ export default function LiveAuction() {
             monthNumber={state.monthNumber}
             userId={state.me?.id}
             memberProfileId={state.myMembership?.member_profile_id}
+            readOnly={!state.myMembership}
             senderName={state.myName}
             onJoin={(name) => pushToast(`${name} joined`, "join")}
             defaultOpen
@@ -584,6 +591,7 @@ export default function LiveAuction() {
           monthNumber={auction.month_number}
           userId={state.me?.id}
           memberProfileId={myMembership?.member_profile_id}
+          readOnly={!myMembership}
           senderName={myName}
         />
       </div>
@@ -610,6 +618,7 @@ export default function LiveAuction() {
           monthNumber={auction.month_number}
           userId={state.me?.id}
           memberProfileId={myMembership?.member_profile_id}
+          readOnly={!myMembership}
           senderName={myName}
           onJoin={(name) => pushToast(`${name} joined`, "join")}
           defaultOpen
@@ -814,6 +823,7 @@ export default function LiveAuction() {
         monthNumber={auction.month_number}
         userId={state.me?.id}
         memberProfileId={myMembership?.member_profile_id}
+        readOnly={!myMembership}
         senderName={myName}
         onJoin={(name) => pushToast(`${name} joined`, "join")}
       />

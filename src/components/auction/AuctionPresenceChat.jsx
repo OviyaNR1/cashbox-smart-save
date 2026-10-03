@@ -49,7 +49,8 @@ const formatTime = (iso) => {
 // passed once it's known and gets attached to new messages/logged events
 // from then on, but is never required for the room itself to work; the same
 // room (and its history) carries straight through into the actual auction.
-export default function AuctionPresenceChat({ auctionId, groupId, monthNumber, userId, memberProfileId, senderName, onJoin, onPresenceChange, defaultOpen }) {
+// readOnly: a watcher (no ticket in the group) can read the chat but not post to it.
+export default function AuctionPresenceChat({ auctionId, groupId, monthNumber, userId, memberProfileId, senderName, onJoin, onPresenceChange, defaultOpen, readOnly = false }) {
   // Starts open, not collapsed to the floating bubble — during a live
   // session (and the pre-start waiting room) the chat is the main point of
   // coordination, not a secondary panel someone has to remember to click open.
@@ -425,7 +426,8 @@ export default function AuctionPresenceChat({ auctionId, groupId, monthNumber, u
           ) : (
             <button
               onClick={startRecording}
-              className="w-9 h-9 shrink-0 rounded-lg border border-border text-foreground grid place-items-center hover:bg-muted"
+              disabled={readOnly}
+              className="w-9 h-9 shrink-0 rounded-lg border border-border text-foreground grid place-items-center hover:bg-muted disabled:opacity-50"
               title="Record a voice message"
             >
               <Mic className="w-4 h-4" />
@@ -436,13 +438,13 @@ export default function AuctionPresenceChat({ auctionId, groupId, monthNumber, u
             value={text}
             onChange={onTextChange}
             onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder={recording ? "Recording…" : "Say something, @ to mention…"}
-            disabled={recording}
+            placeholder={readOnly ? "You're watching — chat is read-only" : recording ? "Recording…" : "Say something, @ to mention…"}
+            disabled={recording || readOnly}
             className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-border bg-background text-sm text-foreground disabled:opacity-50"
           />
           <button
             onClick={send}
-            disabled={sending || !text.trim() || recording}
+            disabled={sending || !text.trim() || recording || readOnly}
             className="w-9 h-9 shrink-0 rounded-lg bg-primary text-primary-foreground grid place-items-center disabled:opacity-50"
           >
             <Send className="w-4 h-4" />
