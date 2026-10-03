@@ -201,7 +201,7 @@ export async function generatePayoutReceiptPdf({ winner, member, group, plan, pa
   field("Plan", plan?.plan_name, colB);
   y += 44;
   field("Month won", `Month ${winner.month_number}`, marginX);
-  field("Announced on", pdfDate(winner.announcement_date), colB);
+  field("Auction date", pdfDate(winner.announcement_date), colB);
   y += 44;
   field("Paid on", pdfDate(paidDate), marginX);
   field("Paid via", paidVia || "UPI", colB);

@@ -12,6 +12,13 @@ import { useAdminCountry } from "@/lib/AdminCountryContext";
 import { useToast } from "@/components/ui/use-toast";
 import { sendPayoutReceipt } from "@/lib/sendReceipts";
 
+// "2026-09-05" -> "5 Sep 2026" (parsed by hand so it never shifts with the timezone)
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const shortDate = (value) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ""));
+  return m ? `${Number(m[3])} ${SHORT_MONTHS[Number(m[2]) - 1]} ${m[1]}` : String(value || "");
+};
+
 const statusTone = (s) => s === "paid" ? "bg-emerald-500/15 text-emerald-400" : s === "announced" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground";
 
 export default function Winners() {
@@ -300,7 +307,7 @@ export default function Winners() {
                 <tr>
                   <th className="text-left px-5 py-3">Month</th>
                   <th className="text-left px-5 py-3">Winner</th>
-                  <th className="text-left px-5 py-3">Announced</th>
+                  <th className="text-left px-5 py-3">Auction date</th>
                   <th className="text-right px-5 py-3">Prize</th>
                   <th className="text-right px-5 py-3">Status</th>
                 </tr>
@@ -313,7 +320,7 @@ export default function Winners() {
                   <tr key={w.id}>
                     <td className="px-5 py-3 font-medium text-foreground">Month {w.month_number}</td>
                     <td className="px-5 py-3 text-muted-foreground">{w.member_name}</td>
-                    <td className="px-5 py-3 text-muted-foreground">{w.announcement_date}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{shortDate(w.announcement_date)}</td>
                     <td className="px-5 py-3 text-right tabular-nums text-foreground">{formatMoney(w.prize_amount, plan?.currency)}</td>
                     <td className="px-5 py-3 text-right">
                       {w.status === "paid" ? (
@@ -328,6 +335,7 @@ export default function Winners() {
                             </button>
                           )}
                           <span className={`text-xs px-2.5 py-1 rounded-full ${statusTone(w.status)}`}>{w.status}</span>
+                          {w.paid_at && <span className="text-xs text-muted-foreground">on {shortDate(new Date(w.paid_at).toLocaleDateString("en-CA"))}</span>}
                         </span>
                       ) : (
                         <button onClick={() => markPaid(w)} className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 flex items-center gap-1 ml-auto">
