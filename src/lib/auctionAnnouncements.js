@@ -261,8 +261,11 @@ export function announceSilence(tier = "first", currency) {
 // spoken, colloquial Tamil (with the English words people actually use at an
 // auction: bid, final call, chance), not formal written Tamil.
 const STAGE_CHATTER_CLIPS = {
-  // 3 was dropped ("kammi bid vandhiruku…" didn't sound right to a Tamil ear).
-  hold: [1, 2, 4, 5, 6].map((n) => `/audio/stage-hold-${n}.mp3`),
+  // 3 ("kammi bid vandhiruku…") didn't sound right to a Tamil ear, and 6 was
+  // a second dividend line — two of five keep-going lines about the dividend
+  // made it repeat too often, so only hold-2 ("Dividend kammi aagum pa…")
+  // stays.
+  hold: [1, 2, 4, 5].map((n) => `/audio/stage-hold-${n}.mp3`),
   "final-warning": ["/audio/stage-urgent-1.mp3"],
   "last-seconds": ["/audio/stage-urgent-2.mp3"],
 };
