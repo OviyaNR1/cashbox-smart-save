@@ -158,8 +158,7 @@ export default function Winners() {
   // Sends the winner their payout receipt as a PDF over WhatsApp.
   const sendReceipt = async (w) => {
     try {
-      const me = await base44.auth.me().catch(() => ({}));
-      await sendPayoutReceipt({ winner: w, prof: profileOf(w.member_profile_id), group, plan, paidBy: me.email || "CashBox admin" });
+      await sendPayoutReceipt({ winner: w, prof: profileOf(w.member_profile_id), group, plan });
       const sentAt = new Date().toISOString();
       await base44.entities.Winner.update(w.id, { receipt_sent_at: sentAt });
       setWinners((ws) => ws.map((x) => (x.id === w.id ? { ...x, receipt_sent_at: sentAt } : x)));

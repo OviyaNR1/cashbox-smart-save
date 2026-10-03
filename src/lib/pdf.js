@@ -204,7 +204,7 @@ export async function generatePayoutReceiptPdf({ winner, member, group, plan, pa
   field("Announced on", pdfDate(winner.announcement_date), colB);
   y += 44;
   field("Paid on", pdfDate(paidDate), marginX);
-  field("Paid by", paidBy || "CashBox admin", colB);
+  field("Paid by", paidBy || "CashBox", colB);
   y += 52;
 
   doc.line(marginX, y, pageWidth - marginX, y);
