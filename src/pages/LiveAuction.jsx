@@ -207,6 +207,19 @@ export default function LiveAuction() {
             // amount — saying it here too put it twice back to back.
             }).parts.slice(0, 1), { tag: "reaction", maxAgeMs: 4000 });
           }
+          // The spoken call line (with the new amount) comes from the bid
+          // itself, NOT from noticing the status change. A new bid makes the
+          // server flip the auction to "open" and the admin screen set Call 1
+          // again within a split second, so this screen often only ever sees
+          // call_1 -> call_1 and never saw a change to react to — the reaction
+          // clip played but the amount was never spoken. Not throttled: every
+          // bid replaces the previous call line (speakCallAnnouncement cancels
+          // the old one). A bid at the plan's minimum goes straight to Final
+          // Call, which the status change below announces instead.
+          const newAmount = Number(payload.new.amount);
+          if (!reachedFloor(newAmount, state.plan?.auction_min_bid, state.auction?.min_decrement)) {
+            speakCallAnnouncement("call_1", newAmount, state.plan?.currency, false, state.auction.id);
+          }
         }
         load();
       })
@@ -312,7 +325,11 @@ export default function LiveAuction() {
         const validBidsNow = (state.bids || []).filter((b) => b.status === "valid").sort((a, b) => a.amount - b.amount);
         const calledAmount = validBidsNow[0]?.amount ?? auction.starting_amount;
         const atFloor = reachedFloor(validBidsNow[0]?.amount, state.plan?.auction_min_bid, auction.min_decrement);
-        speakCallAnnouncement(auction.status, calledAmount, state.plan?.currency, atFloor, auction.id);
+        // Call 1 is spoken from the bid event above; only the timer-driven
+        // Call 2 / Final Call (and a floor bid's Final Call) come from here.
+        if (auction.status !== "call_1") {
+          speakCallAnnouncement(auction.status, calledAmount, state.plan?.currency, atFloor, auction.id);
+        }
       } else if (auction.status === "closed") {
         const iWon = state.myMembership && auction.winner_member_profile_id === state.myMembership.member_profile_id;
         const winnerName = state.profiles?.find((p) => p.id === auction.winner_member_profile_id)?.full_name || "Member";

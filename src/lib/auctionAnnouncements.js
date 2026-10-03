@@ -132,15 +132,13 @@ export function announceSignOff(currency) {
 // fallback once none of SPECIAL_REACTIONS below match. The English pool
 // mirrors it 1:1 (same size, same character) so "variety, not repetition"
 // carries over identically for Canada.
-const BID_REACTION_CLIPS = [
-  "/audio/bid-reaction-1.mp3",
-  "/audio/bid-reaction-2.mp3",
-  "/audio/bid-reaction-3.mp3",
-  "/audio/bid-reaction-4.mp3",
-  "/audio/bid-reaction-5.mp3",
-  "/audio/bid-reaction-6.mp3",
-  "/audio/bid-reaction-7.mp3",
-];
+// The old generic Tamil reaction pool (bid-reaction-1..7.mp3) is switched off:
+// several of those clips are "innum kammi vandhuchu…" lines the room doesn't
+// want, and they played after almost every bid. Until a new set is recorded,
+// India gets no generic reaction — only the special ones below (back-to-back,
+// first bid, last second, big drop, very low, close range) — and the call
+// line that follows still speaks the amount. The files stay in public/audio.
+const BID_REACTION_CLIPS = [];
 const BID_REACTION_CLIPS_EN = [
   "/audio/en/bid-reaction-1.mp3",
   "/audio/en/bid-reaction-2.mp3",
@@ -231,10 +229,12 @@ export function announceNewLowestBid(amount, currency, context = {}) {
   if (pool.length === 1 && pool[0] === lastReactionClip) pool = generic;
   const fresh = pool.filter((c) => c !== lastReactionClip);
   const choices = fresh.length ? fresh : pool;
-  const reaction = choices[Math.floor(Math.random() * choices.length)];
-  lastReactionClip = reaction;
+  const reaction = choices.length ? choices[Math.floor(Math.random() * choices.length)] : null;
+  if (reaction) lastReactionClip = reaction;
   return {
-    parts: [{ clip: reaction }, ...amountToSpeechParts(amount, currency)],
+    // No reaction clip available (India's generic pool is empty): say nothing
+    // here rather than speak the bare amount — callers play parts[0] only.
+    parts: reaction ? [{ clip: reaction }, ...amountToSpeechParts(amount, currency)] : [],
     visual: `📉 New lowest bid: ${formatMoney(amount, currency)}`,
   };
 }
