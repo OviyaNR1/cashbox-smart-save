@@ -325,10 +325,10 @@ const FINAL_CALL_CLIPS_EN = [
 // anyone going lower?" speech after every single bid (right after the bid
 // reaction has already said the new amount) is what made the room sound
 // like a loop. The first Call 1 of an auction gets the full line; restarts
-// after that say just the new amount — the "yaaravadhu kammiya…" invitation
-// is heard once per auction, not again on every restart (the mid-call lines
-// carry the encouragement). India only: the English (Canada) flow has more
-// varied lines and plays as-is.
+// after that say just the new amount — the "yaaravadhu kammiya…" /
+// "Can anyone go lower? Come on!" invitation is heard once per auction, not
+// again on every restart (the mid-call lines carry the encouragement). Applies
+// to both India and Canada; English repeated it after every bid too.
 const call1Spoken = new Map();
 
 // atFloor: the current lowest bid has already hit the plan's minimum
@@ -376,7 +376,7 @@ export function speakCallAnnouncement(status, amount, currency, atFloor = false,
   }
   const lines = (cad ? CALL_AUDIO_EN : CALL_AUDIO)[status];
   if (!lines) return;
-  if (!cad && status === "call_1" && auctionId) {
+  if (status === "call_1" && auctionId) {
     const seen = call1Spoken.get(auctionId) || 0;
     call1Spoken.set(auctionId, seen + 1);
     if (seen > 0) {
