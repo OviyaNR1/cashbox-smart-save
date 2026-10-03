@@ -128,11 +128,53 @@ const entities = Object.fromEntries(
   Object.entries(TABLES).map(([key, table]) => [key, makeEntity(table)])
 );
 
+// getUser() is a network call. On a phone, a dropped connection or a
+// background-tab wake-up fails it with a retryable fetch error — which used
+// to be treated exactly like "not logged in" and bounced a perfectly valid
+// session to the login screen. A real rejection (revoked/expired/deleted
+// user) comes back as a 4xx and still logs out.
+const ME_CACHE_KEY = 'cashbox-last-user';
+
+function isTransientAuthError(error) {
+  if (!error) return false;
+  return (
+    error.name === 'AuthRetryableFetchError' ||
+    error instanceof TypeError ||
+    error.status === 0 ||
+    error.status >= 500
+  );
+}
+
+function readCachedMe() {
+  try {
+    return JSON.parse(window.localStorage.getItem(ME_CACHE_KEY) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedMe(value) {
+  try {
+    if (value) window.localStorage.setItem(ME_CACHE_KEY, JSON.stringify(value));
+    else window.localStorage.removeItem(ME_CACHE_KEY);
+  } catch {
+    // storage unavailable — only costs the offline fallback
+  }
+}
+
 async function me() {
   const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) throw error || new Error('Not authenticated');
+  if (error || !user) {
+    if (isTransientAuthError(error)) {
+      const cached = readCachedMe();
+      const { data } = await supabase.auth.getSession();
+      // Only trust the cache for the same person whose session is stored.
+      if (cached && data.session?.user?.id === cached.id) return cached;
+    }
+    throw error || new Error('Not authenticated');
+  }
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-  return {
+  const result = {
     id: user.id,
     email: user.email,
     role: profile?.role ?? 'user',
@@ -140,6 +182,8 @@ async function me() {
     branch: profile?.branch ?? null,
     phone: profile?.phone ?? null,
   };
+  writeCachedMe(result);
+  return result;
 }
 
 export const base44 = {
@@ -150,6 +194,7 @@ export const base44 = {
       return !!data.session;
     },
     async logout(redirectTo) {
+      writeCachedMe(null);
       await supabase.auth.signOut();
       if (redirectTo) window.location.href = redirectTo;
     },

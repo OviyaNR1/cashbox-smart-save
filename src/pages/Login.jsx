@@ -286,6 +286,19 @@ export default function Login() {
           >
             <ArrowLeft className="w-3.5 h-3.5" /> {countryCode} {phoneDigits}
           </button>
+          {/* The number is entered on the previous step, so without this the
+              password form has no username field and Chrome/Safari/iCloud
+              Keychain can't save or autofill the login as a pair. */}
+          <input
+            type="text"
+            name="username"
+            autoComplete="username"
+            value={`${countryCode}${phoneDigits}`}
+            readOnly
+            tabIndex={-1}
+            aria-hidden="true"
+            className="sr-only"
+          />
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
@@ -297,6 +310,7 @@ export default function Login() {
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
               <Input
                 id="password"
+                name="password"
                 type="password"
                 autoComplete="current-password"
                 autoFocus

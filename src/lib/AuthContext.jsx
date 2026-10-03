@@ -42,8 +42,14 @@ export const AuthProvider = ({ children }) => {
 
   const inactivityTimer = useRef(null);
 
+  // Staff accounts (admins/agents handle everyone's money) keep the idle
+  // timeout. Members don't: they open the app for a minute a month, and on
+  // a phone this timer also fires the moment the browser wakes a sleeping
+  // tab after 2h — which looked like "it logs me out every time".
+  const isStaff = !!user?.app_role && user.app_role !== 'member';
+
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !isStaff) return;
 
     const resetTimer = () => {
       clearTimeout(inactivityTimer.current);
@@ -59,7 +65,7 @@ export const AuthProvider = ({ children }) => {
       ACTIVITY_EVENTS.forEach((evt) => window.removeEventListener(evt, resetTimer));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isStaff]);
 
   const navigateToLogin = () => {
     window.location.href = '/login';
