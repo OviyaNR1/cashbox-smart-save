@@ -149,7 +149,7 @@ export function buildPayoutNumber({ group, winner }) {
  * marks the prize as paid. Same look as the installment receipt.
  * returnFile: hand back { blob, filename } instead of downloading it.
  */
-export async function generatePayoutReceiptPdf({ winner, member, group, plan, paidDate, paidBy, returnFile = false }) {
+export async function generatePayoutReceiptPdf({ winner, member, group, plan, paidDate, paidBy, paidVia = "UPI", returnFile = false }) {
   const cur = plan?.currency || "INR";
   const number = buildPayoutNumber({ group, winner });
   const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -204,7 +204,9 @@ export async function generatePayoutReceiptPdf({ winner, member, group, plan, pa
   field("Announced on", pdfDate(winner.announcement_date), colB);
   y += 44;
   field("Paid on", pdfDate(paidDate), marginX);
-  field("Paid by", paidBy || "CashBox", colB);
+  field("Paid via", paidVia || "UPI", colB);
+  y += 44;
+  field("Paid by", paidBy || "CashBox", marginX);
   y += 52;
 
   doc.line(marginX, y, pageWidth - marginX, y);
