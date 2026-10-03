@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ const statusTone = (s) => s === "success" ? "bg-emerald-500/15 text-emerald-400"
 
 export default function Payments() {
   const [payments, setPayments] = useState(null);
-  const [memberships, setMemberships] = useState([]);
+  const [allMemberships, setAllMemberships] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [groups, setGroups] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -51,10 +51,17 @@ export default function Payments() {
   // calendar day (shared by every payment recorded that day, as the Date
   // column above now makes obvious), so sorting by it left same-day rows
   // in an arbitrary order with no real "most recent first" meaning.
+  // Practice and demo groups are never paid for, so their tickets don't belong in
+  // this screen: the same member would otherwise show up holding two tickets (their
+  // live one plus a practice one) and the "paid together?" prompt would be wrong.
+  const memberships = useMemo(
+    () => (groups.length ? allMemberships.filter((m) => !groups.find((g) => g.id === m.group_id)?.is_demo) : []),
+    [allMemberships, groups],
+  );
   const load = () => base44.entities.Payment.list("-created_at", 300).then(setPayments);
   useEffect(() => {
     load();
-    base44.entities.GroupMembership.list("-created_date", 200).then(setMemberships);
+    base44.entities.GroupMembership.list("-created_date", 200).then(setAllMemberships);
     base44.entities.MemberProfile.list("-created_date", 200).then(setProfiles);
     base44.entities.ChitGroup.list("-created_date", 200).then(setGroups);
     base44.entities.ChitPlan.list("-created_date", 200).then(setPlans);
