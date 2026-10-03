@@ -417,7 +417,10 @@ export default function AdminLiveAuction() {
     const groupLabel = group.group_name || group.group_code;
     const memberProfiles = await Promise.all(allActive.map(m => base44.entities.MemberProfile.get(m.member_profile_id)));
     for (const prof of memberProfiles) {
-      if (prof?.mobile) {
+      // Practice (trial) and demo groups never message anyone: the winner /
+      // "next installment" templates read like a real payout and would confuse
+      // members who are only practising.
+      if (prof?.mobile && !group.is_demo) {
         const isWinner = prof.id === winnerProfileId;
         const template = isWinner ? "winner_announcement_winner_v5" : "winner_announcement_all_v5";
         const parameters = isWinner

@@ -160,7 +160,7 @@ export default function LiveAuction() {
         ? await base44.entities.MemberProfile.get(myMembership.member_profile_id).catch(() => null)
         : null;
 
-      setState({ loading: false, me, auction, group, plan, monthNumber, myMembership, myName: myProfile?.full_name || "Member", bids, profiles });
+      setState({ loading: false, me, auction, group, plan, monthNumber, myMembership, myName: myProfile?.full_name || "Member", bids, profiles, watchGroupIds: liveGroups.map((g) => g.id) });
     } catch (err) {
       setState({ loading: false, error: err.message || String(err) });
     }
@@ -231,17 +231,20 @@ export default function LiveAuction() {
   // The channel above only watches the auction that was loaded when the page
   // opened. A member already sitting on last month's result (or the waiting
   // room) never heard about the NEXT auction starting and needed a manual
-  // refresh — missing the opening and the first bids. Watch the group for new
-  // auctions and reload when one is created.
-  const watchedGroupId = state.group?.id;
+  // refresh — missing the opening and the first bids. Watch EVERY live group
+  // the member belongs to (a member can be in a practice group and the real
+  // one at the same time) and reload when any of them gets a new auction.
+  const watchKey = (state.watchGroupIds || []).join(",");
   useEffect(() => {
-    if (!watchedGroupId) return;
-    const channel = supabase
-      .channel(`member-group-auctions-${watchedGroupId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "auctions", filter: `group_id=eq.${watchedGroupId}` }, () => load())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [watchedGroupId, load]);
+    if (!watchKey) return undefined;
+    const channels = watchKey.split(",").map((gid) =>
+      supabase
+        .channel(`member-group-auctions-${gid}`)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "auctions", filter: `group_id=eq.${gid}` }, () => load())
+        .subscribe()
+    );
+    return () => { channels.forEach((c) => supabase.removeChannel(c)); };
+  }, [watchKey, load]);
 
   const countdown = useCountdown(state.auction?.call_stage_started_at, state.auction?.status, state.plan?.currency);
   const countdownRef = useRef(null);
